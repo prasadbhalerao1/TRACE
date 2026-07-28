@@ -19,6 +19,12 @@ Before touching any module, get this working and log-in-able for all 5 roles:
 **Definition of done:** you can create a user of each role and land on the correct empty dashboard
 with no 403s. Nothing AI-related exists yet. Don't skip this — every module depends on it.
 
+**Status: ✅ Done (2026-07-29).** Schema migrated (Neon), Clerk wired end-to-end, RBAC dependency
+live, onboarding + shared dashboard built. Manually verified: sign-up → onboarding → dashboard with
+no 403s. See `.agents/decisions.md` for the implementation choices made along the way (schema
+version pick, role-onboarding flow, the `/dashboard` routing-collision fix, Neon SSL/pooling
+config, phone-auth disabled on the Clerk instance).
+
 (Status: this phase is being implemented — see `.agents/decisions.md` for the specific choices
 made where the docs were silent or disagreed.)
 
