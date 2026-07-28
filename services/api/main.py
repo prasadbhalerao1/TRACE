@@ -1,6 +1,22 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from services.api.core.config import get_settings
+from services.api.routers import users
+
+settings = get_settings()
 
 app = FastAPI(title="AI Talent Platform API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in settings.cors_allowed_origins.split(",")],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(users.router)
 
 
 @app.get("/health")
