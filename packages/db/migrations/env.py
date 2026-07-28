@@ -26,6 +26,10 @@ load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 # one (psycopg, already installed) for this process only. The app itself still uses
 # asyncpg at runtime via services/api/core/db.py.
 _database_url = os.environ["DATABASE_URL"].replace("+asyncpg", "+psycopg")
+if os.environ.get("DATABASE_SSL_REQUIRED", "false").lower() == "true":
+    # psycopg (unlike asyncpg) understands the standard libpq sslmode param directly.
+    separator = "&" if "?" in _database_url else "?"
+    _database_url = f"{_database_url}{separator}sslmode=require"
 config.set_main_option("sqlalchemy.url", _database_url)
 
 target_metadata = Base.metadata

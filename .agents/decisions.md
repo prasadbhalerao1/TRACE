@@ -69,3 +69,19 @@ gets built in Phase 1, not now (nothing to guard yet).
 rather than replacing them, since the generic names still describe the intent for a future
 non-Clerk swap.
 → `.env.example`
+
+**Dev database switched from local docker-compose Postgres to Neon (managed), per user request.**
+Both docs describe local Docker as the dev default and a managed provider (Neon/Supabase) as the
+prod target — the user chose to develop directly against Neon instead. Two driver-specific wrinkles
+this surfaced: (1) Neon's connection string uses the plain `postgresql://` scheme with libpq-style
+`sslmode`/`channel_binding` query params, which the app's asyncpg driver doesn't understand the
+same way (asyncpg takes an `ssl` connect arg, not a `sslmode` URL param); (2) the given endpoint is
+Neon's pooled (`-pooler`) hostname, which breaks asyncpg's default server-side prepared-statement
+caching (PgBouncer-style transaction pooling doesn't support it) — needs `statement_cache_size: 0`.
+Added a `DATABASE_SSL_REQUIRED` setting: when true, `services/api/core/db.py` passes
+`connect_args={"ssl": True, "statement_cache_size": 0}` to the asyncpg engine, and
+`packages/db/migrations/env.py` appends `?sslmode=require` to the sync (psycopg) URL used for
+migrations instead (psycopg understands that param natively). Local docker-compose Postgres is
+untouched and still defined in `infra/docker-compose.yml` for anyone who wants to switch back —
+just point `DATABASE_URL` at it and set `DATABASE_SSL_REQUIRED=false`.
+→ `services/api/core/config.py`, `services/api/core/db.py`, `packages/db/migrations/env.py`, `.env`
