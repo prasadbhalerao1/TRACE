@@ -1,3 +1,11 @@
+import {
+  ClerkProvider,
+  Show,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
+import { shadcn } from "@clerk/ui/themes";
 import type { Metadata } from "next";
 import { Space_Grotesk, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
@@ -35,7 +43,25 @@ export default function RootLayout({
       lang="en"
       className={`${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ClerkProvider appearance={{ theme: shadcn }}>
+          <header className="flex items-center justify-between border-b border-slate/20 px-6 py-3">
+            <span className="font-heading text-lg font-semibold text-ink">
+              AI Talent Platform
+            </span>
+            <div className="flex items-center gap-3">
+              <Show when="signed-out">
+                <SignInButton />
+                <SignUpButton />
+              </Show>
+              <Show when="signed-in">
+                <UserButton />
+              </Show>
+            </div>
+          </header>
+          <div className="flex flex-1 flex-col">{children}</div>
+        </ClerkProvider>
+      </body>
     </html>
   );
 }
