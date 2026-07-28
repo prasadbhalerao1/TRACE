@@ -1,9 +1,14 @@
+import os
 from logging.config import fileConfig
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+from packages.db.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -14,11 +19,16 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# Repo root is two levels up from packages/db/migrations/
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+
+# Alembic runs migrations synchronously — swap the app's asyncpg driver for a sync
+# one (psycopg, already installed) for this process only. The app itself still uses
+# asyncpg at runtime via services/api/core/db.py.
+_database_url = os.environ["DATABASE_URL"].replace("+asyncpg", "+psycopg")
+config.set_main_option("sqlalchemy.url", _database_url)
+
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
