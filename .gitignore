@@ -1,0 +1,51 @@
+# Node
+node_modules/
+.pnp
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+apps/web/build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+services/api/.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+
+# Logs / misc
+*.log
+.cache/
+
+# Docker volumes (local dev data, not the compose file)
+infra/pgdata/
+infra/qdrantdata/
+
+# Claude Code local/runtime state (not shared project config)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
