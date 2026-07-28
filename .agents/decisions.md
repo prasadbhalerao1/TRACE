@@ -35,13 +35,33 @@ role-picker page; submitting creates the row. Revisit if/when an invite-based or
 flow becomes necessary (e.g. recruiters belonging to a specific `organization_id`).
 → `apps/web/src/app/(public)/onboarding/page.tsx`, `services/api/routers/users.py` (`POST /users/onboarding`)
 
-**All 5 role groups get a `/dashboard` landing page, not just candidate/recruiter.**
-`doc/multi-agent-architecture/10` §1 only lists an explicit `/dashboard` page for candidate and
-recruiter — organizer/judge/admin's first-listed routes are `hackathons/new`, `evaluations`, and
-`fraud-review` respectively. For a uniform post-login redirect target across all 5 roles, added a
-`/dashboard` page to organizer/judge/admin too. Doesn't contradict the doc, just fills a gap it
-left open.
-→ `apps/web/src/app/(organizer|judge|admin)/dashboard/page.tsx`
+**All 5 roles land on `/dashboard` — as ONE shared route, not one per role group. See the routing
+collision entry below for why.** Originally planned as a `/dashboard` page inside each of the 5
+role groups (`(candidate)`, `(recruiter)`, `(organizer)`, `(judge)`, `(admin)`) for a uniform
+post-login target, since `doc/multi-agent-architecture/10` §1 only lists an explicit `/dashboard`
+for candidate and recruiter. Superseded by the fix below before any of those files were built.
+→ `apps/web/src/app/dashboard/page.tsx`
+
+**Routing collision: Next.js route groups don't add URL segments, so per-role `dashboard/` folders
+would collide.** `(candidate)/dashboard/page.tsx` and `(recruiter)/dashboard/page.tsx` both resolve
+to the literal URL `/dashboard` — parenthesized route groups are invisible to the URL, they're
+purely organizational. Confirmed empirically: creating both and running `npm run build` fails with
+"You cannot have two parallel pages that resolve to the same path." This wasn't just a candidate/
+recruiter problem — it would have tripled once organizer/judge/admin dashboards were added too.
+Doc 10's entire folder structure uses this same parenthesized-group pattern everywhere else
+(`(recruiter)/jobs/new`, `(judge)/evaluations`, etc.) without collisions, because those leaf names
+are unique across groups — `dashboard` is the one name reused across roles.
+**Decision: one shared `/dashboard` route, living directly under `src/app/dashboard/` (outside any
+role group), not five.** It reads the signed-in user's role server-side (via `/me`) and renders
+role-specific placeholder content from there — same pattern used to redirect signed-out/
+not-yet-onboarded users. Fully satisfies "land on the correct empty dashboard" per role without
+restructuring the rest of the app to add role prefixes to every URL (which would have been the
+other valid fix, but a much bigger deviation from doc 10's apparent intent of clean, non-prefixed
+URLs everywhere else). Each role group's own `(candidate)/`, `(recruiter)/`, etc. folders remain
+for their OTHER pages (assessments, jobs, evaluations, ...) — those don't collide since their leaf
+names are unique per group; add that group's `layout.tsx` auth/role guard when its first real page
+gets built in Phase 1, not now (nothing to guard yet).
+→ `apps/web/src/app/dashboard/page.tsx`, `apps/web/src/lib/api.ts`
 
 **Clerk env var names**: `.env.example` originally used generic `AUTH_PUBLISHABLE_KEY`/
 `AUTH_SECRET_KEY` names. Clerk's SDKs expect specific names
