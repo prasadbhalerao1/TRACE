@@ -45,3 +45,10 @@ This document specifies binding constraints, code style rules, security guidelin
 ## 5. Model Routing Policy
 - **Extraction & High-Volume:** Use Claude Haiku or Groq-hosted Llama 3.3 70B for field extraction, tagging, MCQ generation, and NL filter parsing.
 - **Human-Facing Judgments:** Use Claude 3.7 Sonnet for multi-turn interview turns, pitch deck rubric scoring, fraud forensics reports, and candidate re-ranking.
+
+---
+
+## 6. Architecture & Documentation Discipline
+- **Modular, Feature-Based Structure:** This is a multi-agent architecture — organize code by feature/module (candidate intelligence, recruitment, assessment, PPT analyzer, hackathon pipeline, fraud prevention), not by technical layer alone. One concern per router/agent-node/component. Avoid god-files and cross-module imports that aren't through `packages/shared_schemas/`.
+- **Maintainable Over Clever:** Prefer explicit, readable code over premature abstraction. Match existing patterns already established in the codebase before introducing a new one; don't build for hypothetical future requirements.
+- **Docs Are the Source of Truth:** Before implementing any feature, endpoint, scoring formula, schema, or UI decision, consult both `doc/SRS/00-07` (requirements, schema) and `doc/multi-agent-architecture/00-11` (extended design/implementation detail; 08-11 have no SRS counterpart — see `.agents/DOCUMENTATION_MAP.md` and `.agents/DOC_SET_08-11_CONTENTS.md`). Both doc sets are current; neither supersedes the other. Never invent requirements, field names, or formulas that contradict either doc. Where the two sets genuinely disagree (see `.agents/DOCUMENTATION_MAP.md` § "Known Differences"), stop and ask rather than silently picking one.
