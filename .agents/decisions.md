@@ -85,3 +85,13 @@ migrations instead (psycopg understands that param natively). Local docker-compo
 untouched and still defined in `infra/docker-compose.yml` for anyone who wants to switch back —
 just point `DATABASE_URL` at it and set `DATABASE_SSL_REQUIRED=false`.
 → `services/api/core/config.py`, `services/api/core/db.py`, `packages/db/migrations/env.py`, `.env`
+
+**Phone number auth disabled on the Clerk instance entirely.** Clerk's default template had
+`auth_phone.required_for_sign_up: true`, and Clerk's SMS provider doesn't support Indian phone
+numbers on this instance's tier, which hard-blocked sign-up ("Phone numbers from this country
+(India) are currently not supported"). Neither doc uses phone number for anything — auth is
+email-based only, role lives in Postgres via the onboarding flow, no MFA in Phase 0 — so disabled
+phone as an identifier entirely (`used_for_sign_up`, `used_for_sign_in`, `used_for_second_factor`,
+`verify_at_sign_up` all set false, strategy lists cleared) rather than working around the region
+restriction. Applied via `clerk config patch` against the dev instance (Clerk instance config, not
+a repo file — no code change, nothing to commit).
