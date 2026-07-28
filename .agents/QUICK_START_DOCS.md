@@ -5,25 +5,24 @@
 | Question | Answer | File |
 |---|---|---|
 | **What's the brief?** | 12 mandatory deliverables for hackathon | `.agents/Problem_Statement.md` |
-| **What's the architecture?** | Tech stack, core schema, deployment | `doc/SRS/00-Master-Architecture-and-Analysis.md` |
-| **What am I building? (detailed)** | 7 independent modules, each with full SRS | `doc/SRS/01-07-*.md` |
-| **What's wrong with the old docs?** | Cultural Fit removed, Piston → Pyodide, etc. | `.agents/DOCUMENTATION_MAP.md` § "What Changed" |
+| **What's the architecture?** | Tech stack, core schema, deployment | `doc/SRS/00-Master-Architecture-and-Analysis.md` + `doc/multi-agent-architecture/00-master-architecture.md` |
+| **What am I building? (detailed)** | 7 independent modules, each with full requirements | `doc/SRS/01-07-*.md` + `doc/multi-agent-architecture/01-07-*.md` |
+| **Where do the two doc sets disagree?** | See table | `.agents/DOCUMENTATION_MAP.md` § "Known Differences" |
 | **What should I code first?** | Candidate Intelligence → Matching → Verification | `doc/SRS/00` § "Build Order" |
-| **What's the formula for Talent Score?** | 7-term weighted sum, dynamic renormalization | `doc/multi-agent-architecture/08-algorithms-and-formulas.md` (preserve this) |
-| **What color is "verified"?** | Teal (#0E7C86), Evidence Receipt design | `doc/multi-agent-architecture/09-ui-design-system.md` (preserve this) |
-| **What routes exist?** | 50+ pages grouped by role | `doc/multi-agent-architecture/10-folder-structure-and-accessibility.md` (preserve this) |
-| **Walk me through signing up as a candidate** | 14-step flow with plain-English use cases | `doc/multi-agent-architecture/11-role-flows-and-use-cases.md` (preserve this) |
+| **What's the formula for Talent Score?** | 7-term weighted sum, dynamic renormalization | `doc/multi-agent-architecture/08-algorithms-and-formulas.md` |
+| **What color is "verified"?** | Teal (#0E7C86), Evidence Receipt design | `doc/multi-agent-architecture/09-ui-design-system.md` |
+| **What routes exist?** | 50+ pages grouped by role | `doc/multi-agent-architecture/10-folder-structure-and-accessibility.md` |
+| **Walk me through signing up as a candidate** | 14-step flow with plain-English use cases | `doc/multi-agent-architecture/11-role-flows-and-use-cases.md` |
 
 ---
 
 ## 📂 The Two Documentation Sets
 
-### ✅ SRS Version (USE THIS)
-**Location:** `doc/SRS/`  
-**Files:** 8 (`00-07`)  
-**Status:** Latest, all 8 corrections applied  
-**Quality:** Production-ready  
-**Use for:** All implementation, decisions, requirements
+Both are current. They cover the same modules from different angles — read both for whatever you're building.
+
+### `doc/SRS/` — Requirements & schema
+**Files:** 8 (`00-07`)
+**Use for:** Functional requirements, actors, shared/module data schemas, agent state machines.
 
 ```
 doc/SRS/
@@ -37,47 +36,31 @@ doc/SRS/
 └── 07-Multi-Agent-Architecture-LangGraph.md    ← Agent orchestration
 ```
 
-### ⚠️ Legacy Version (REFERENCE ONLY)
-**Location:** `doc/multi-agent-architecture/`  
-**Files:** 13 (11 core + 2 extras + 1 duplicate)  
-**Status:** Earlier iteration, pre-corrections  
-**Quality:** Reference/research  
-**Use for:** Extra implementation detail only (docs 08-11), then delete
+### `doc/multi-agent-architecture/` — Extended design & implementation detail
+**Files:** 12 (`00-11`)
+**Use for:** Everything in the SRS set, in more implementation-oriented form, plus algorithms, UI design, folder structure, and role flows that have no SRS counterpart.
 
 ```
 doc/multi-agent-architecture/
-├── 00-11 ...                      ← DON'T USE (has bugs, removed features)
-├── 08-algorithms-and-formulas.md  ← ⭐ PRESERVE & MIGRATE to SRS
-├── 09-ui-design-system.md         ← ⭐ PRESERVE & MIGRATE to SRS
-├── 10-folder-structure-and-accessibility.md  ← ⭐ PRESERVE & MIGRATE to SRS
-├── 11-role-flows-and-use-cases.md ← ⭐ PRESERVE & MIGRATE to SRS
-└── 06-trust-fraud-prevention (1).md ← ❌ DELETE (duplicate)
+├── 00-11 ...                                  ← Companion to doc/SRS, same 7 modules
+├── 08-algorithms-and-formulas.md              ← ⭐ Only source for scoring formulas
+├── 09-ui-design-system.md                     ← ⭐ Only source for design tokens
+├── 10-folder-structure-and-accessibility.md   ← ⭐ Only source for routes/folder layout
+└── 11-role-flows-and-use-cases.md             ← ⭐ Only source for role flows
 ```
 
 ---
 
-## 🔄 8 Corrections Applied to SRS
+## ⚠️ Where the Two Sets Disagree
 
-| # | Was | Now | Files Changed |
-|---|---|---|---|
-| 1 | Piston server sandbox | Pyodide browser WASM | 00, 03, 07 |
-| 2 | Self-hosted Whisper/Coqui TTS | Web Speech API | 03 |
-| 3 | Latency targets (<3s, <60s) | Removed; measure real numbers | 03 |
-| 4a | judge_evaluations table exists | Deleted (use hackathon_submissions) | 02 |
-| 4b | jobs.org_id + organization_id | Removed duplicate column | 02 |
-| 4c | interview_sessions.consent_given/timestamp | Removed; use consents.consent_id FK | 03 |
-| 4d | Confidence Score undefined | Defined: per-topic signals | 03 |
-| 5 | Cultural Fit scoring | Removed (bias vector) | 02, 07 |
-| 6 | Salary from AmbitionBox | Stack Overflow Survey only | 01 |
-| 7 | Scale worries | Noted: non-issues at 20 users | 00, 03 |
-| 8 | Shared GitHub token risk | Each candidate's own OAuth token | 01 |
+A handful of specific points differ between the two sets (Piston vs. Pyodide sandbox mentions, Cultural Fit scoring present/absent, a couple of duplicate schema columns, etc.) — see `.agents/DOCUMENTATION_MAP.md` § "Known Differences Between the Two Doc Sets" for the full table. When your task touches one of these, don't silently pick a side — check both cited sections and resolve deliberately (ask if it's not obvious from `Problem_Statement.md` or `constraints.md`).
 
 ---
 
 ## 🚀 Implementation Order
 
 **Phase 1 — Foundation (Day 1)**
-1. Read `doc/SRS/00` fully
+1. Read `doc/SRS/00` and `doc/multi-agent-architecture/00` fully
 2. Set up database schema from `doc/SRS/00` § 5
 3. Scaffold auth + RBAC middleware
 4. Candidate & Recruiter dashboard shells
@@ -173,70 +156,53 @@ doc/SRS/07-Multi-Agent-Architecture-LangGraph.md       ~8 KB
                                                 Total: ~80 KB
 
 doc/multi-agent-architecture/08-algorithms-and-formulas.md        ~20 KB ⭐
-doc/multi-agent-architecture/09-ui-design-system.md              ~12 KB ⭐
+doc/multi-agent-architecture/09-ui-design-system.md               ~12 KB ⭐
 doc/multi-agent-architecture/10-folder-structure-...md           ~15 KB ⭐
 doc/multi-agent-architecture/11-role-flows-and-use-cases.md      ~18 KB ⭐
                                                                   ──────
-                                            (Preserve these) ~65 KB
+                                                            ~65 KB
 ```
 
 ---
 
 ## ✅ Pre-Implementation Checklist
 
-- [ ] Read `doc/SRS/00` end-to-end (master architecture)
-- [ ] Skim all `doc/SRS/01-07` (understand all 7 modules)
-- [ ] Extract `doc/multi-agent-architecture/08-11` to `doc/SRS/08-11` (algorithms, design, structure, flows)
-- [ ] Delete `doc/multi-agent-architecture/` folder entirely
-- [ ] Use `.agents/DOCUMENTATION_MAP.md` as your reference
+- [ ] Read `doc/SRS/00` and `doc/multi-agent-architecture/00` end-to-end (master architecture, both angles)
+- [ ] Skim all `doc/SRS/01-07` and `doc/multi-agent-architecture/01-07` (understand all 7 modules)
+- [ ] Read `doc/multi-agent-architecture/08-11` for algorithms, design, structure, flows (no SRS counterpart)
+- [ ] Check `.agents/DOCUMENTATION_MAP.md` § "Known Differences" before implementing anything on that list
 - [ ] Share role-specific docs with your team (backend gets 07 + 08, frontend gets 09 + 10, QA gets 11)
-- [ ] Create a quick-reference Slack bookmark to this file
 
 ---
 
 ## 🤔 Common Questions
 
-**Q: Should I read the legacy docs?**  
-A: No. Read SRS only. Legacy has bugs (Cultural Fit, Piston). Only use docs 08-11 for extra implementation detail, then migrate them.
+**Q: Should I read `doc/multi-agent-architecture`?**
+A: Yes — both doc sets are current. It's the only source for algorithms (08), design system (09), folder structure (10), and role flows (11).
 
-**Q: Where's the database schema?**  
+**Q: Where's the database schema?**
 A: `doc/SRS/00` § 5 (shared tables) + each module's § 5 (module tables).
 
-**Q: How do I know if my implementation is correct?**  
-A: Check against § 10–11 in each module (success metrics, non-functional requirements).
+**Q: How do I know if my implementation is correct?**
+A: Check against § 10–11 in each SRS module (success metrics, non-functional requirements).
 
-**Q: Where are the API endpoints?**  
+**Q: Where are the API endpoints?**
 A: `doc/SRS/01-06` § 6 in each module.
 
-**Q: How do I make sure scores are explainable?**  
+**Q: How do I make sure scores are explainable?**
 A: Every agent writes to `agent_runs` table (§ 00.5). Use `langfuse_trace_id` to trace the full flow.
 
-**Q: Should I build Cultural Fit scoring?**  
-A: No. It was removed (bias vector). Score only: Skill Similarity + Project Relevance.
+**Q: Should I build Cultural Fit scoring?**
+A: The two doc sets disagree here — `doc/SRS/02` omits it, `doc/multi-agent-architecture/02` includes it. Check `.agents/DOCUMENTATION_MAP.md`'s differences table and confirm with the user before implementing either way.
 
-**Q: Can I use Piston for code sandbox?**  
-A: No. Use Pyodide (browser WASM) only. Simpler, no server infra.
+**Q: Can I use Piston for code sandbox, or only Pyodide?**
+A: Same — the two sets differ on this. Pyodide (browser WASM) is the primary design in both; confirm before adding server-side sandbox infra.
 
-**Q: Why are the design tokens in the legacy docs?**  
-A: They should be in SRS 08-11 (after migration). Copy from `09-ui-design-system.md` to your Tailwind config immediately.
-
----
-
-## 🚦 Status Summary
-
-| Component | Status | Location | Action |
-|---|---|---|---|
-| Requirements (SRS 00-07) | ✅ Complete, all corrections applied | `doc/SRS/` | Use immediately |
-| Algorithms & formulas | ✅ Complete | `doc/multi-ag/08` | Migrate to SRS 08 |
-| Design system | ✅ Complete | `doc/multi-ag/09` | Migrate to SRS 09 |
-| Repository structure | ✅ Complete | `doc/multi-ag/10` | Migrate to SRS 10 |
-| Role flows & use cases | ✅ Complete | `doc/multi-ag/11` | Migrate to SRS 11 |
-| Documentation map | ✅ Complete | `.agents/DOCUMENTATION_MAP.md` | Reference guide |
-| Quick start guide | ✅ Complete | `.agents/QUICK_START_DOCS.md` | You are here |
-| Legacy docs migration | ⏳ Ready to start | `.agents/PRESERVE_LEGACY_DOCS.md` | Follow checklist |
+**Q: Why are the design tokens in `doc/multi-agent-architecture`?**
+A: Because that's the only doc set with a UI Design System doc — copy from `09-ui-design-system.md` to your Tailwind config (already done in `apps/web`).
 
 ---
 
-**Last updated:** 2026-07-28  
-**Prepared by:** Claude Code  
+**Last updated:** 2026-07-28
+**Prepared by:** Claude Code
 **For:** Hackathon build team

@@ -1,6 +1,6 @@
 # DataAxle Project Documentation Map
-**Last Updated:** 2026-07-28  
-**Purpose:** Navigate all project documentation, understand relationships, identify duplicates and sources of truth
+**Last Updated:** 2026-07-28
+**Purpose:** Navigate all project documentation, understand what each doc set covers, and where to look for a given decision.
 
 ---
 
@@ -12,11 +12,11 @@ DataAxle/
 │   ├── Problem_Statement.md                   # Brief: 12 mandatory deliverables
 │   ├── constraints.md                          # Constraints & requirements
 │   ├── DOCUMENTATION_MAP.md                    # This file
-│   ├── PRESERVE_LEGACY_DOCS.md
+│   ├── DOC_SET_08-11_CONTENTS.md               # What's in multi-agent-architecture/08-11
 │   └── QUICK_START_DOCS.md
 │
-├── doc/                                        # ALL documentation (divided into 2 versions)
-│   ├── SRS/                                    # ⭐ CURRENT - Latest/Corrected (8 files)
+├── doc/                                        # ALL documentation — two complementary sets
+│   ├── SRS/                                    # Requirements & shared schema (8 files)
 │   │   ├── 00-Master-Architecture-and-Analysis.md
 │   │   ├── 01-SRS-Candidate-Intelligence-Platform.md
 │   │   ├── 02-SRS-AI-Recruitment-Platform.md
@@ -26,7 +26,7 @@ DataAxle/
 │   │   ├── 06-SRS-Trust-Fraud-Prevention.md
 │   │   └── 07-Multi-Agent-Architecture-LangGraph.md
 │   │
-│   └── multi-agent-architecture/              # ⚠️ LEGACY - Earlier version (13 files)
+│   └── multi-agent-architecture/               # Extended design & implementation detail (12 files)
 │       ├── 00-master-architecture.md
 │       ├── 01-candidate-intelligence-platform.md
 │       ├── 02-recruitment-platform.md
@@ -34,26 +34,23 @@ DataAxle/
 │       ├── 04-ppt-analyzer.md
 │       ├── 05-hackathon-pipeline.md
 │       ├── 06-trust-fraud-prevention.md
-│       ├── 06-trust-fraud-prevention (1).md   # ⚠️ DUPLICATE FILE
 │       ├── 07-multi-agent-architecture.md
-│       ├── 08-algorithms-and-formulas.md      # ℹ️ Extra (not in SRS)
-│       ├── 09-ui-design-system.md             # ℹ️ Extra (not in SRS)
-│       ├── 10-folder-structure-and-accessibility.md  # ℹ️ Extra (not in SRS)
-│       └── 11-role-flows-and-use-cases.md     # ℹ️ Extra (not in SRS)
+│       ├── 08-algorithms-and-formulas.md       # Not in SRS
+│       ├── 09-ui-design-system.md              # Not in SRS
+│       ├── 10-folder-structure-and-accessibility.md  # Not in SRS
+│       └── 11-role-flows-and-use-cases.md      # Not in SRS
 ```
 
 ---
 
-## 📊 Documentation Versions Comparison
+## 📊 Both doc sets are current — they cover different ground
 
-### ✅ SRS Version (doc/SRS) — RECOMMENDED
-**Status:** Current, with 8 corrections applied  
-**Files:** 8  
-**Last Updated:** Today (2026-07-28)  
-**Contains:** All core requirements across 7 modules + master architecture  
-**Quality:** ⭐⭐⭐⭐⭐ Use this version for all implementation
+Neither folder supersedes the other. `doc/SRS/` and `doc/multi-agent-architecture/` are companion documents written at different times covering the same seven modules from different angles. Use both.
 
-#### File Mapping:
+### `doc/SRS/00-07` — Requirements & shared schema
+**Files:** 8
+**Contains:** Functional requirements, actors, shared core Postgres schema, agent architecture per module, cross-cutting rules (RBAC, model routing, build order).
+
 | # | File | Covers |
 |---|---|---|
 | 00 | Master-Architecture-and-Analysis | Cross-cutting: tech stack, core schema, deployment, roadmap |
@@ -65,38 +62,16 @@ DataAxle/
 | 06 | Trust-Fraud-Prevention | Fake certs, duplicates, plagiarism, authenticity score |
 | 07 | Multi-Agent-Architecture-LangGraph | Agent registry, supervisor graph, state schema, routing |
 
----
+### `doc/multi-agent-architecture/00-11` — Extended architecture, design & implementation detail
+**Files:** 12
+**Contains:** The same 7-module architecture in more implementation-oriented form, plus four docs with no SRS counterpart:
 
-### ⚠️ Multi-Agent-Architecture Version (doc/multi-agent-architecture) — LEGACY
-**Status:** Earlier iteration  
-**Files:** 13 (11 core + 2 extras + 1 duplicate)  
-**Contains:** Similar to SRS but pre-correction + additional design docs  
-**Quality:** ⭐⭐⭐ Reference only; do NOT use for implementation (contains bugs and removed features)  
-**Why kept:** May have additional design details in docs 08-11 not in SRS
+- **08-algorithms-and-formulas.md** — Talent Score formula, Job Matching formula, plagiarism/structural-similarity detection — the exact math behind every score in the platform.
+- **09-ui-design-system.md** — Design tokens, typography, component library, landing page structure, the Evidence Receipt component spec.
+- **10-folder-structure-and-accessibility.md** — Full repo layout, page routes per role, component inventory, accessibility specs.
+- **11-role-flows-and-use-cases.md** — Step-by-step flows for all 5 roles + plain-English use cases, useful as acceptance criteria.
 
-#### Additional Files (not in SRS):
-- **08-algorithms-and-formulas.md** — May contain salary model, scoring formulas
-- **09-ui-design-system.md** — Design tokens, component library
-- **10-folder-structure-and-accessibility.md** — Repo layout, WCAG compliance
-- **11-role-flows-and-use-cases.md** — Detailed user journeys by role
-
----
-
-## 🎯 What Changed in SRS (8 Corrections Applied)
-
-| # | Issue | Location | Change | Status |
-|---|---|---|---|---|
-| 1 | Sandbox complexity | 00, 03, 07 | Piston → Pyodide (browser WASM) + server static analysis | ✅ |
-| 2 | Speech TTS | 03 | Whisper/Coqui → Web Speech API | ✅ |
-| 3 | Latency targets | 03 | Removed <3s, <60s targets; use measured numbers | ✅ |
-| 4a | judge_evaluations table | 02 | Deleted (judges use hackathon_submissions.judge_score) | ✅ |
-| 4b | jobs.org_id duplicate | 02 | Removed duplicate column, kept organization_id | ✅ |
-| 4c | interview_sessions consent | 03 | Removed consent_given/timestamp, use consent_id FK only | ✅ |
-| 4d | confidence_score undefined | 03 | Defined as "per-topic consistency & depth signals" | ✅ |
-| 5 | Cultural Fit | 02, 07 | Removed FR-2.3, agent, score column entirely | ✅ |
-| 6 | Salary data source | 01 | AmbitionBox → Stack Overflow Survey only | ✅ |
-| 7 | Scale assumptions | 00, 03 | Noted Qdrant cap, rate limits not issues at 20 users | ✅ |
-| 8 | GitHub OAuth | 01 | Clarified: each candidate uses own token, no shared server token | ✅ |
+See `DOC_SET_08-11_CONTENTS.md` for a detailed breakdown of these four.
 
 ---
 
@@ -106,7 +81,7 @@ DataAxle/
 ```
 .agents/Problem_Statement.md (defines 12 deliverables)
     ↓
-doc/SRS/00-Master-Architecture-and-Analysis.md (shared schema, stack)
+doc/SRS/00 + doc/multi-agent-architecture/00 (shared schema, stack, folder structure)
     ↓
     ├─→ 01-Candidate-Intelligence-Platform (data foundation)
     │   └─→ 02-Recruitment-Platform (depends on candidate data)
@@ -135,24 +110,42 @@ doc/SRS/00-Master-Architecture-and-Analysis.md (shared schema, stack)
 
 ---
 
+## ⚠️ Known Differences Between the Two Doc Sets
+
+On a handful of specific points, the two doc sets literally describe different designs. Neither is auto-authoritative — when your task touches one of these, read both cited sections and, per `constraints.md` §6, resolve deliberately (ask the user if it's not obvious from other context) rather than picking one silently:
+
+| Topic | `doc/SRS` says | `doc/multi-agent-architecture` says | Where |
+|---|---|---|---|
+| Code sandbox | Pyodide (browser WASM) + server static analysis | Pyodide primary, mentions Piston Docker sandbox in places | 00, 03, 07 |
+| Interview speech | Web Speech API | Some sections reference Whisper/Coqui TTS | 03 |
+| Latency targets | Removed; measure real numbers | Some sections list numeric targets (<3s, <60s) | 03 |
+| `judge_evaluations` table | Not present; judges use `hackathon_submissions.judge_score` | Table appears | 02 |
+| `jobs.org_id` | Only `organization_id` | Both `org_id` and `organization_id` appear | 02 |
+| `interview_sessions` consent fields | `consent_id` FK only, via central `consents` table | Also has `consent_given`/`timestamp` columns | 03 |
+| Cultural Fit scoring | Removed (FR-2.3, agent, score column) | Present as part of Job Matching | 02, 07 |
+| Salary data source | Stack Overflow Survey only | Also references AmbitionBox | 01 |
+| GitHub OAuth | Explicit: each candidate's own token, no shared server token | Less explicit on this point | 01 |
+
+This list exists so you don't have to re-diff the two doc sets yourself — treat it as "things to double check," not a ruling.
+
+---
+
 ## ✋ Action Items
 
 ### For Implementation:
-1. **Use ONLY `doc/SRS/` for all coding** — it contains the 8 corrections
-2. **Delete or archive `doc/multi-agent-architecture/`** — legacy, source of confusion
-3. **Fix duplicate file:** `06-trust-fraud-prevention (1).md` should be deleted
-4. **Check docs 08-11 in legacy version** for any unique design content worth extracting (design system, algorithms, UI flows) before deleting
+1. **Read both `doc/SRS/` and `doc/multi-agent-architecture/`** for the module you're building — they're complementary, not a choice between old/new.
+2. For anything in the "Known Differences" table above, don't default to either doc — check with the user or with `.agents/Problem_Statement.md`/`constraints.md` for tie-breaking context.
+3. `doc/multi-agent-architecture/08-11` have no SRS counterpart — they're the only source for algorithms, design tokens, folder structure, and role flows. Always consult them for those topics.
 
 ### For Reference:
 - Problem statement: `.agents/Problem_Statement.md` (12 deliverables)
-- Constraints: `.agents/constraints.md` (rate limits, tech requirements)
+- Constraints: `.agents/constraints.md` (rate limits, tech requirements, architecture discipline)
 
 ---
 
 ## 📋 File Size & Complexity Check
 
-```bash
-# SRS version (CURRENT)
+```
 doc/SRS/00-Master-Architecture-and-Analysis.md      ~15 KB   (shared foundations)
 doc/SRS/01-SRS-Candidate-Intelligence-Platform.md   ~12 KB   (Talent Score™, dashboard)
 doc/SRS/02-SRS-AI-Recruitment-Platform.md           ~9 KB    (matching, copilot)
@@ -163,39 +156,16 @@ doc/SRS/06-SRS-Trust-Fraud-Prevention.md            ~9 KB    (fraud detection, a
 doc/SRS/07-Multi-Agent-Architecture-LangGraph.md    ~8 KB    (agent registry, orchestration)
 ────────────────────────────────────────────────────
 TOTAL: ~80 KB across 8 files
+
+doc/multi-agent-architecture/08-algorithms-and-formulas.md        ~20 KB
+doc/multi-agent-architecture/09-ui-design-system.md               ~12 KB
+doc/multi-agent-architecture/10-folder-structure-...md            ~15 KB
+doc/multi-agent-architecture/11-role-flows-and-use-cases.md       ~18 KB
+────────────────────────────────────────────────────
+                                                     ~65 KB
 ```
 
 ---
 
-## 🚨 Known Issues (Fixed in SRS)
-
-| Issue | Was In | Now Fixed |
-|---|---|---|
-| Piston server-side sandbox complexity | multi-ag 03, 07, 00 | ✅ SRS: Pyodide only |
-| Cultural Fit bias vector | multi-ag 02, 07 | ✅ SRS: Removed entirely |
-| judge_evaluations table duplication | multi-ag 02 | ✅ SRS: Deleted |
-| Unverified latency targets | multi-ag 03 | ✅ SRS: Removed |
-| Undefined confidence_score field | multi-ag 03 | ✅ SRS: Defined |
-| Salary scraped from AmbitionBox | multi-ag 01 | ✅ SRS: Stack Overflow only |
-| Duplicate org_id column in jobs | multi-ag 02 | ✅ SRS: Fixed |
-| Interview consent redundancy | multi-ag 03 | ✅ SRS: Central consents table only |
-
----
-
-## 💡 Recommendations
-
-1. **Archive or delete `doc/multi-agent-architecture/`** immediately to avoid confusion
-2. **Update any local IDE references** to point to `doc/SRS/`
-3. **Extract unique value from docs 08-11** (if any) before deletion:
-   - 08: Algorithms/formulas for salary regression, scoring
-   - 09: UI design tokens, component specs
-   - 10: Folder structure conventions
-   - 11: User journey workflows
-4. **Delete duplicate:** `06-trust-fraud-prevention (1).md`
-5. **Use this map** as the canonical reference for what documentation exists
-
----
-
-**Prepared for:** Hackathon build  
-**Source of Truth:** `doc/SRS/` (all modules 00-07)  
-**Status:** All 8 corrections applied and verified
+**Prepared for:** Hackathon build
+**Source of truth:** Both `doc/SRS/` and `doc/multi-agent-architecture/` — read the module doc from each set, plus 08-11 for algorithms/design/structure/flows.
