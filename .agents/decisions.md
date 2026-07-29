@@ -95,3 +95,73 @@ phone as an identifier entirely (`used_for_sign_up`, `used_for_sign_in`, `used_f
 `verify_at_sign_up` all set false, strategy lists cleared) rather than working around the region
 restriction. Applied via `clerk config patch` against the dev instance (Clerk instance config, not
 a repo file — no code change, nothing to commit).
+
+---
+
+## 2026-07-29 — Phase 1, Module 01: Candidate Intelligence — core loop (first pass)
+
+**Scope of this pass: FR-1 (Ingestion) + FR-2 (Talent Score) + FR-3 (Dashboard) only.**
+FR-4 (Career Guidance: skill gaps/roadmap/salary) and FR-5 (Resume/Portfolio Builder) are
+deliberately deferred to a follow-up session — module 01's FR list is large enough that building
+all five FRs in one pass risked exactly the drift this file exists to prevent. `career_recommendations`
+table is not yet created; add it when FR-4 is built.
+→ `packages/db/models.py`, `services/agents/candidate_intelligence/`, `services/api/routers/candidates.py`
+
+**Candidate-table schema: used `doc/multi-agent-architecture/01` §7's version (adds `score_version`
+tracking), not `doc/SRS/01` §5's** — same doc-set pick already established for Phase 0 tables, applied
+consistently here. Added a `renormalized_subscores` JSONB column (not in either doc verbatim, but
+required by doc 08 §1.1's own re-normalization provenance requirement — "store which weights were
+re-normalized... never a hidden adjustment").
+→ `packages/db/models.py` (`TalentScore.renormalized_subscores`)
+
+**`consents.consent_type` CHECK constraint extended with `'github_ingestion'`.** Doc 01 §10 and
+constraints.md §3 both require consent before GitHub ingestion, but neither doc's enumerated
+`consent_type` list actually included a GitHub value (only `resume_parsing`, `linkedin_export`,
+`ai_interview`, `perceptual_photo_hash`, `ai_assessment`) — a genuine gap, not a disagreement between
+the two doc sets. Added the missing value via migration rather than overloading `resume_parsing`.
+→ `packages/db/models.py` (`Consent`), `packages/db/migrations/versions/44fd41ed1de0_*.py`
+
+**Talent Score sub-score split, decided by what data actually exists yet, not by doc 01's
+Mechanical/Subjective labels alone:** Coding Ability, Technical Consistency, Community Participation,
+and Leadership compute for real from GitHub data alone right now (Leadership's "team-lead flag" input
+from doc 03 is simply omitted, not zero-filled). Problem Solving is always `None` — it depends
+entirely on Module 03 (Assessment/Verification), which doesn't exist yet; this is cold-start, not a
+bug. Project Quality and Innovation call Anthropic/Qdrant/embeddings for real (per doc 01 §4's own
+Sonnet routing for exactly these two) and degrade to `None` on any failure — missing API key, empty
+Qdrant corpus, embedding model unavailable — rather than fabricating a number. Doc 08 §1.1's cold-start
+re-normalization is what absorbs all of this gracefully; a fresh candidate's first score is expected to
+have 3 of 7 sub-scores renormalized away until Module 03 exists and keys are configured.
+→ `services/agents/candidate_intelligence/tools/mechanical_scores.py`,
+  `services/agents/candidate_intelligence/tools/judgment_scores.py`
+
+**GitHub OAuth callback: kept `GITHUB_OAUTH_REDIRECT_URI` pointed at the frontend
+(`localhost:3000/api/auth/github/callback`) and added a pure-passthrough Next.js Route Handler that
+redirects to the real backend callback, instead of changing the redirect URI to point at FastAPI
+directly.** Doc 00 §2.1's "Next.js never runs business logic" convention would suggest the code
+exchange itself should live in FastAPI (and it does — `services/api/routers/candidates.py`'s
+`/candidates/github/oauth/callback`), but the redirect URI is registered on the actual GitHub OAuth
+App outside this repo, and changing it wasn't something this session could verify/coordinate. Revisit
+if the GitHub App's callback URL is ever repointed directly at the backend — the Next.js route can
+then be deleted.
+→ `apps/web/src/app/api/auth/github/callback/route.ts`
+
+**LangGraph parallel fan-out: node functions must return only the keys they change, never the
+full mutated state.** `resume_parser`, `github_analysis`, and `certificate_ocr` all run in the same
+superstep (fanning out from `START`); returning the entire state dict from each (including untouched
+keys) makes every parallel branch write the same value to every channel, and langgraph's default
+"last value" channel raises `InvalidUpdateError` the moment two branches write to one key in the same
+step — even identical values. `conflicts` specifically needed an `Annotated[list[str], operator.add]`
+reducer since multiple nodes genuinely contribute *different* new entries to it in parallel. Caught by
+running the graph directly (bypassing HTTP/auth) against a synthetic `GithubAnalysis` before wiring the
+frontend — worth repeating for future modules' graphs before assuming a node contract's `run()` shape
+is fine to write full-state returns.
+→ `services/agents/candidate_intelligence/state.py`, `services/agents/candidate_intelligence/nodes/*.py`
+
+**`ANTHROPIC_API_KEY` and `CLOUDINARY_URL` are still not configured with real values in `.env`**
+(confirmed empty / literal placeholder respectively). Per user decision this session, the real
+integration code was written anyway (Anthropic structured-extraction calls, Cloudinary upload calls)
+rather than stubbed — they'll raise a clear `ResumeExtractionUnavailable` / `StorageUnavailable`
+at runtime until real keys are added, never silently fabricate data. Add real keys before testing
+resume upload or Project-Quality/Innovation LLM judgment end-to-end.
+→ `services/api/core/config.py`, `services/agents/candidate_intelligence/tools/resume.py`,
+  `services/api/core/storage.py`

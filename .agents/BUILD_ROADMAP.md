@@ -35,6 +35,18 @@ made where the docs were silent or disagreed.)
 Per doc 00 §7: Candidate Intelligence (01) → Recruitment (02) → Verification (03) → PPT Analyzer
 (04) → Hackathon (05) → Fraud (06).
 
+**Module 01 (Candidate Intelligence) — core loop in progress (2026-07-29).** FR-1 (ingestion:
+GitHub OAuth, resume upload+parse, certificate upload+OCR), FR-2 (Talent Score: all 7 sub-scores,
+cold-start re-normalization, evidence trail), and FR-3 (dashboard: Evidence Receipt, radar/trend
+charts, badges) are built — DB tables, `services/agents/candidate_intelligence/` LangGraph subgraph,
+`services/api/routers/candidates.py`, and `(candidate)/profile/edit` + the shared `/dashboard`
+candidate view. Verified end-to-end (mechanical scoring, cold-start re-normalization, conflict
+detection, badge awarding, DB persistence) via direct graph invocation with a synthetic GitHub
+payload — real GitHub ingestion untested live (this network's unauthenticated GitHub rate limit was
+exhausted during verification; will work once a real OAuth token is used). **FR-4 (Career Guidance)
+and FR-5 (Resume/Portfolio Builder) are NOT started** — next session should pick those up. See
+`.agents/decisions.md`'s 2026-07-29 Module 01 entries for the specific choices made.
+
 ### The loop, repeated per module
 
 1. **Fresh Claude Code session.** Feed it exactly: doc 00 (shared schema) + doc 07 (agent
