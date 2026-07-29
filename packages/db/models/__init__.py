@@ -21,6 +21,14 @@ from packages.db.models.presentation import (
     PresentationScore,
     Slide,
 )
+from packages.db.models.recruitment import (
+    Application,
+    CopilotConversation,
+    Job,
+    LocationAlias,
+    MatchScore,
+    SkillTaxonomyEntry,
+)
 from packages.db.models.user import User
 
 __all__ = [
@@ -44,4 +52,10 @@ __all__ = [
     "PlagiarismMatch",
     "PresentationScore",
     "Slide",
+    "Job",
+    "Application",
+    "MatchScore",
+    "CopilotConversation",
+    "SkillTaxonomyEntry",
+    "LocationAlias",
 ]
