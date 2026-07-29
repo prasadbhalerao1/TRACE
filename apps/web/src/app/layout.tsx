@@ -42,8 +42,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <ClerkProvider appearance={{ theme: shadcn }}>
           <header className="flex items-center justify-between border-b border-slate/20 px-6 py-3">
             <span className="font-heading text-lg font-semibold text-ink">
