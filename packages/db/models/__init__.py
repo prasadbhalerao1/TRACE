@@ -1,4 +1,12 @@
 from packages.db.models.agent_run import AgentRun
+from packages.db.models.assessment import (
+    Assessment,
+    ContributionReport,
+    InterviewReport,
+    InterviewSession,
+    InterviewTranscriptTurn,
+    Submission,
+)
 from packages.db.models.audit_log import AuditLog
 from packages.db.models.base import Base
 from packages.db.models.candidate import (
@@ -58,4 +66,10 @@ __all__ = [
     "CopilotConversation",
     "SkillTaxonomyEntry",
     "LocationAlias",
+    "Assessment",
+    "Submission",
+    "InterviewSession",
+    "InterviewTranscriptTurn",
+    "InterviewReport",
+    "ContributionReport",
 ]
