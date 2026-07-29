@@ -1,0 +1,201 @@
+"""Project Quality & Innovation — the two sub-scores doc 01 §4 routes to Sonnet.
+
+Both are "Mixed"/"Subjective": a mechanical component that always runs, plus an
+LLM/embedding component that calls out to Anthropic/the embedding model for real and
+degrades to `None` (never a fabricated number) if that dependency isn't reachable —
+whether because a key is missing or the service/model isn't available in this
+environment. Doc 08 §1.1's cold-start re-normalization is what absorbs that gracefully.
+"""
+
+import base64
+import uuid
+
+import anthropic
+from github import Github
+from github.GithubException import GithubException
+from qdrant_client import QdrantClient
+from qdrant_client.http import models as qmodels
+from radon.complexity import cc_visit
+
+from packages.shared_schemas.candidates import SubScore
+from services.agents.candidate_intelligence.tools.github import GithubAnalysis
+from services.api.core.config import get_settings
+
+_QDRANT_COLLECTION = "candidate_project_embeddings"
+
+
+def _penalty_curve(avg_complexity: float) -> float:
+    """Mild penalty up to cyclomatic complexity 15, steeper past it (doc 08 §1 note)."""
+    if avg_complexity <= 5:
+        return 100.0
+    if avg_complexity <= 15:
+        return 100.0 - (avg_complexity - 5) * 2.0
+    return max(0.0, 80.0 - (avg_complexity - 15) * 5.0)
+
+
+def _sample_complexity(
+    github_username: str, access_token: str | None, analysis: GithubAnalysis, max_repos: int = 3
+) -> tuple[float | None, list[str]]:
+    client = Github(login_or_token=access_token, retry=None) if access_token else Github(retry=None)
+    complexities: list[float] = []
+    sampled: list[str] = []
+
+    python_repos = [r for r in analysis.repos if not r.is_fork and "Python" in r.languages][:max_repos]
+    for repo_snapshot in python_repos:
+        try:
+            repo = client.get_repo(repo_snapshot.repo_full_name)
+            contents = repo.get_contents("")
+            py_files = [c for c in contents if c.path.endswith(".py") and c.size < 50_000]
+            if not py_files:
+                continue
+            source = base64.b64decode(py_files[0].content).decode("utf-8", errors="ignore")
+            blocks = cc_visit(source)
+            if blocks:
+                complexities.extend(b.complexity for b in blocks)
+                sampled.append(f"{repo_snapshot.repo_full_name}:{py_files[0].path}")
+        except (GithubException, UnicodeDecodeError, SyntaxError):
+            continue
+
+    if not complexities:
+        return None, []
+    return sum(complexities) / len(complexities), sampled
+
+
+def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple[float | None, str | None]:
+    if not settings.anthropic_api_key or not project_summaries:
+        return None, None
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    schema = {
+        "name": "project_quality_judgment",
+        "description": "Rate architecture/README quality of a candidate's projects.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number", "description": "0-100"},
+                "rationale": {"type": "string"},
+            },
+            "required": ["score", "rationale"],
+        },
+    }
+    try:
+        response = client.messages.create(
+            model=settings.llm_model_judgment,
+            max_tokens=512,
+            tools=[schema],
+            tool_choice={"type": "tool", "name": "project_quality_judgment"},
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Rate the architecture and README quality of these projects (0-100), "
+                        "grounded only in what's described, no speculation:\n\n"
+                        + "\n---\n".join(project_summaries)
+                    ),
+                }
+            ],
+        )
+    except anthropic.APIError:
+        return None, None
+    for block in response.content:
+        if block.type == "tool_use":
+            return float(block.input["score"]), block.input.get("rationale")
+    return None, None
+
+
+def project_quality(
+    github_username: str, access_token: str | None, analysis: GithubAnalysis
+) -> SubScore:
+    settings = get_settings()
+    avg_complexity, sampled_files = _sample_complexity(github_username, access_token, analysis)
+    mechanical = _penalty_curve(avg_complexity) if avg_complexity is not None else None
+
+    summaries = [f"{r.repo_full_name}: {r.stars} stars, languages {list(r.languages)}" for r in analysis.repos[:5]]
+    llm_score, llm_rationale = _llm_quality_judgment(summaries, settings)
+
+    if mechanical is None and llm_score is None:
+        return SubScore(value=None, rationale="No sampled Python source and no LLM judgment available.")
+    if mechanical is not None and llm_score is not None:
+        value = 0.6 * mechanical + 0.4 * llm_score
+        rationale = f"Complexity-based (avg cc={avg_complexity:.1f}) + LLM: {llm_rationale}"
+    elif mechanical is not None:
+        value = mechanical
+        rationale = f"Complexity-based only (avg cc={avg_complexity:.1f}); LLM judgment unavailable."
+    else:
+        value = llm_score
+        rationale = f"LLM judgment only; no Python source sampled. {llm_rationale}"
+    return SubScore(value=round(value, 1), evidence=sampled_files, rationale=rationale)
+
+
+def _get_qdrant() -> QdrantClient | None:
+    settings = get_settings()
+    try:
+        client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None, timeout=5.0)
+        client.get_collections()
+        return client
+    except Exception:
+        return None
+
+
+def _embed(texts: list[str]) -> list[list[float]] | None:
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        settings = get_settings()
+        model = SentenceTransformer(settings.embedding_model)
+        return model.encode(texts).tolist()
+    except Exception:
+        return None
+
+
+def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
+    settings = get_settings()
+    descriptions = [f"{r.repo_full_name}: {list(r.languages)}" for r in analysis.repos[:5]]
+
+    novelty_score: float | None = None
+    qdrant = _get_qdrant() if descriptions else None
+    embeddings = _embed(descriptions) if qdrant else None
+    if qdrant is not None and embeddings:
+        try:
+            if not qdrant.collection_exists(_QDRANT_COLLECTION):
+                qdrant.create_collection(
+                    collection_name=_QDRANT_COLLECTION,
+                    vectors_config=qmodels.VectorParams(
+                        size=len(embeddings[0]), distance=qmodels.Distance.COSINE
+                    ),
+                )
+            corpus_count = qdrant.count(_QDRANT_COLLECTION).count
+            if corpus_count > 0:
+                hits = qdrant.search(_QDRANT_COLLECTION, query_vector=embeddings[0], limit=5)
+                avg_similarity = sum(h.score for h in hits) / len(hits) if hits else 0.0
+                novelty_score = max(0.0, min(100.0, 100.0 * (1 - avg_similarity)))
+            qdrant.upsert(
+                _QDRANT_COLLECTION,
+                points=[
+                    qmodels.PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=vec,
+                        payload={"candidate_id": candidate_id, "repo_name": desc},
+                    )
+                    for vec, desc in zip(embeddings, descriptions)
+                ],
+            )
+        except Exception:
+            novelty_score = novelty_score  # keep whatever was computed before the failure
+
+    llm_score, llm_rationale = _llm_quality_judgment(descriptions, settings)  # reuse judgment shape
+
+    if novelty_score is None and llm_score is None:
+        return SubScore(
+            value=None,
+            rationale="No embedding corpus yet (cold start) and no LLM judgment available.",
+        )
+    if novelty_score is not None and llm_score is not None:
+        value = 0.5 * novelty_score + 0.5 * llm_score
+        rationale = f"Novelty vs corpus + LLM judgment: {llm_rationale}"
+    elif novelty_score is not None:
+        value = novelty_score
+        rationale = "Embedding-novelty vs corpus only; LLM judgment unavailable."
+    else:
+        value = llm_score
+        rationale = f"LLM judgment only; no embedding corpus yet. {llm_rationale}"
+    return SubScore(value=round(value, 1), rationale=rationale)
