@@ -88,9 +88,14 @@ export function CandidateDashboard() {
         </CardContent>
       </Card>
 
-      <Button variant="outline" render={<Link href="/profile/edit" />}>
-        {profile.github_username ? "Update your evidence" : "Connect more evidence"}
-      </Button>
+      <div className="flex gap-3">
+        <Button variant="outline" render={<Link href="/profile/edit" />}>
+          {profile.github_username ? "Update your evidence" : "Connect more evidence"}
+        </Button>
+        <Button variant="outline" render={<Link href="/resume-builder" />}>
+          Build resume & portfolio
+        </Button>
+      </div>
     </div>
   );
 }
