@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import Link from "next/link";
 import { fetchMe } from "@/lib/api";
 
 export default function CandidateLayout({ children }: { children: React.ReactNode }) {
@@ -44,5 +45,25 @@ export default function CandidateLayout({ children }: { children: React.ReactNod
     return <div className="p-8 text-muted-foreground">Loading…</div>;
   }
 
-  return <>{children}</>;
+  return (
+    <div className="flex flex-col md:flex-row flex-1 min-h-[calc(100vh-65px)]">
+      <aside className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6">
+        <div className="space-y-4">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Candidate Workspace</h2>
+          <nav className="flex flex-col gap-1">
+            <Link href="/dashboard" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Dashboard</Link>
+            <Link href="/profile/edit" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Ingest & Profile</Link>
+            <Link href="/resume-builder" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Resume & Portfolio</Link>
+            <Link href="/career" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">AI Career Guidance</Link>
+            <Link href="/pitch-deck" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Pitch Deck Analyzer</Link>
+            <Link href="/assessments/sample-assessment" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Assessments</Link>
+            <Link href="/interview/sample-session" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">AI Interview</Link>
+            <Link href="/my-flags" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Disputes & Flags</Link>
+            <Link href="/applications" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">My Applications</Link>
+          </nav>
+        </div>
+      </aside>
+      <main className="flex-1 bg-zinc-50 dark:bg-black p-8">{children}</main>
+    </div>
+  );
 }
