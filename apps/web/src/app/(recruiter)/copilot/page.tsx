@@ -1,30 +1,54 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { postCopilotQuery, type CopilotResult } from "@/lib/api";
+
+interface ChatMessage {
+  role: "ai" | "user";
+  text: string;
+  results?: CopilotResult[];
+}
+
+function formatResults(results: CopilotResult[]): string {
+  if (results.length === 0) return "I couldn't find any candidates matching that search.";
+  return `I found ${results.length} candidate(s) matching your description.`;
+}
 
 export default function RecruiterCopilotPage() {
-  const [messages, setMessages] = useState<Array<{ role: "ai" | "user"; text: string }>>([
-    { role: "ai", text: "Hello! I am your Recruitment Copilot. Ask me to find candidates (e.g. 'Find backend developers with React and Python experience who won hackathons')" }
+  const { getToken } = useAuth();
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "ai", text: "Hello! I am your Recruitment Copilot. Ask me to find candidates (e.g. 'Find backend developers with React and Python experience')" },
   ]);
   const [input, setInput] = useState("");
   const [searching, setSearching] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSend() {
-    if (!input.trim()) return;
+  async function handleSend() {
+    if (!input.trim() || searching) return;
     const userMsg = input;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setSearching(true);
+    setError(null);
 
-    setTimeout(() => {
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      const response = await postCopilotQuery(token, userMsg, conversationId);
+      setConversationId(response.conversation_id);
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: "I found 2 candidates matching your description:\n1. Alice Johnson (97% Match) - Python, FastAPI, React. Won DataAxle Summer Hackathon.\n2. Bob Smith (89% Match) - Python, Django, PostgreSQL. Active contributor.\n\nWould you like to add these candidates to your active screening pipeline?" }
+        { role: "ai", text: formatResults(response.results), results: response.results },
       ]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Copilot search failed");
+    } finally {
       setSearching(false);
-    }, 1500);
+    }
   }
 
   return (
@@ -38,7 +62,7 @@ export default function RecruiterCopilotPage() {
         <Card className="md:col-span-2 flex flex-col h-[500px]">
           <CardHeader>
             <CardTitle className="text-base font-semibold">Copilot Chat</CardTitle>
-            <CardDescription>Conversational search runs through semantic Qdrant lookups and LLM synthesis.</CardDescription>
+            <CardDescription>Structured filters + Qdrant semantic re-rank + Claude explanation, per doc 02 §3.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col flex-1 space-y-4 overflow-hidden">
             <div className="flex-1 overflow-y-auto space-y-3 p-4 bg-slate-50 dark:bg-zinc-900 rounded-md border">
@@ -47,16 +71,29 @@ export default function RecruiterCopilotPage() {
                   <div className={`max-w-[80%] p-3 rounded-lg text-sm whitespace-pre-wrap ${m.role === "ai" ? "bg-white dark:bg-zinc-800 text-ink dark:text-zinc-50 shadow-sm border border-border" : "bg-primary text-primary-foreground"}`}>
                     <p className="font-semibold text-xs mb-1 opacity-70">{m.role === "ai" ? "Recruiter Copilot" : "You"}</p>
                     <p>{m.text}</p>
+                    {m.results && m.results.length > 0 && (
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {m.results.map((r) => (
+                          <li key={r.candidate_id} className="border-t border-border/50 pt-1">
+                            {r.match_percentage !== null && (
+                              <span className="font-semibold">{r.match_percentage.toFixed(0)}% — </span>
+                            )}
+                            {r.explanation}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
               ))}
               {searching && (
                 <div className="flex justify-start">
                   <div className="bg-white dark:bg-zinc-800 text-slate p-3 rounded-lg text-sm border">
-                    Querying vector models...
+                    Understanding your query and searching the candidate pool…
                   </div>
                 </div>
               )}
+              {error && <p className="text-sm text-rose-flagged">{error}</p>}
             </div>
 
             <div className="flex gap-2">
@@ -80,23 +117,14 @@ export default function RecruiterCopilotPage() {
             <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
               <p>You can search by:
                 <br />• **Skills**: &quot;with Python and React&quot;
-                <br />• **Badges**: &quot;who have verified security badges&quot;
                 <br />• **Location**: &quot;based in Bangalore&quot;
-                <br />• **Complexity**: &quot;who worked on high complexity databases&quot;
+                <br />• **Quality bar**: &quot;top candidates&quot;
+                <br />• Follow up in the same conversation: &quot;now only remote ones&quot;
               </p>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">Technical Reference: doc/SRS/02-SRS-AI-Recruitment-Platform.md</CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-slate space-y-2">
-          <p>**Natural Language Parser**: Calls `POST /recruiter/copilot`. It processes query embeddings, queries Qdrant database clusters, filters using Postgres, and parses outputs using Claude 3.5 Sonnet.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

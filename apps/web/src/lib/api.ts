@@ -492,3 +492,213 @@ export async function fetchPresentationReport(
   }
   return res.json();
 }
+
+// --- Recruitment (Module 02) ---
+
+export const APPLICATION_STAGES = [
+  "sourced",
+  "screened",
+  "interview_scheduled",
+  "offered",
+  "rejected",
+  "hired",
+] as const;
+export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
+
+export const APPLICATION_STAGE_LABELS: Record<ApplicationStage, string> = {
+  sourced: "Sourced",
+  screened: "Screened",
+  interview_scheduled: "Interview Scheduled",
+  offered: "Offered",
+  rejected: "Rejected",
+  hired: "Hired",
+};
+
+export interface JobResponse {
+  id: string;
+  organization_id: string | null;
+  posted_by_user_id: string;
+  title: string;
+  description: string;
+  required_skills: string[] | null;
+  min_experience_years: number | null;
+  location: string | null;
+  is_remote: boolean;
+  created_at: string;
+}
+
+export interface JobCreateRequest {
+  title: string;
+  description: string;
+  required_skills?: string[];
+  min_experience_years?: number | null;
+  location?: string | null;
+  is_remote?: boolean;
+}
+
+export interface ApplicationResponse {
+  id: string;
+  job_id: string;
+  candidate_id: string;
+  stage: ApplicationStage;
+  source: string | null;
+  applied_at: string;
+  stage_updated_at: string;
+}
+
+export interface ApplicationWithJobResponse extends ApplicationResponse {
+  job_title: string;
+  job_location: string | null;
+}
+
+export interface ApplicationWithCandidateResponse extends ApplicationResponse {
+  candidate_headline: string | null;
+  candidate_github_username: string | null;
+  candidate_overall_talent_score: number | null;
+}
+
+export interface MatchScoreWithCandidateResponse {
+  id: string;
+  job_id: string;
+  candidate_id: string;
+  match_percentage: number | null;
+  skill_similarity: number | null;
+  semantic_similarity: number | null;
+  experience_match: number | null;
+  talent_score_alignment: number | null;
+  project_relevance: number | null;
+  explanation: string | null;
+  computed_at: string;
+  candidate_headline: string | null;
+  candidate_location: string | null;
+  candidate_github_username: string | null;
+  candidate_overall_talent_score: number | null;
+}
+
+export interface CopilotResult {
+  candidate_id: string;
+  match_percentage: number | null;
+  explanation: string;
+}
+
+export interface CopilotQueryResponse {
+  conversation_id: string;
+  results: CopilotResult[];
+  structured_filters_used: Record<string, unknown>;
+}
+
+export interface FunnelStage {
+  stage: ApplicationStage;
+  count: number;
+  conversion_rate_from_previous: number | null;
+}
+
+export interface HiringFunnelResponse {
+  job_id: string | null;
+  stages: FunnelStage[];
+}
+
+export interface TimeToHireResponse {
+  job_id: string | null;
+  distribution: Record<string, number>;
+  median_days: number | null;
+}
+
+export interface SourceBreakdownResponse {
+  job_id: string | null;
+  direct: number;
+  copilot_search: number;
+  hackathon: number;
+}
+
+async function recruitmentJson<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export function createJob(token: string, body: JobCreateRequest): Promise<JobResponse> {
+  return recruitmentJson(`/jobs`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchJobs(token: string): Promise<JobResponse[]> {
+  return recruitmentJson(`/jobs`, token);
+}
+
+export function fetchJobMatches(token: string, jobId: string): Promise<MatchScoreWithCandidateResponse[]> {
+  return recruitmentJson(`/jobs/${jobId}/matches`, token);
+}
+
+export function applyToJob(token: string, jobId: string): Promise<ApplicationResponse> {
+  return recruitmentJson(`/jobs/${jobId}/apply`, token, { method: "POST" });
+}
+
+export function fetchMyApplications(token: string): Promise<ApplicationWithJobResponse[]> {
+  return recruitmentJson(`/candidates/me/applications`, token);
+}
+
+export function fetchApplications(
+  token: string,
+  filters?: { jobId?: string; stage?: ApplicationStage },
+): Promise<ApplicationWithCandidateResponse[]> {
+  const params = new URLSearchParams();
+  if (filters?.jobId) params.set("job_id", filters.jobId);
+  if (filters?.stage) params.set("stage", filters.stage);
+  const query = params.toString();
+  return recruitmentJson(`/applications${query ? `?${query}` : ""}`, token);
+}
+
+export function updateApplicationStage(
+  token: string,
+  applicationId: string,
+  stage: ApplicationStage,
+): Promise<ApplicationResponse> {
+  return recruitmentJson(`/applications/${applicationId}/stage`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stage }),
+  });
+}
+
+export function postCopilotQuery(
+  token: string,
+  message: string,
+  conversationId?: string,
+): Promise<CopilotQueryResponse> {
+  return recruitmentJson(`/copilot/query`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, conversation_id: conversationId ?? null }),
+  });
+}
+
+export function fetchHiringFunnel(token: string, jobId?: string): Promise<HiringFunnelResponse> {
+  const query = jobId ? `?job_id=${jobId}` : "";
+  return recruitmentJson(`/analytics/hiring-funnel${query}`, token);
+}
+
+export function fetchTimeToHire(token: string, jobId?: string): Promise<TimeToHireResponse> {
+  const query = jobId ? `?job_id=${jobId}` : "";
+  return recruitmentJson(`/analytics/time-to-hire${query}`, token);
+}
+
+export function fetchSourceBreakdown(token: string, jobId?: string): Promise<SourceBreakdownResponse> {
+  const query = jobId ? `?job_id=${jobId}` : "";
+  return recruitmentJson(`/analytics/source-breakdown${query}`, token);
+}

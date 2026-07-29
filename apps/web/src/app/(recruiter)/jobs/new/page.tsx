@@ -1,20 +1,50 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { createJob, type JobResponse } from "@/lib/api";
 
 export default function RecruiterNewJobPage() {
+  const { getToken } = useAuth();
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [skills, setSkills] = useState("");
-  const [created, setCreated] = useState(false);
+  const [location, setLocation] = useState("");
+  const [minExperience, setMinExperience] = useState("");
+  const [isRemote, setIsRemote] = useState(true);
+  const [created, setCreated] = useState<JobResponse | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!title || !desc) return;
-    setCreated(true);
+    setSubmitting(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      const job = await createJob(token, {
+        title,
+        description: desc,
+        required_skills: skills
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        min_experience_years: minExperience ? Number(minExperience) : null,
+        location: location || null,
+        is_remote: isRemote,
+      });
+      setCreated(job);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create job posting");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -65,12 +95,47 @@ export default function RecruiterNewJobPage() {
                     onChange={(e) => setSkills(e.target.value)}
                   />
                 </div>
-                <Button type="submit" className="w-full">Publish Job Posting</Button>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="location">Location</Label>
+                    <input
+                      id="location"
+                      className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                      placeholder="e.g. Delhi"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="minExperience">Min Experience (years)</Label>
+                    <input
+                      id="minExperience"
+                      type="number"
+                      min={0}
+                      className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                      value={minExperience}
+                      onChange={(e) => setMinExperience(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate">
+                  <input type="checkbox" checked={isRemote} onChange={(e) => setIsRemote(e.target.checked)} />
+                  Remote OK
+                </label>
+                {error && <p className="text-sm text-rose-flagged">{error}</p>}
+                <Button type="submit" className="w-full" disabled={submitting}>
+                  {submitting ? "Publishing…" : "Publish Job Posting"}
+                </Button>
               </form>
             ) : (
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded text-sm">
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded text-sm space-y-2">
                 <h4 className="font-semibold text-emerald-800 dark:text-emerald-400">Job Posting Created</h4>
-                <p className="text-xs text-slate mt-1">AI Matching agents are currently running background index parses. Initial candidate matches will populate shortly.</p>
+                <p className="text-xs text-slate">
+                  The AI Matching Engine has run and scored every candidate in the pool against this posting.
+                </p>
+                <Button render={<Link href={`/jobs/${created.id}/matches`} />} className="w-full">
+                  View Ranked Matches
+                </Button>
               </div>
             )}
           </CardContent>
@@ -82,23 +147,14 @@ export default function RecruiterNewJobPage() {
               <CardTitle className="text-base font-semibold">Matching Strategy</CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>Posting triggers the **3-Stage Candidate Matcher**:</p>
-              <p>**Stage 1**: Fast SQL query matching candidate profiles for location, experience constraints.</p>
-              <p>**Stage 2**: Qdrant vector semantic search matching job descriptions to candidate profiles.</p>
-              <p>**Stage 3**: Claude Sonnet re-ranking top matches with natural language reasoning.</p>
+              <p>Posting triggers the AI Job Matching Engine (doc 08 §2):</p>
+              <p><strong>Skill Overlap</strong>: required skills vs. the candidate&apos;s verified (GitHub-corroborated) and self-declared skills.</p>
+              <p><strong>Semantic Similarity</strong>: embedding similarity between the job description and the candidate&apos;s skills, blended with location/remote fit.</p>
+              <p><strong>Experience Match</strong> and <strong>Talent Score Alignment</strong> round out the 4-term breakdown shown on every match.</p>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">Technical Reference: doc/SRS/02-SRS-AI-Recruitment-Platform.md</CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-slate space-y-2">
-          <p>**Job Schema**: Saves directly to the `jobs` table, defining parameters for embedding-generation pipelines.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
