@@ -23,10 +23,11 @@ status rollup.
   decisions.md. `(recruiter)/top-performers` and `reports/*` deferred to Phase 2 (Module 03/05
   output, not Module 02's job).
 - **Module 04 (PPT Pitch Deck Analyzer)** — FULLY COMPLETE, merged on `main`.
-- **Module 03 (Assessment & Verification)** — IN PROGRESS as of this file's timestamp. DB schema,
-  all three LangGraph subgraphs (skill verification, turn-based interview, team contribution), and
-  the FastAPI router are built; frontend wiring and live-verification against the real DB are the
-  remaining steps in the same session.
+- **Module 03 (Assessment & Verification)** — FULLY COMPLETE, all 3 FRs merged on `main`. Sandbox
+  execution is 100% client-side Pyodide (never server-side); interview is turn-based REST with
+  manually-persisted state (no LangGraph checkpointer, same as Module 02's Copilot); Web Speech
+  STT/TTS is entirely client-side, no audio ever stored. `submissions`/`contribution_reports`
+  tables Modules 05/06 need to read now exist on `main`.
 - **Modules 05 (Hackathon Pipeline) and 06 (Trust & Fraud Prevention)** — not started.
 
 **Work is currently split across 4 people/sessions** — see `.agents/PARALLEL_WORK_ASSIGNMENTS.md`
