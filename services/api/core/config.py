@@ -12,10 +12,24 @@ class Settings(BaseSettings):
     # transaction poolers. False (default) for local docker-compose Postgres.
     database_ssl_required: bool = False
     cors_allowed_origins: str = "http://localhost:3000"
+    frontend_url: str = "http://localhost:3000"
+    backend_url: str = "http://localhost:8000"
 
     clerk_secret_key: str
     clerk_jwks_url: str
     clerk_issuer: str
+
+    # Module 1 (Candidate Intelligence) integrations — see doc/SRS/01 §9.
+    anthropic_api_key: str = ""
+    llm_model_fast: str = "claude-haiku-4-5-20251001"
+    llm_model_judgment: str = "claude-sonnet-4-6"
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    github_oauth_redirect_uri: str = ""
+    cloudinary_url: str = ""
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""
+    embedding_model: str = "BAAI/bge-large-en-v1.5"
 
 
 @lru_cache
