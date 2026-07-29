@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.api.core.config import get_settings
-from services.api.routers import assessments, candidates, presentations, public, recruitment, users
+from services.api.routers import assessments, candidates, hackathons, presentations, public, recruitment, users
 
 settings = get_settings()
 
@@ -22,6 +22,7 @@ app.include_router(presentations.router)
 app.include_router(public.router)
 app.include_router(recruitment.router)
 app.include_router(assessments.router)
+app.include_router(hackathons.router)
 
 
 @app.get("/health")
