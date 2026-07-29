@@ -279,3 +279,59 @@ class GeneratedDocument(Base):
         ),
         Index("idx_generated_documents_candidate_time", "candidate_id", "generated_at"),
     )
+
+
+class CourseCatalogEntry(Base):
+    """FR-4.2/FR-4.5 — curated, statically-seeded course catalog (doc 01 §8: "maintained
+    static table ... not scraped live"). Seed rows are inserted by this table's own
+    migration, not by application code."""
+
+    __tablename__ = "course_catalog"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)  # coursera | freecodecamp | vendor
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    skill_tags: Mapped[list] = mapped_column(JSONB, nullable=False)  # ["python", "system-design", ...]
+    level: Mapped[str | None] = mapped_column(Text)  # beginner | intermediate | advanced
+    estimated_hours: Mapped[int | None] = mapped_column(Integer)
+    is_free: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "provider IN ('coursera','freecodecamp','vendor')", name="ck_course_catalog_provider"
+        ),
+        CheckConstraint(
+            "level IS NULL OR level IN ('beginner','intermediate','advanced')",
+            name="ck_course_catalog_level",
+        ),
+    )
+
+
+class CareerRecommendation(Base):
+    """FR-4 — AI Career Guidance System output (doc/multi-agent-architecture/01 §7).
+
+    `target_role` isn't in the doc's table verbatim — added so a candidate can request
+    guidance for more than one target role and each gets its own cached row (see
+    .agents/decisions.md dated entry for this module)."""
+
+    __tablename__ = "career_recommendations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=False
+    )
+    target_role: Mapped[str | None] = mapped_column(Text)
+    skill_gaps: Mapped[list | None] = mapped_column(JSONB)
+    recommended_courses: Mapped[list | None] = mapped_column(JSONB)
+    roadmap: Mapped[dict | None] = mapped_column(JSONB)
+    # Range only, never a point estimate (doc 01 §8) — enforced at the tool layer too.
+    salary_estimate_low: Mapped[int | None] = mapped_column(Integer)
+    salary_estimate_high: Mapped[int | None] = mapped_column(Integer)
+    salary_rationale: Mapped[str | None] = mapped_column(Text)
+    generated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_career_recs_candidate_time", "candidate_id", "generated_at"),
+    )

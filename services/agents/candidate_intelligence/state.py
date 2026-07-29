@@ -38,3 +38,34 @@ class CandidateProfileState(TypedDict):
 
     # Badge output
     badges: list[dict]
+
+
+class CareerGuidanceState(TypedDict):
+    """FR-4 (AI Career Guidance) — separate on-demand subgraph, not part of Flow A's
+    ingestion fan-out. See `career_guidance_graph.py`'s module docstring for why."""
+
+    candidate_id: str
+    candidate_skills: list[str]
+    location: Optional[str]
+    years_experience_proxy: float
+    talent_score: Optional[float]
+    target_role: Optional[str]  # candidate-requested; None = auto-pick best-fit role
+    # Small, static catalog fetched once by the API route (nodes don't touch the DB —
+    # same convention as the rest of this module).
+    course_catalog: list[dict]
+
+    # skill_gap_analysis output
+    resolved_target_role: Optional[str]
+    skill_gaps: list[dict]
+    covered_skills: list[str]
+
+    # certification_mapping output (FR-4.2 + FR-4.5 — same catalog, filtered by gap)
+    recommended_courses: list[dict]
+
+    # career_roadmap output (FR-4.3)
+    roadmap: Optional[dict]
+
+    # salary_prediction output (FR-4.4) — range only, never a point estimate
+    salary_estimate_low: Optional[int]
+    salary_estimate_high: Optional[int]
+    salary_rationale: Optional[str]

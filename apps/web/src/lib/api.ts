@@ -1,4 +1,4 @@
-// Client-side helpers only — per doc 00 §2.1, Next.js never runs business logic or
+﻿// Client-side helpers only — per doc 00 §2.1, Next.js never runs business logic or
 // guards routes itself; components call FastAPI directly with the Clerk token they
 // already have client-side. No Server Actions, no app/api/* proxying.
 
@@ -322,5 +322,75 @@ export async function fetchPublicPortfolio(
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GET /public/candidates/${username} failed: ${res.status}`);
+  return res.json();
+}
+
+// --- Career Guidance (Module 1 FR-4) ---
+
+export const CAREER_GUIDANCE_ROLES = [
+  "Backend Engineer",
+  "Frontend Engineer",
+  "Full-Stack Engineer",
+  "Data Scientist",
+  "Machine Learning Engineer",
+  "DevOps Engineer",
+  "Mobile Engineer",
+  "Cloud/Platform Engineer",
+  "Site Reliability Engineer",
+  "Security Engineer",
+] as const;
+
+export interface SkillGap {
+  skill: string;
+  similarity: number;
+  weight: number;
+  priority: number;
+}
+
+export interface CourseRecommendation {
+  id: string;
+  provider: "coursera" | "freecodecamp" | "vendor";
+  title: string;
+  url: string;
+  skill_tags: string[];
+  level: "beginner" | "intermediate" | "advanced" | null;
+  estimated_hours: number | null;
+  is_free: boolean;
+}
+
+export interface RoadmapStage {
+  stage: string;
+  skills: string[];
+  estimated_weeks: number;
+  description?: string;
+}
+
+export interface CareerGuidanceResponse {
+  target_role: string | null;
+  skill_gaps: SkillGap[];
+  recommended_courses: CourseRecommendation[];
+  roadmap: { stages: RoadmapStage[] };
+  salary_estimate_low: number | null;
+  salary_estimate_high: number | null;
+  salary_rationale: string | null;
+  generated_at: string;
+}
+
+export async function fetchCareerGuidance(
+  token: string,
+  options?: { targetRole?: string; refresh?: boolean },
+): Promise<CareerGuidanceResponse> {
+  const params = new URLSearchParams();
+  if (options?.targetRole) params.set("target_role", options.targetRole);
+  if (options?.refresh) params.set("refresh", "true");
+  const query = params.toString();
+  const res = await fetch(`${API_URL}/candidates/me/career-guidance${query ? `?${query}` : ""}`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ? String(body.detail) : `GET career-guidance failed: ${res.status}`);
+  }
   return res.json();
 }
