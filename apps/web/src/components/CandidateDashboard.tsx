@@ -88,6 +88,19 @@ export function CandidateDashboard() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-heading">Career Insights</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Skill gaps, a staged roadmap, recommended courses, and a salary estimate range for your
+            target role.
+          </p>
+          <Button render={<Link href="/career" />}>View career guidance</Button>
+        </CardContent>
+      </Card>
+
       <Button variant="outline" render={<Link href="/profile/edit" />}>
         {profile.github_username ? "Update your evidence" : "Connect more evidence"}
       </Button>
