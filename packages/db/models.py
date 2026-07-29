@@ -153,6 +153,11 @@ class CandidateProfile(Base):
     experience: Mapped[list | None] = mapped_column(JSONB)
     education: Mapped[list | None] = mapped_column(JSONB)
     merged_conflicts: Mapped[list | None] = mapped_column(JSONB)
+    # FR-5.2 public portfolio (`/[username]`) — neither doc set names a slug column, but
+    # the SSR route can't exist without one. Nullable + unique: no username until the
+    # candidate opts in via POST /candidates/me/portfolio/publish.
+    username: Mapped[str | None] = mapped_column(Text, unique=True)
+    portfolio_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -231,3 +236,46 @@ class Badge(Base):
     skill_name: Mapped[str] = mapped_column(Text, nullable=False)
     corroboration_sources: Mapped[list] = mapped_column(JSONB, nullable=False)
     awarded_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GeneratedDocument(Base):
+    """Module 1 FR-5 (Resume & Portfolio Builder) — one row per resume/cover-letter
+    generation attempt, covering both FR-5.1/5.3 (plain generation) and FR-5.4
+    (JD-optimized: `target_job_description` set, generated bullets re-ranked/re-worded
+    to that JD). Neither doc set specifies a table for this — added additively, same
+    reasoning as `career_recommendations` in doc 01 §7 (one row per on-demand generation,
+    not a mutable "current resume" singleton, so candidates keep a history).
+
+    `fact_check_status`/`fact_check_findings` implement the mandatory Fact-Check Agent
+    guardrail (doc 01 §4, NFR "zero tolerance for fabricated experience") — every row is
+    written regardless of pass/fail for the explainability trail, but the API only ever
+    hands a candidate a `failed` row's PDF/text if generation is being deliberately
+    disclosed as unresolved; see `services/api/routers/candidates.py` (FactCheckFailed).
+    """
+
+    __tablename__ = "generated_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=False
+    )
+    document_type: Mapped[str] = mapped_column(Text, nullable=False)  # resume | cover_letter
+    target_job_description: Mapped[str | None] = mapped_column(Text)
+    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id"))
+    fact_check_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    fact_check_findings: Mapped[list | None] = mapped_column(JSONB)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    model_used: Mapped[str | None] = mapped_column(Text)
+    generated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "document_type IN ('resume','cover_letter')", name="ck_generated_documents_document_type"
+        ),
+        CheckConstraint(
+            "fact_check_status IN ('pending','passed','failed')",
+            name="ck_generated_documents_fact_check_status",
+        ),
+        Index("idx_generated_documents_candidate_time", "candidate_id", "generated_at"),
+    )
