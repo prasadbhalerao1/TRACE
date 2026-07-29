@@ -1,6 +1,6 @@
 # Starts everything needed for local development: Docker infra (redis), the FastAPI
 # backend, and the Next.js frontend. Postgres and Qdrant are both managed/remote
-# (Neon, Qdrant Cloud) — no local containers for either. Run from anywhere; paths
+# (Neon, Qdrant Cloud) - no local containers for either. Run from anywhere; paths
 # are resolved relative to this script's location.
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1
@@ -32,7 +32,7 @@ if (-not $dockerOk) {
             if ($?) { $dockerOk = $true; break }
         }
     } else {
-        Write-Host "Docker Desktop.exe not found — start it manually, then re-run this script." -ForegroundColor Red
+        Write-Host "Docker Desktop.exe not found - start it manually, then re-run this script." -ForegroundColor Red
     }
 }
 
@@ -40,7 +40,7 @@ if ($dockerOk) {
     Write-Host "Starting redis container..." -ForegroundColor Green
     docker compose -f "$root\infra\docker-compose.yml" up -d redis
 } else {
-    Write-Host "Skipping redis — Docker not available." -ForegroundColor Red
+    Write-Host "Skipping redis - Docker not available." -ForegroundColor Red
 }
 
 # --- 2. FastAPI backend --------------------------------------------------------
