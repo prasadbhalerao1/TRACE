@@ -161,3 +161,121 @@ export async function uploadCertificate(
   if (!res.ok) throw new Error(`POST /candidates/me/ingest/certificate failed: ${res.status}`);
   return res.json();
 }
+
+// --- PPT Analyzer (Module 04) ---
+
+export const PITCH_SCORE_LABELS: Record<string, string> = {
+  innovation: "Innovation",
+  technical_feasibility: "Technical Feasibility",
+  presentation_quality: "Presentation Quality",
+  business_potential: "Business Potential",
+};
+
+export interface RubricScore {
+  value: number | null;
+  rationale: string | null;
+  gaps: string[];
+}
+
+export interface AIContentSignal {
+  score: number | null;
+  confidence_label: string;
+  flagged_sections: string[];
+  rationale: string;
+}
+
+export interface SlideOut {
+  slide_index: number;
+  title: string | null;
+  body: string | null;
+  notes: string | null;
+  has_image: boolean;
+  ocr_text: string | null;
+}
+
+export interface PlagiarismMatchOut {
+  id: string;
+  presentation_id: string;
+  matched_presentation_id: string;
+  slide_index: number;
+  similarity: number;
+  flagged_at: string;
+}
+
+export interface PresentationUploadResponse {
+  presentation_id: string;
+  status: string;
+}
+
+export interface PresentationStatusResponse {
+  presentation_id: string;
+  status: string;
+}
+
+export interface PresentationReportResponse {
+  presentation_id: string;
+  status: string;
+  linked_repo: string | null;
+  slides: SlideOut[];
+  scores: Record<string, RubricScore>;
+  overall_pitch_score: number | null;
+  renormalized_scores: string[];
+  summary: string | null;
+  suggestions: string[];
+  ai_content_signal: AIContentSignal | null;
+  plagiarism_matches: PlagiarismMatchOut[];
+  computed_at: string | null;
+}
+
+export async function uploadPresentation(
+  token: string,
+  file: File,
+  linkedRepo?: string,
+): Promise<PresentationUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (linkedRepo) formData.append("linked_repo", linkedRepo);
+  const res = await fetch(`${API_URL}/presentations/upload`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`POST /presentations/upload failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchPresentationStatus(
+  token: string,
+  presentationId: string,
+): Promise<PresentationStatusResponse> {
+  const res = await fetch(`${API_URL}/presentations/${presentationId}/status`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`GET /presentations/${presentationId}/status failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchPresentationReport(
+  token: string,
+  presentationId: string,
+): Promise<PresentationReportResponse> {
+  const res = await fetch(`${API_URL}/presentations/${presentationId}/report`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`GET /presentations/${presentationId}/report failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchPlagiarismMatches(
+  token: string,
+  presentationId: string,
+): Promise<PlagiarismMatchOut[]> {
+  const res = await fetch(`${API_URL}/presentations/${presentationId}/plagiarism-matches`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`GET /presentations/${presentationId}/plagiarism-matches failed: ${res.status}`);
+  return res.json();
+}
