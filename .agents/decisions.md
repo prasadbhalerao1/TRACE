@@ -132,7 +132,7 @@ Qdrant corpus, embedding model unavailable — rather than fabricating a number.
 re-normalization is what absorbs all of this gracefully; a fresh candidate's first score is expected to
 have 3 of 7 sub-scores renormalized away until Module 03 exists and keys are configured.
 → `services/agents/candidate_intelligence/tools/mechanical_scores.py`,
-`services/agents/candidate_intelligence/tools/judgment_scores.py`
+  `services/agents/candidate_intelligence/tools/judgment_scores.py`
 
 **GitHub OAuth callback: kept `GITHUB_OAUTH_REDIRECT_URI` pointed at the frontend
 (`localhost:3000/api/auth/github/callback`) and added a pure-passthrough Next.js Route Handler that
@@ -151,7 +151,7 @@ superstep (fanning out from `START`); returning the entire state dict from each 
 keys) makes every parallel branch write the same value to every channel, and langgraph's default
 "last value" channel raises `InvalidUpdateError` the moment two branches write to one key in the same
 step — even identical values. `conflicts` specifically needed an `Annotated[list[str], operator.add]`
-reducer since multiple nodes genuinely contribute _different_ new entries to it in parallel. Caught by
+reducer since multiple nodes genuinely contribute *different* new entries to it in parallel. Caught by
 running the graph directly (bypassing HTTP/auth) against a synthetic `GithubAnalysis` before wiring the
 frontend — worth repeating for future modules' graphs before assuming a node contract's `run()` shape
 is fine to write full-state returns.
@@ -164,17 +164,7 @@ rather than stubbed — they'll raise a clear `ResumeExtractionUnavailable` / `S
 at runtime until real keys are added, never silently fabricate data. Add real keys before testing
 resume upload or Project-Quality/Innovation LLM judgment end-to-end.
 → `services/api/core/config.py`, `services/agents/candidate_intelligence/tools/resume.py`,
-`services/api/core/storage.py`
-
-<<<<<<< HEAD
-**Qdrant switched from local docker-compose to Qdrant Cloud (managed), per user request** — same
-pattern already applied to Postgres/Neon. `QDRANT_URL`/`QDRANT_API_KEY` in `.env` now point at a real
-Qdrant Cloud cluster; no code change needed since `judgment_scores.py` already read both settings and
-passed `api_key=settings.qdrant_api_key or None` to `QdrantClient` (local Qdrant has no auth, so this
-path was already conditional). Local `qdrant` docker-compose service left defined but stopped/unused,
-same as `postgres`, for anyone who wants to switch back.
-→ `.env`, `infra/docker-compose.yml` (unchanged, service just not started), `DEV_SERVERS.md`,
-`scripts/dev-up.ps1`
+  `services/api/core/storage.py`
 
 ---
 
@@ -199,7 +189,7 @@ username could shadow). No dynamic route registry exists to check this automatic
 `services/api/routers/candidates.py` (`_RESERVED_USERNAMES`) must be updated by hand if new
 top-level pages are added.
 → `packages/db/models.py` (`CandidateProfile.username`/`.portfolio_published`), migration
-`a76c622e4c08`, `services/api/routers/candidates.py`, `services/api/routers/public.py`
+  `a76c622e4c08`, `services/api/routers/candidates.py`, `services/api/routers/public.py`
 
 **One `generated_documents` table for both resumes and cover letters** (`document_type` column),
 not two separate tables — neither doc set specifies a table here at all (doc 01 §5/§7's data
@@ -218,7 +208,7 @@ an infinite loop against a model that keeps producing unsupported claims, and do
 tolerance for fabrication" means the API must refuse to deliver the document rather than give up
 by relaxing the check, so a cap-then-refuse design was chosen over cap-then-deliver-anyway.
 → `services/agents/candidate_intelligence/resume_graph.py`,
-`services/agents/candidate_intelligence/document_state.py`
+  `services/agents/candidate_intelligence/document_state.py`
 
 **Fact-Check Agent failure (missing `ANTHROPIC_API_KEY`, API error) is treated as a FAILED check,
 never a silent pass.** Doc 01 §10 says "zero tolerance for fabricated experience" — an
@@ -228,7 +218,7 @@ letting the exception (or a default "trust it") skip the check. The API layer th
 the candidate that document (`FactCheckFailed`, HTTP 422 with the findings) rather than silently
 downgrading to an unchecked delivery.
 → `services/agents/candidate_intelligence/nodes/fact_check.py`,
-`services/api/routers/candidates.py` (`FactCheckFailed`)
+  `services/api/routers/candidates.py` (`FactCheckFailed`)
 
 **Cover-letter generation routed to Sonnet (`llm_model_judgment`), not Haiku**, even though doc
 01 §4's agent registry table only lists a Sonnet tier explicitly for the "Resume Generator Agent"
@@ -291,125 +281,3 @@ loops back through the generator exactly once before ending `passed`); `npx tsc 
 `npm run lint`, and `npm run build` all clean, with the production build's route table confirming
 `/[username]` resolves as a server-rendered dynamic route with no collisions.
 → all FR-5 files listed above
-=======
-
----
-
-## 2026-07-29 — Module 04: PPT Analyzer, built from scratch
-
-**Scope: full FR-1 through FR-9 in one pass**, unlike Module 01's deliberate FR-4/FR-5 deferral —
-doc 04 is small enough (§3 has 9 FRs, all tightly coupled around one linear pipeline with a single
-parallel fan-out) that splitting it across sessions would have meant threading partial state through
-the graph twice for no real benefit. Both `doc/SRS/04-SRS-PPT-Analyzer.md` and
-`doc/multi-agent-architecture/04-ppt-analyzer.md` were read in full and are essentially identical for
-this module (state schema, §5 data model SQL, and §6 endpoints all byte-for-byte the same) — no entry
-was needed in `.agents/DOCUMENTATION_MAP.md`'s "Known Differences" table and none was added.
-→ `services/agents/ppt_analyzer/`, `services/api/routers/presentations.py`, `packages/db/models.py`
-
-**Schema: matches both docs' §5/§4 SQL sketch almost verbatim**, with two additive, documented
-deviations: (1) `slides.ocr_text` (not in the doc's SQL) — the doc's own agent registry describes a
-Slide Image/OCR Agent producing text that FR-2/FR-5 need somewhere to persist per-slide, but the SQL
-sketch only has a `has_image` boolean; discarding OCR output after the graph run rather than storing
-it would silently throw away exactly the evidence FR-5's "cross-check technical claims" is supposed to
-ground its judgment in. (2) `presentations.hackathon_submission_id` and `.status`/`.status_detail` — the
-UUID FK-shaped column from the doc is kept as a **plain nullable UUID with no FK constraint** (doc 05
-doesn't exist yet, and the master architecture doc's own rule is that modules never FK directly into
-another module's private tables anyway — this was true even before doc 05 existed); `status`/
-`status_detail` were added because doc 04 §6 requires a `GET /status` endpoint but the doc's SQL sketch
-has no column to serve it from.
-→ `packages/db/models.py` (`Presentation`, `Slide`, `PresentationScore`, `PlagiarismMatch`)
-
-**Migration `e8a55dc975da_ppt_analyzer_tables`, `down_revision = '44fd41ed1de0'`** (chains directly
-onto Module 01's `44fd41ed1de0_add_github_ingestion_consent_type` — that was `alembic current`'s head
-at the time this was generated). Autogenerated, reviewed, and **actually applied to the real Neon dev
-DB** (`alembic upgrade head` succeeded, `alembic current` confirms `e8a55dc975da (head)`) — this
-migration may need rebasing if another module's migration lands on top of `44fd41ed1de0` first, since
-several modules are being built in parallel worktrees right now.
-→ `packages/db/migrations/versions/e8a55dc975da_ppt_analyzer_tables.py`
-
-**No `arq` background worker — the subgraph is invoked synchronously from `POST /presentations/upload`**,
-same as Module 01's Flow A. Doc 04 §9/§6 call for `arq` so the upload response never blocks on the
-pipeline, but no `arq` worker entrypoint exists anywhere in this repo yet (checked `services/` — only
-`arq` the _dependency_ is installed, no worker process). Building a whole shared worker infrastructure
-just for this one module's upload endpoint was judged out of scope for this pass; revisit once a real
-worker entrypoint exists for any module (`services/workers/` is sketched in doc 10 §1 but unbuilt).
-`GET /presentations/{id}/status` still exists and is real (reads a genuine `processing`/`done`/`failed`
-column) — it just resolves to `done`/`failed` synchronously within the same request cycle for now, and
-the frontend still polls it defensively in case that assumption changes later.
-→ `services/agents/ppt_analyzer/graph.py`, `services/api/routers/presentations.py`
-
-**FR-5's Module 01/03 cross-reference degrades to a direct, unauthenticated GitHub API read of the
-linked repo — not a join against `candidate_project_embeddings` or Module 03's (nonexistent) static
-analysis tables.** Per the task brief's instruction to treat that data as optional/absent and design the
-read path so it can be wired in later without a schema change: `presentations.linked_repo` is a plain
-string (no FK to any candidate/repo table), and `tools/repo_crosscheck.py` fetches a lightweight public
-snapshot (languages, README excerpt) directly from GitHub to give the Technical Feasibility Agent real
-evidence instead of nothing, with a docstring flagging it as the extension point once Module 01/03 data
-exists. Degrades to `None` on any failure (repo private/missing/rate-limited/not linked) — never
-fabricates evidence. This mirrors the exact "Problem Solving is always `None`" cold-start pattern from
-Module 01's own entry above.
-→ `services/agents/ppt_analyzer/tools/repo_crosscheck.py`
-
-**FR-6's AI-content heuristic uses burstiness + lexical-diversity statistics, not a GPT-2 perplexity
-model via `transformers`.** Doc 08's own ground rules explicitly allow a simpler statistical fallback as
-a legitimate scope-reduction for the _code_-plagiarism algorithm (§3) "if integrating [the real
-approach] is still too heavy in the time you have" — the same reasoning was applied here: a GPT-2-based
-perplexity signal needs a model download at runtime (no guaranteed network access, multi-hundred-MB),
-where a pure-stdlib statistical signal has zero extra runtime dependency and still produces a
-score+confidence+evidence signal that satisfies FR-6's actual hard requirement (never a bare verdict).
-`transformers`/`torch` remain installed in `services/api/.venv` for a future upgrade to real perplexity
-scoring without new dependency work.
-→ `services/agents/ppt_analyzer/tools/ai_content_heuristic.py`
-
-**Similarity/Plagiarism Agent skips the doc's "Haiku for narrative" step** — matches are structured
-(`matched_presentation_id`, `slide_index`, `similarity`) via a real Qdrant search against a
-`presentation_slide_embeddings` collection (built up incrementally, same corpus-building pattern as
-Module 01's Innovation novelty check), which is itself the evidence FR-6/§9's "never a bare boolean,
-always evidence" rule asks for. The LLM narrative was judged to be UI copy, not part of the actual
-detection, and cut to keep the number of real Anthropic calls per upload bounded.
-→ `services/agents/ppt_analyzer/tools/plagiarism.py`
-
-**Route split: upload is `(candidate)/pitch-deck/page.tsx` (candidate-only, guarded by that route
-group's existing layout); the report view is `/pitch-deck/[id]/page.tsx`, OUTSIDE any role group.**
-Doc/SRS/04 §2's actor table has Candidate/Team upload but Judge/Recruiter/Investor _view_ the scored
-report — putting the report page inside `(candidate)` would incorrectly block those other roles via
-that group's role-guard `layout.tsx`. This is the exact same problem and fix already recorded above for
-`/dashboard`: a route needed by multiple roles can't live inside any single role's parenthesized group,
-so it goes directly under `src/app/` instead. The backend enforces the actual access boundary
-(`get_current_user`, no role restriction, on all three GET endpoints) — the frontend split just mirrors it.
-→ `apps/web/src/app/(candidate)/pitch-deck/page.tsx`, `apps/web/src/app/pitch-deck/[id]/page.tsx`
-
-**Two real bugs found and fixed via direct `graph.ainvoke()` / router-function smoke tests against a
-real python-pptx deck and the real Neon dev DB** (following the same "test the graph directly before
-wiring the frontend" practice recorded in Module 01's parallel fan-out entry above):
-
-1. `python-pptx`'s `slide.shapes.title` returns a **new proxy object on every property access**, so
-   `shape is not slide.shapes.title` (identity comparison) never actually excluded the title shape from
-   the body text — every slide's title was being duplicated into its own body. Fixed by comparing
-   `shape.shape_id` (stable across accesses) instead of object identity.
-   → `services/agents/ppt_analyzer/tools/extraction.py`
-2. A syntactically-valid-but-placeholder `CLOUDINARY_URL` (literally `cloudinary://<api_key>:...`, this
-   repo's actual `.env.example`/current `.env` value) passes `storage.py`'s config-presence check and
-   only fails once the real Cloudinary API call is made, raising `cloudinary.exceptions.AuthorizationRequired`
-   — a different exception type than `StorageUnavailable`, so it wasn't being caught by the narrower
-   except clause and would have 500'd the whole upload. Broadened the catch to
-   `cloudinary.exceptions.Error` as well, same graceful "best-effort persistence, never blocks the
-   extraction/scoring pipeline" degrade.
-   → `services/api/routers/presentations.py`
-
-**Verification performed without live API keys**: the full pipeline (`format_normalization` ->
-`content_extraction` -> all 5 parallel branches -> `aggregation` -> `summary_suggestions`) was run
-directly via `graph.ainvoke()` against both an empty state and a real generated `.pptx`, and the
-`upload_presentation`/`get_report`/`get_status`/`get_plagiarism_matches` router functions were called
-directly (bypassing Clerk auth, same technique as Module 01) against the real Neon DB — confirming no
-`InvalidUpdateError` from the parallel fan-out, confirming every LLM-dependent node degrades to a
-`None`-valued score with a clear "unavailable: ANTHROPIC_API_KEY is not configured" rationale (never a
-fabricated number), and confirming the DB writes/reads round-trip correctly. **Not verified**: the
-actual Anthropic rubric-scoring output quality, real Cloudinary storage, real Qdrant plagiarism corpus
-matching (local Qdrant wasn't running during this session), and legacy `.ppt` conversion (no LibreOffice
-binary on this host) — all four require infrastructure/keys not present in this environment and degrade
-via the typed-error paths described above rather than being stubbed.
-→ verified interactively, not committed as test files (no test runner/fixtures exist yet in this repo
-for either `services/agents` or `services/api` — worth adding in a follow-up pass)
-
-> > > > > > > worktree-agent-a65b3f366de8e6465
