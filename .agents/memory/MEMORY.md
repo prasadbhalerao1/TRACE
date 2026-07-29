@@ -8,3 +8,5 @@
 - [Windows background dev servers](feedback_windows_background_dev_servers.md) — never background a long-lived server with shell `&`/disown; pass the bare command with run_in_background instead.
 - [Parallel module builds 2026-07-29](project_parallel_module_builds_20260729.md) — **COMPLETED**: FR-4, FR-5, Module 04 all merged into main (`8f6327a`). Worktrees removed. Migration chain linearized. Read this for the full file inventory and what's needed before testing live.
 - [Env secret leak prevention](feedback_env_example_secret_leak.md) — never commit real secrets; .env.example uses placeholders.
+- [Candidate Workflow UI Completed](project_candidate_workflow_ui_completed.md) — **COMPLETED**: 4-action candidate dashboard launchpad, Module 04 API client alignment, DB verified at head (`e8a55dc975da`), 0 tsc errors.
+- [Module 02 Recruitment Prep](project_module02_recruitment_platform_prep.md) — Architecture blueprint and step sequence for Module 02 (3-stage matching pipeline, Recruiter Copilot, Job CRUD, ATS Kanban).
