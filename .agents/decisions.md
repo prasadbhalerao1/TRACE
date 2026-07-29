@@ -432,3 +432,114 @@ all clean, no route collisions.
 → `packages/db/models/assessment.py`, `services/agents/assessment/`,
 `services/api/routers/assessments.py`, `apps/web/src/app/(candidate)/assessments/`,
 `apps/web/src/app/(candidate)/interview/`, `apps/web/src/app/(recruiter)/reports/`
+
+---
+
+## 2026-07-29 — Phase 1, Module 05: Hackathon-to-Hiring Pipeline
+
+**No `judge_evaluations` table — SRS's design over the architecture doc's.** This is the
+one real disagreement `.agents/DOCUMENTATION_MAP.md`'s Known Differences table already
+flags. The member-1 assignment file's own data-model list only names `hackathons`,
+`hackathon_teams`, `hackathon_team_members`, `hackathon_submissions`,
+`hackathon_rankings`, `recruiter_watchlists` (no `judge_evaluations`), so SRS's single
+`hackathon_submissions.judge_score` column is what got built. `judge_rationale` and
+`judge_user_id` are additive (neither doc's `judge_score`-only column has anywhere to put
+the qualitative rationale the `(judge)/submissions/[id]` frontend stub already collects).
+→ `packages/db/models/hackathon.py`
+
+**`hackathon_team_members` uses a surrogate `id` PK, not the docs' composite
+`(team_id, candidate_id)`.** A CSV/webhook-imported roster member is frequently not a
+platform candidate yet — the composite PK requires a non-null `candidate_id` on every
+row, which can't represent that. Same real gap Module 03's
+`contribution_reports.github_username` fallback already solved once this project;
+solved the same way here (`candidate_id` nullable, `github_username`/`display_name`
+fallback columns, resolved-by-github-username matching against `candidate_profiles` at
+ingestion time).
+→ `packages/db/models/hackathon.py`, migration `afe5f58698f3`
+
+**Cross-module integration reuses the target module's real compiled LangGraph graph
+in-process (`get_verification_graph()`), not its HTTP router endpoint verbatim.** The
+member-1 assignment says to "call into Module 03's router endpoints, never its internal
+tools/nodes directly" — but `assessments.py`'s `POST /assessments/{id}/submit` is gated by
+`_require_consent(db, user.id, "ai_assessment")`, a consent designed for a candidate
+personally consenting to being assessed, which doesn't fit "an organizer/team links a
+repo to a hackathon submission." Rather than fabricate a consent grant for a use case the
+gate wasn't built for, this session calls `get_verification_graph()` directly — the exact
+same graph-level entrypoint `assessments.py` itself imports and calls, one level above
+`tools`/`nodes` — and persists the resulting `Assessment`/`Submission` rows itself
+(mirroring `assessments.py`'s own persistence code exactly, not reimplementing any
+scoring). Module 04 needed no equivalent workaround: a team's deck is uploaded through
+Module 04's own real `POST /presentations/upload` endpoint before the team links it to
+their hackathon submission, so by ranking time `presentation_scores` already exists and
+this module only ever reads that table (a plain `SELECT`, exactly as instructed).
+→ `services/agents/hackathon/nodes/repo_deck_linking.py`,
+  `services/api/routers/hackathons.py` (`finalize_rankings`)
+
+**Cross-event novelty reuses Module 04's existing `plagiarism_matches` output instead of
+re-embedding slide text and re-querying Qdrant.** `plagiarism_matches` is itself the
+result of a Qdrant search across the *entire* presentation corpus (not scoped to one
+hackathon), computed once at deck-upload time — exactly the "has this idea appeared in
+prior events" signal FR-5 asks for. `novelty_score = 100 * (1 - max_similarity)` if any
+match rows exist for that presentation, `100` (fully novel) if the deck has zero matches,
+`None` (N/A, re-normalized away) if no deck is linked at all.
+→ `services/agents/hackathon/nodes/cross_event_novelty.py`
+
+**Composite ranking formula (doc 08 §8, unchanged weights) with the same cold-start
+re-normalization pattern as doc 08 §1.1** (already used by Module 01's Talent Score):
+0.40 judge + 0.30 pitch + 0.20 repo quality + 0.10 novelty, any missing component's
+weight zeroed and the rest re-normalized rather than zero-filled. `repo_quality_score`
+is Module 03's `Submission.score` for the linked repo's `project_analysis` assessment;
+there's no separate "repo quality" concept in either doc, this is the closest existing
+signal and is what FR-3's `doc03.repo_quality_score` term actually refers to.
+→ `services/agents/hackathon/tools/ranking.py`
+
+**Ingestion mode split: CSV needs no server-side Normalization Agent pass, webhook
+does.** Doc 05 §8's `CSVImportPreview.tsx` (SheetJS/xlsx.js) means the organizer already
+resolves column-name ambiguity in a client-side preview grid before the structured
+`CSVImportRequest` ever reaches the backend — so CSV import only validates, it doesn't
+re-map fields. Webhook payloads have no human in the loop, so `POST .../webhook` accepts
+an arbitrary `dict` and runs it through a real Normalization Agent (rules-first synonym
+table, Haiku fallback only when rules can't confidently map a required field) before
+reusing the same team-upsert path as CSV/direct. Webhook HMAC signature verification
+(doc 05 §9) was NOT implemented — documented gap, same "real integration, honest limit"
+pattern as other modules' unfinished integrations.
+→ `services/agents/hackathon/tools/normalization.py`,
+  `services/api/routers/hackathons.py` (`receive_webhook`)
+
+**Additive endpoints beyond doc 05 §7's literal list** (none of these exist in either doc
+— logged since they change the actual API surface): `POST .../submissions/{id}/judge-
+score` (FR-2 needs a judge-scoring write path and neither doc's endpoint list has one);
+`POST .../rankings/finalize` (doc 05 §7 lists only `GET .../rankings` — nothing actually
+triggers ranking computation; the organizer frontend's pre-existing "Finalize Rankings"
+button needed a real endpoint to call); `GET /hackathons` and `GET .../teams` (list forms,
+needed for the organizer manage page and judge queue, mirroring `GET /jobs`'s precedent
+in Module 02). `/recruiters/{id}/watchlists` and `/recruiters/{id}/top-performers-feed`
+were built as `/recruiters/me/...` instead — same self-service-over-literal-`{id}`
+deviation Module 01 FR-5 already established, logged there.
+
+**`/recruiters/me/top-performers-feed` shows all recent top-3 finishers, unfiltered by
+watchlist criteria.** Actually matching a recruiter's specific `recruiter_watchlists`
+criteria against finalized rankings is the Module 02 consumer side of the
+`hackathon.rankings.finalized` event — explicitly out of this module's scope per the
+assignment file's §6 ("stop here"), deferred to the Phase 2 integration pass. Watchlists
+are still fully created/persisted now so that Phase 2 work has real rows to match
+against later.
+
+**No HTML/CSV file upload parsing (`pandas`) — CSV import takes pre-parsed JSON.** Doc 05
+§9 names `pandas` for backend CSV/XLSX parsing, but doc 05 §8's own frontend design
+already does that parsing client-side (SheetJS) for the preview-before-commit UX; adding
+a second, redundant server-side file-parsing path contradicts that design rather than
+complementing it. If a future session wants raw file upload support instead of/alongside
+the JSON path, doc 05 §9's `pandas` note is still the right tool for it.
+
+**Verified live against the real Neon DB** (same dependency-override-bypassing-Clerk
+technique as Modules 01/02/03): hackathon creation; CSV import (team + member + judge
+score in one call); direct submission with a real repo link; webhook ingestion with a
+raw Devpost-shaped payload run through the real Normalization Agent; judge scoring;
+`rankings/finalize` end-to-end including a real GitHub API call + Module 03 static
+analysis pass against `octocat/Hello-World` (LLM code review correctly failed closed
+with the still-empty `ANTHROPIC_API_KEY`, so `repo_quality_score` stayed `None` —
+expected, not a bug); idempotent re-finalize (upserts 3 ranking rows, not 6); recruiter
+watchlist creation; top-performers feed. `python -c "import services.api.main"` clean.
+→ `packages/db/models/hackathon.py`, `packages/shared_schemas/hackathon.py`,
+`services/agents/hackathon/`, `services/api/routers/hackathons.py`
