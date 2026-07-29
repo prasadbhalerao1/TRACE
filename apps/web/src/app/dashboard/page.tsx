@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CandidateDashboard } from "@/components/CandidateDashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchMe, type UserProfile } from "@/lib/api";
 
@@ -50,6 +51,14 @@ export default function DashboardPage() {
 
   if (!profile) {
     return <div className="p-8 text-slate">Loading your dashboard…</div>;
+  }
+
+  if (profile.role === "candidate") {
+    return (
+      <div className="mx-auto w-full max-w-2xl p-8">
+        <CandidateDashboard />
+      </div>
+    );
   }
 
   return (

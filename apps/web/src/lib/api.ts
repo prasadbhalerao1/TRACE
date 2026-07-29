@@ -48,3 +48,116 @@ export async function completeOnboarding(
   }
   return res.json();
 }
+
+// --- Candidate Intelligence (Module 1 core loop) ---
+
+export interface SubScore {
+  value: number | null;
+  evidence: string[];
+  rationale: string | null;
+}
+
+export const SUB_SCORE_LABELS: Record<string, string> = {
+  coding_ability: "Coding Ability",
+  problem_solving: "Problem Solving",
+  project_quality: "Project Quality",
+  innovation: "Innovation",
+  technical_consistency: "Technical Consistency",
+  community_participation: "Community Participation",
+  leadership: "Leadership",
+};
+
+export interface TalentScoreResponse {
+  overall: number | null;
+  sub_scores: Record<string, SubScore>;
+  renormalized_subscores: string[];
+  score_version: string;
+  computed_at: string;
+}
+
+export interface CandidateProfileResponse {
+  id: string;
+  user_id: string;
+  github_username: string | null;
+  headline: string | null;
+  location: string | null;
+  skills: { name: string; source?: string; confidence?: number }[] | null;
+  experience: Record<string, unknown>[] | null;
+  education: Record<string, unknown>[] | null;
+  merged_conflicts: { description: string; resolved: boolean }[] | null;
+  updated_at: string;
+}
+
+export interface BadgeResponse {
+  id: string;
+  skill_name: string;
+  corroboration_sources: string[];
+  awarded_at: string;
+}
+
+export interface DashboardResponse {
+  profile: CandidateProfileResponse;
+  latest_score: TalentScoreResponse | null;
+  score_history: TalentScoreResponse[];
+  badges: BadgeResponse[];
+}
+
+function authHeaders(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
+}
+
+export async function fetchDashboard(token: string): Promise<DashboardResponse> {
+  const res = await fetch(`${API_URL}/candidates/me/dashboard`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`GET /candidates/me/dashboard failed: ${res.status}`);
+  return res.json();
+}
+
+export async function grantConsent(token: string, consentType: string): Promise<void> {
+  const res = await fetch(`${API_URL}/candidates/me/consents/${consentType}`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`POST /candidates/me/consents/${consentType} failed: ${res.status}`);
+}
+
+export async function fetchGithubOAuthUrl(token: string): Promise<string> {
+  const res = await fetch(`${API_URL}/candidates/github/oauth-url`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`GET /candidates/github/oauth-url failed: ${res.status}`);
+  const data = await res.json();
+  return data.authorize_url;
+}
+
+export async function uploadResume(
+  token: string,
+  file: File,
+): Promise<CandidateProfileResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_URL}/candidates/me/ingest/resume`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`POST /candidates/me/ingest/resume failed: ${res.status}`);
+  return res.json();
+}
+
+export async function uploadCertificate(
+  token: string,
+  file: File,
+): Promise<CandidateProfileResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_URL}/candidates/me/ingest/certificate`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  if (!res.ok) throw new Error(`POST /candidates/me/ingest/certificate failed: ${res.status}`);
+  return res.json();
+}
