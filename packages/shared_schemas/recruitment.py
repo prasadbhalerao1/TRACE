@@ -57,6 +57,15 @@ class ApplicationWithJobResponse(ApplicationResponse):
     job_location: str | None
 
 
+class ApplicationWithCandidateResponse(ApplicationResponse):
+    """Used by the recruiter-facing GET /applications (kanban board) — needs enough
+    candidate identity to render a card without a second round-trip per card."""
+
+    candidate_headline: str | None
+    candidate_github_username: str | None
+    candidate_overall_talent_score: float | None
+
+
 class ApplicationStageUpdateRequest(BaseModel):
     stage: str
 

@@ -51,7 +51,11 @@ async def run(state: CopilotState) -> dict:
         for candidate in survivors:
             skill_names = [s["name"] for s in candidate.get("skills", [])]
             centroid = candidate_skill_centroid(skill_names)
-            similarity = cosine_similarity(query_vector, centroid) if centroid else 0.0
+            similarity = max(0.0, cosine_similarity(query_vector, centroid)) if centroid else 0.0
+            # Carried through to the response as a display "match_percentage" for
+            # Copilot results — this is retrieval relevance, not the formal per-job
+            # doc-08 4-term MatchScore (Copilot search isn't necessarily job-scoped).
+            candidate = {**candidate, "_retrieval_score": round(100.0 * similarity, 1)}
             scored.append((similarity, candidate))
         scored.sort(key=lambda pair: pair[0], reverse=True)
         shortlist = [c for _, c in scored[:_SHORTLIST_LIMIT]]
