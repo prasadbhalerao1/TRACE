@@ -1,100 +1,147 @@
 ---
 name: parallel-module-builds-20260729
-description: "Handoff snapshot: 3 parallel worktree-agent builds (Module 01 FR-4, FR-5, Module 04 PPT Analyzer) dispatched 2026-07-29, session ended mid-flight due to credit limit"
-metadata: 
+description: "COMPLETED 2026-07-29: All 3 parallel worktree builds (Module 01 FR-4, FR-5, Module 04 PPT Analyzer) merged into main. Worktrees cleaned up. Next: Module 02 Recruitment Platform."
+metadata:
   node_type: memory
   type: project
   originSessionId: 0f392849-bc56-42a0-9b8b-f5ba099635df
-  modified: 2026-07-29T11:24:23.082Z
+  modified: 2026-07-29T17:26:00.000Z
 ---
 
-## Why this memory exists
-Session ran out of credits with two of three dispatched builds still in progress. This is a literal
-handoff snapshot — read it first in any continuation session, before re-deriving anything from the docs.
+## STATUS: FULLY COMPLETE — read this before touching anything
 
-## What was dispatched (all via Agent tool, isolation: worktree, run in background)
-Per [[doc_sets_both_current]]'s module-boundary design (each module owns its own tables/subgraph,
-cross-module only via shared core/events bus), three independent build tasks were launched in
-parallel, each briefed to follow BOTH `doc/SRS/*.md` and `doc/multi-agent-architecture/*.md` for its
-module, check `.agents/decisions.md` for precedent, write real (not stubbed) integration code that
-raises typed "Unavailable" errors given the still-missing `ANTHROPIC_API_KEY`/`CLOUDINARY_URL`, commit
-progressively, and log new decisions to `.agents/decisions.md`.
+All three parallel worktree agent builds are **merged into `main`** and worktrees are removed.
+`main` HEAD is `8f6327a`. Working tree is clean. No conflicts anywhere.
 
-## Ground truth as of session end (2026-07-29, verified via `git worktree list` + per-worktree `git log`/`git status`)
+---
 
-**Main branch** is at `fc707f8` — 2 commits AHEAD of the point (`524874b`) all three worktrees branched
-from: `d08ae7e` (dev-up script + DEV_SERVERS.md) and `fc707f8` (Qdrant Cloud switch). Neither touches
-code any worktree agent touched, **except** `.agents/decisions.md`, which all three agents also append
-to — expect a trivial append-conflict there on merge, nothing else.
+## What was built (all on `main` as of 2026-07-29 17:26 IST)
 
-### 1. Module 01 FR-5 (Resume/Portfolio Builder) — **DONE**, agent `a5bb5f7bdf864e68e`
-Branch `worktree-agent-a5bb5f7bdf864e68e`, worktree `D:\Programming\DataAxle\.claude\worktrees\agent-a5bb5f7bdf864e68e`, HEAD `253635b`, clean (no uncommitted changes). 6 commits: schema → agents → API → web → nav link → decisions log.
-Migration: `a76c622e4c08_resume_portfolio_builder_tables.py`, `down_revision = '44fd41ed1de0'`.
-`tsc --noEmit`, `npm run lint`, `npm run build` all passed. Full detail already in `.agents/decisions.md`
-under "2026-07-29 — Phase 1, Module 01: Candidate Intelligence — FR-5".
+Per `doc/multi-agent-architecture/00-master-architecture.md §7 Build Order`, **Module 01 (Candidate
+Intelligence)** is now fully implemented across all FRs, and **Module 04 (PPT Analyzer)** is done.
 
-### 2. Module 01 FR-4 (Career Guidance) — **STALLED/FAILED, uncommitted**, agent `a8ffa119f4ae8a6d9`
-Confirmed dead: task notification reported `status: failed`, `"Agent stalled: no progress for 600s
-(stream watchdog did not recover)"`, mid-fix on a real type error. **It will not resume on its own** —
-any continuation must treat this as a plain uncommitted worktree, not a live agent to message.
-Branch `worktree-agent-a8ffa119f4ae8a6d9`, worktree `D:\Programming\DataAxle\.claude\worktrees\agent-a8ffa119f4ae8a6d9`, HEAD still at `524874b` (the base — **zero commits made**).
-**Known issue to fix before committing: there is an unresolved type error somewhere in the diff below** —
-the agent's last message before stalling was "Real type error caught. Let's fix it" — run `tsc --noEmit`
-(frontend) and check Python type-checking before committing to find and fix it.
-Uncommitted work present in the working tree (verified via `git status --short`):
-- Modified: `apps/web/src/components/CandidateDashboard.tsx`, `apps/web/src/lib/api.ts`, `packages/db/models.py`, `packages/shared_schemas/candidates.py`, `services/agents/candidate_intelligence/state.py`, `services/api/core/config.py`, `services/api/routers/candidates.py`
-- New/untracked: `apps/web/src/app/(candidate)/career/`, `apps/web/src/components/{CareerGuidance,RoadmapTimeline,SalaryRangeChart}.tsx`, `packages/db/migrations/versions/a333d4c53bd0_career_guidance_tables.py` (`down_revision = '44fd41ed1de0'`), `services/agents/candidate_intelligence/career_guidance_graph.py`, `services/agents/candidate_intelligence/nodes/{career_roadmap,certification_mapping,salary_prediction,skill_gap_analysis}.py`, `services/agents/candidate_intelligence/tools/{course_catalog,roadmap,role_taxonomy,salary_model,skill_gap,train_salary_model}.py`
-**This looks feature-complete but never committed or nav-linked.** A continuation session should: review this diff, commit it in logical chunks (schema → agents → API/schemas → frontend, matching the FR-5 agent's pattern), add the decisions.md entry, and check whether `CandidateDashboard.tsx` needs a nav link to the new `career/` page (FR-5's agent added one for its page — this one may not have gotten that far).
+### Module 01 FR-1/2/3 — Talent Profile Engine (done before this session)
+Base commit `fc707f8`. Tables, LangGraph Flow A (ingest → score → innovate → badge), GitHub OAuth,
+PDF/cert ingest, conflict resolution, scoring endpoints. See `project_module01_candidate_core_loop.md`.
+Migration head at time of branching: `44fd41ed1de0`.
 
-### 3. Module 04 (PPT Analyzer) — **STALLED/FAILED, partially committed**, agent `a65b3f366de8e6465`
-Confirmed dead: task notification reported `status: failed`, `"Agent stalled: no progress for 600s
-(stream watchdog did not recover)"`, mid-commit — its last message was "Good — node_modules and .env
-are properly excluded. Let's stage and commit the frontend work along with the decisions log and env
-example." **It will not resume on its own.**
-Branch `worktree-agent-a65b3f366de8e6465`, worktree `D:\Programming\DataAxle\.claude\worktrees\agent-a65b3f366de8e6465`, HEAD `440ccb6`. 2 commits beyond base: `4d6f052` (LangGraph subgraph) and `440ccb6` (presentations router + migration).
-Migration: `e8a55dc975da_ppt_analyzer_tables.py`, `down_revision = '44fd41ed1de0'`.
-Uncommitted work present on top of those 2 commits (re-verified after the stall — unchanged from the
-earlier check, so it genuinely froze, not just slow):
-- Modified: `.agents/decisions.md` (the entry it was about to commit — read it, it's likely finished text), `.env.example`, `apps/web/src/lib/api.ts`
-- New/untracked: `apps/web/src/app/(candidate)/pitch-deck/`, `apps/web/src/app/pitch-deck/` (**note: TWO pitch-deck dirs, one nested under `(candidate)` and one at top level — likely an in-progress rename/relocation the agent hadn't finished; resolve which is intended, probably the `(candidate)` one, before committing**), `apps/web/src/components/{AIContentSignalBadge,PitchScoreRadarChart,PlagiarismMatchList,SlideViewer}.tsx`
-The staged `.agents/decisions.md` diff is very likely the finished module-04 decisions entry, just never
-committed — read `git -C <worktree> diff .agents/decisions.md` first, it may save re-deriving it.
+### Module 01 FR-5 — AI Resume & Portfolio Builder (commit `202245d`, merge tag)
+- **Migration**: `a76c622e4c08` (`down_revision = '44fd41ed1de0'`)
+  → `packages/db/migrations/versions/a76c622e4c08_resume_portfolio_builder_tables.py`
+  → Adds: `generated_documents` table, `username` + `portfolio_published` columns on `candidate_profiles`
+- **LangGraph**: Flow B subgraph — `resume_graph.py` (generate → fact-check → retry-or-end)
+  → `services/agents/candidate_intelligence/resume_graph.py`
+  → Nodes: `nodes/document_generator.py`, `nodes/fact_check.py`
+  → Tools: `tools/document_generation.py` (Claude Sonnet), `tools/fact_check.py` (Claude Haiku),
+           `tools/resume_pdf.py` (WeasyPrint HTML→PDF)
+  → State: `document_state.py`
+- **API endpoints** (all in `services/api/routers/candidates.py`):
+  - `POST /candidates/me/resume/generate` — generate + fact-check + PDF upload
+  - `POST /candidates/me/cover-letter/generate`
+  - `GET  /candidates/me/documents`
+  - `POST /candidates/me/portfolio/publish`
+  - `POST /candidates/me/portfolio/unpublish`
+  - `GET  /public/candidates/{username}` (via `services/api/routers/public.py`)
+- **Frontend**: `apps/web/src/app/(candidate)/resume-builder/page.tsx`
+  - `apps/web/src/app/(public)/[username]/page.tsx` (SSR public portfolio)
+- **API client**: `apps/web/src/lib/api.ts` — `generateResume`, `generateCoverLetter`,
+  `fetchMyDocuments`, `publishPortfolio`, `unpublishPortfolio`, `fetchPublicPortfolio`
+- **Schema**: `packages/shared_schemas/candidates.py` adds FR-5 Pydantic models
 
-## The known collision: 3-way migration branch
-All three new migrations share the same `down_revision = '44fd41ed1de0'` (they all branched off the
-same head). Before merging to main, pick a merge order and re-point `down_revision` into a single
-linear chain, e.g.:
+### Module 01 FR-4 — AI Career Guidance System (commit `e76c86a`, merge tag)
+- **Migration**: `a333d4c53bd0` (`down_revision = 'a76c622e4c08'`) — linearized to chain after FR-5
+  → `packages/db/migrations/versions/a333d4c53bd0_career_guidance_tables.py`
+  → Adds: `career_recommendations` table, `course_catalog` table (seeded), `CourseCatalogEntry` +
+           `CareerRecommendation` ORM models in `packages/db/models.py`
+- **LangGraph**: `services/agents/candidate_intelligence/career_guidance_graph.py`
+  → Parallel fan-out: `skill_gap_analysis` ‖ `salary_prediction` ‖ `certification_mapping`
+    → `career_roadmap` (sequential after skill-gap)
+  → Nodes: `nodes/skill_gap_analysis.py`, `nodes/career_roadmap.py`,
+           `nodes/salary_prediction.py`, `nodes/certification_mapping.py`
+  → Tools: `tools/skill_gap.py` (Qdrant embed cosine), `tools/roadmap.py` (Anthropic),
+           `tools/salary_model.py` (joblib regressor), `tools/role_taxonomy.py` (ROLE_SKILL_TAXONOMY),
+           `tools/course_catalog.py`, `tools/train_salary_model.py` (offline training script)
+  → State: `CareerGuidanceState` added to `services/agents/candidate_intelligence/state.py`
+- **API endpoint**: `GET /candidates/me/career-guidance?target_role=&refresh=` (cached, 24h TTL)
+  → `services/api/routers/candidates.py`
+- **Frontend**: `apps/web/src/app/(candidate)/career/page.tsx`
+  → Components: `CareerGuidance.tsx`, `RoadmapTimeline.tsx`, `SalaryRangeChart.tsx`
+- **API client**: `apps/web/src/lib/api.ts` — `fetchCareerGuidance`, `CAREER_GUIDANCE_ROLES`,
+  `SkillGap`, `CourseRecommendation`, `RoadmapStage`, `CareerGuidanceResponse` interfaces
+- **Config**: `salary_model_path` added to `services/api/core/config.py`
+- **Dashboard**: Career card deliberately NOT added to `CandidateDashboard.tsx` (user's explicit choice)
+  — the `/career` page is navigable directly; add a dashboard card later if desired.
+
+### Module 04 — PPT Pitch Deck Analyzer (commit `8f6327a`, merge tag)
+- **Migration**: `e8a55dc975da` (`down_revision = 'a333d4c53bd0'`) — linearized to chain after FR-4
+  → `packages/db/migrations/versions/e8a55dc975da_ppt_analyzer_tables.py`
+  → Adds: `presentations` + `presentation_slide_embeddings` tables
+- **LangGraph**: `services/agents/ppt_analyzer/graph.py`
+  → Parallel rubric branches: format_normalization → content_extraction → [5 parallel AI agents]
+    → aggregation → summary_suggestions
+- **API endpoints** (all in `services/api/routers/presentations.py`):
+  - `POST /presentations/upload` — upload .pptx/.ppt, run pipeline, return report
+  - `GET  /presentations/{id}/status`
+  - `GET  /presentations/{id}/report`
+  - `GET  /presentations/{id}/plagiarism-matches`
+- **Frontend**:
+  - `apps/web/src/app/(candidate)/pitch-deck/page.tsx` (upload — candidate-only)
+  - `apps/web/src/app/pitch-deck/[id]/page.tsx` (report — no role restriction, judges/recruiters too)
+  - Components: `AIContentSignalBadge.tsx`, `PitchScoreRadarChart.tsx`,
+                `PlagiarismMatchList.tsx`, `SlideViewer.tsx`
+- **Config**: `presentation_max_file_size_mb`, `libreoffice_binary` added to `config.py`
+- **`services/api/main.py`**: registers `presentations.router` + `public.router`
+
+---
+
+## DB Migration chain (linear, single head)
+
 ```
-44fd41ed1de0 (existing head)
-  -> a76c622e4c08 (FR-5, already committed)
-  -> a333d4c53bd0 (FR-4)
-  -> e8a55dc975da (Module 04)
+44fd41ed1de0 (base: candidate_intelligence_tables)
+  -> a76c622e4c08 (FR-5: resume/portfolio tables)
+  -> a333d4c53bd0 (FR-4: career guidance + course catalog tables)
+  -> e8a55dc975da (Module 04: presentations + slide embeddings tables)
 ```
-Renumber/edit whichever migration(s) land later so `down_revision` points at the previous one in the
-chosen order, then confirm `alembic heads` shows exactly one head before applying.
 
-## Final status: both remaining agents confirmed dead (not just slow)
-Both FR-4 (`a8ffa119f4ae8a6d9`) and Module 04 (`a65b3f366de8e6465`) received `status: failed` task
-notifications — stream watchdog stalls at 600s, neither recovered. **Do not `SendMessage` to try to
-resume them** — they're gone; their worktrees are just plain uncommitted git state now, safe to pick
-up and finish by hand or with a fresh agent operating directly on those paths.
+Run `alembic upgrade head` (from `services/api/`) against the Neon dev DB to apply all 3 migrations.
+The migrations have NOT yet been applied against the live Neon DB — this must happen before running
+any of the new endpoints end-to-end (even the non-LLM paths will fail with "relation does not exist").
 
-## Recommended continuation order
-1. Skip `git worktree list` speculation — it's already confirmed both agents are dead, not paused.
-   Go straight to their worktrees.
-2. Finish/commit FR-4's and Module 04's uncommitted changes directly (both look substantially complete
-   based on the file lists above). For FR-4: **find and fix the type error first** (its last words were
-   "Real type error caught. Let's fix it" — never got to the fix). For Module 04: check `git diff
-   .agents/decisions.md` in that worktree — the entry may already be finished text, just uncommitted —
-   and resolve the duplicate `pitch-deck` directory question before committing.
-3. Linearize the 3 migrations per above, run `alembic heads` to confirm a single head.
-4. Rebase each of the 3 worktree branches onto current `main` (`fc707f8`), resolving the trivial
-   `.agents/decisions.md` append-conflicts.
-5. Merge all 3 into `main`, delete the worktrees (`git worktree remove`, unlock first if needed).
-6. Per doc 00's build order (see [[doc_sets_both_current]]), Module 02 (Recruitment) is next — it only
-   depends on Module 01's Talent Score data, which already exists.
+---
 
-## Related memories
-[[module01_candidate_core_loop]] (FR-1/2/3 baseline this all builds on), [[doc_sets_both_current]]
-(why parallel dispatch is safe here), [[langgraph_parallel_fanout]] (the node-return-contract bug all
-three agents were warned about).
+## Keys blocking live end-to-end testing (per `services/api/core/config.py`)
+
+| Key | Status | Blocks |
+|-----|--------|--------|
+| `ANTHROPIC_API_KEY` | **MISSING** — not purchased yet | FR-4 roadmap, FR-5 generate/fact-check, Module 04 rubric scoring |
+| `CLOUDINARY_URL` | **MISSING** | FR-5 resume PDF storage, Module 04 deck storage |
+| `DATABASE_URL` | present (Neon) | — |
+| `CLERK_SECRET_KEY` / `CLERK_JWKS_URL` / `CLERK_ISSUER` | present | — |
+| `QDRANT_URL` / `QDRANT_API_KEY` | present (Qdrant Cloud) | FR-4 skill-gap cosine, Module 04 plagiarism |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | present | — |
+
+All missing-key paths degrade to typed errors (never fabricated data). No endpoint will 500 — they
+return structured `503 SERVICE_UNAVAILABLE` with a clear `"unavailable: ANTHROPIC_API_KEY not set"`.
+
+---
+
+## What's next per `doc/multi-agent-architecture/00-master-architecture.md §7`
+
+Build Order step 3: **Module 02 — AI Recruitment Platform** (`doc/SRS/02-SRS-AI-Recruitment-Platform.md`,
+`doc/multi-agent-architecture/02-recruitment-platform.md`).
+
+Module 02 depends on Module 01's `candidate_profiles`, `talent_scores`, and `badges` tables — all present.
+It does NOT depend on any FR-4/FR-5/Module 04 output, so it can be built independently.
+
+Key scope (read doc 02 for full spec):
+- Three-stage matching: SQL pre-filter → Qdrant vector search → Claude Sonnet re-ranking
+- Recruiter Copilot: conversational NL candidate search (`POST /recruiter/copilot`)
+- Job posting CRUD + ATS status Kanban
+- Match score explanations (per-candidate reasoning)
+
+---
+
+## Worktree status
+All 3 worktrees (`agent-a5bb5f7bdf864e68e`, `agent-a8ffa119f4ae8a6d9`, `agent-a65b3f366de8e6465`)
+are **removed**. Only `D:/Programming/DataAxle [main]` exists. Do NOT attempt `git worktree list`
+expecting any other entries — they are gone.

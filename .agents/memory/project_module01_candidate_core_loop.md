@@ -1,38 +1,45 @@
 ---
 name: module01-candidate-core-loop
-description: "Status of Module 01 (Candidate Intelligence) build — what's done, what's deferred, what's missing to test live"
-metadata: 
+description: "COMPLETE 2026-07-29: ALL FRs (1/2/3/4/5) for Module 01 (Candidate Intelligence) are merged into main. Module 04 PPT Analyzer also done. Next: Module 02 Recruitment."
+metadata:
   node_type: memory
   type: project
   originSessionId: 16352565-6648-4267-adde-3cdec207f5a5
-  modified: 2026-07-29T09:28:30.605Z
+  modified: 2026-07-29T17:26:00.000Z
 ---
 
-As of 2026-07-29, Module 01 (Candidate Intelligence Platform) has its "core loop" built: FR-1
-(ingestion — GitHub OAuth, resume upload+parse, certificate upload+OCR), FR-2 (Talent Score — all 7
-sub-scores, cold-start re-normalization, evidence trail via `agent_runs`), and FR-3 (dashboard —
-Evidence Receipt, radar/trend charts, badges). Code lives in `packages/db/models.py` (new tables),
-`services/agents/candidate_intelligence/` (LangGraph subgraph), `services/api/routers/candidates.py`,
-and `apps/web/src/app/(candidate)/profile/edit` + the shared `apps/web/src/app/dashboard/page.tsx`
-(extended to render `CandidateDashboard` for candidate-role users).
+## Module 01 (Candidate Intelligence) — FULLY COMPLETE on `main`
 
-**Not started yet:** FR-4 (Career Guidance: skill gaps, roadmap, salary prediction) and FR-5
-(Resume/Portfolio Builder with fact-check agent). Pick these up next for Module 01, or move to
-Module 02 (Recruitment) per [[doc_sets_both_current]]'s roadmap ordering — check with the user which.
+All 5 Functional Requirements from `doc/SRS/01-SRS-Candidate-Intelligence-Platform.md` are built and
+merged. See `project_parallel_module_builds_20260729.md` for the full file inventory and migration chain.
 
-**Why:** [[build_roadmap_inside_out]] says build one module at a time, inside-out (DB → tools →
-agents → routes → frontend); FR-1–3 is the "get a real score onto a dashboard" slice, FR-4/5 are a
-separate, independently-testable increment.
+| FR | Name | Status | Key files |
+|----|------|--------|-----------|
+| FR-1 | GitHub / Resume / Certificate Ingestion | ✅ Done | `services/agents/candidate_intelligence/graph.py` (Flow A) |
+| FR-2 | Talent Score (7 sub-scores) | ✅ Done | `services/agents/candidate_intelligence/nodes/` |
+| FR-3 | Dashboard (Evidence Receipt, charts, badges) | ✅ Done | `apps/web/src/app/dashboard/page.tsx` |
+| FR-4 | AI Career Guidance (skill gaps, roadmap, salary) | ✅ Done | `career_guidance_graph.py`, `GET /candidates/me/career-guidance` |
+| FR-5 | AI Resume & Portfolio Builder (fact-check, PDF, SSR) | ✅ Done | `resume_graph.py`, `POST /candidates/me/resume/generate` |
 
-**Blocking for live end-to-end testing:** `ANTHROPIC_API_KEY` is empty and `CLOUDINARY_URL` is a
-literal unfilled placeholder in `.env` — resume upload (needs both), certificate storage, and the
-Project Quality/Innovation LLM-judgment sub-scores will raise `ResumeExtractionUnavailable` /
-`StorageUnavailable` until real keys are added. GitHub ingestion works for real (client id/secret are
-configured) but wasn't tested live in this session — the dev network's unauthenticated GitHub rate
-limit got exhausted mid-verification, so real ingestion was validated via a synthetic `GithubAnalysis`
-payload instead of a live API call. A real OAuth-token-based run should be tried once a candidate
-account actually completes the "Connect GitHub" flow in the browser.
+**Module 04 PPT Analyzer** also done — see `project_parallel_module_builds_20260729.md`.
 
-**How to apply:** before starting FR-4/5 or debugging why resume upload "doesn't work," check
-`.agents/decisions.md`'s 2026-07-29 Module 01 entries first — they record the exact schema/consent/
-scoring-scope decisions made and why, so a fresh session doesn't re-derive or contradict them.
+## DB Migration chain (applied order, all on main)
+```
+44fd41ed1de0 → a76c622e4c08 (FR-5) → a333d4c53bd0 (FR-4) → e8a55dc975da (Module 04)
+```
+**Run `alembic upgrade head` from `services/api/` before testing any FR-4/5/Module04 endpoint.**
+
+## Still blocking live end-to-end testing
+- `ANTHROPIC_API_KEY` — not yet purchased. Needed for FR-4 roadmap generation, FR-5
+  resume/fact-check, Module 04 rubric scoring. All paths degrade gracefully (503, no fabrication).
+- `CLOUDINARY_URL` — needed for FR-5 resume PDF storage + Module 04 deck storage. Same graceful degrade.
+- GitHub OAuth `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — configured; real end-to-end test not done.
+- Qdrant — configured (cloud); FR-4 skill-gap cosine + Module 04 plagiarism need real collection data.
+- Salary model — `data/models/salary_regressor.joblib` does not exist yet; run
+  `services/agents/candidate_intelligence/tools/train_salary_model.py` to produce it.
+
+## What's next
+Per `doc/multi-agent-architecture/00-master-architecture.md §7 Build Order`:
+**Module 02 — AI Recruitment Platform** (`doc/SRS/02-SRS-AI-Recruitment-Platform.md`,
+`doc/multi-agent-architecture/02-recruitment-platform.md`).
+Depends on Module 01's `candidate_profiles`, `talent_scores`, `badges` — all present.
