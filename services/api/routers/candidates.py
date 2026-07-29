@@ -1,3 +1,4 @@
+import re
 import secrets
 import time
 from dataclasses import asdict
@@ -15,6 +16,8 @@ from packages.db.models import (
     CandidateProfile,
     Certification,
     Consent,
+    File,
+    GeneratedDocument,
     GithubSnapshot,
     TalentScore,
     User,
@@ -22,20 +25,58 @@ from packages.db.models import (
 from packages.shared_schemas.candidates import (
     BadgeResponse,
     CandidateProfileResponse,
+    CoverLetterGenerateRequest,
     DashboardResponse,
+    GeneratedDocumentResponse,
+    PortfolioPublishRequest,
+    ResumeGenerateRequest,
     SubScore,
     TalentScoreResponse,
 )
+from services.agents.candidate_intelligence.document_state import DocumentBuilderState
 from services.agents.candidate_intelligence.graph import get_graph
+from services.agents.candidate_intelligence.resume_graph import get_resume_graph
 from services.agents.candidate_intelligence.state import CandidateProfileState
+from services.agents.candidate_intelligence.tools.document_generation import (
+    DocumentGenerationUnavailable,
+)
+from services.agents.candidate_intelligence.tools.resume_pdf import (
+    PdfGenerationUnavailable,
+    render_resume_pdf,
+)
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
+from services.api.core.storage import StorageUnavailable, upload_file
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 _GITHUB_OAUTH_STATE_TTL_SECONDS = 600
 _oauth_state_cache: dict[str, tuple[str, float]] = {}
+
+# Route-group collision guard (see .agents/decisions.md "Route group collisions") — every
+# leaf segment used by ANY role group resolves to a top-level URL with no prefix, so a
+# candidate-chosen username could otherwise shadow a real page (e.g. "/dashboard",
+# "/jobs"). No dynamic route registry exists to introspect at runtime; kept in sync by
+# hand against doc/multi-agent-architecture/10 + the actual apps/web/src/app tree.
+_RESERVED_USERNAMES = {
+    "api", "dashboard", "onboarding", "sign-in", "sign-up", "hackathons",
+    "profile", "career", "resume-builder", "assessments", "interview", "my-flags",
+    "applications", "jobs", "copilot", "pipeline", "analytics", "top-performers",
+    "reports", "evaluations", "submissions", "fraud-review", "users", "audit-log",
+    "candidates", "public", "me", "health",
+}
+_USERNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$")
+
+
+class FactCheckFailed(Exception):
+    """Raised when a generated document fails (or can't complete) the Fact-Check Agent
+    guardrail — the document is persisted for audit purposes but never handed to the
+    candidate as if it were verified (doc 01 §10, "zero tolerance for fabrication")."""
+
+    def __init__(self, document: GeneratedDocument) -> None:
+        self.document = document
+        super().__init__("Generated document failed the fact-check guardrail.")
 
 
 async def _get_or_create_profile(db: AsyncSession, user: User) -> CandidateProfile:
@@ -365,3 +406,217 @@ async def get_my_dashboard(
         score_history=scores,
         badges=badges,
     )
+
+
+# --- FR-5: AI Resume & Portfolio Builder ---
+
+
+def _to_document_response(
+    doc: GeneratedDocument, file_url: str | None = None
+) -> GeneratedDocumentResponse:
+    return GeneratedDocumentResponse(
+        id=doc.id,
+        document_type=doc.document_type,
+        target_job_description=doc.target_job_description,
+        content=doc.content,
+        file_url=file_url,
+        fact_check_status=doc.fact_check_status,
+        fact_check_findings=doc.fact_check_findings,
+        model_used=doc.model_used,
+        generated_at=doc.generated_at,
+    )
+
+
+async def _run_document_generation(
+    db: AsyncSession,
+    profile: CandidateProfile,
+    document_type: str,
+    target_job_description: str | None,
+) -> GeneratedDocument:
+    """Runs the Flow-B subgraph (generate -> fact-check -> retry-or-end), persists the
+    result either way (for the explainability trail), then raises if the candidate
+    can't be handed the document — never returns a document that failed its fact-check.
+    """
+    merged_profile_snapshot = {
+        "headline": profile.headline,
+        "location": profile.location,
+        "skills": profile.skills or [],
+        "experience": profile.experience or [],
+        "education": profile.education or [],
+        "github_username": profile.github_username,
+    }
+    initial_state: DocumentBuilderState = {
+        "candidate_id": str(profile.id),
+        "document_type": document_type,
+        "merged_profile": merged_profile_snapshot,
+        "target_job_description": target_job_description,
+        "generated_content": None,
+        "generation_error": None,
+        "fact_check_status": None,
+        "fact_check_findings": None,
+        "attempts": 0,
+    }
+
+    result_state = await get_resume_graph().ainvoke(initial_state)
+    settings = get_settings()
+
+    if result_state.get("generation_error"):
+        raise DocumentGenerationUnavailable(result_state["generation_error"])
+
+    doc_row = GeneratedDocument(
+        candidate_id=profile.id,
+        document_type=document_type,
+        target_job_description=target_job_description,
+        content=result_state["generated_content"],
+        fact_check_status=result_state["fact_check_status"],
+        fact_check_findings=result_state["fact_check_findings"],
+        attempts=result_state["attempts"],
+        model_used=settings.llm_model_judgment,
+    )
+    db.add(doc_row)
+    # Explainability trail for the fact-check verdict (constraints.md §4) — the
+    # generated_documents row itself carries the same data, but agent_runs is the one
+    # place every AI verdict in this platform is guaranteed to be found.
+    db.add(
+        AgentRun(
+            agent_name="fact_check_agent",
+            subject_type="candidate",
+            subject_id=profile.id,
+            input_ref={"document_type": document_type, "target_job_description": target_job_description},
+            output={
+                "fact_check_status": result_state["fact_check_status"],
+                "findings": result_state["fact_check_findings"],
+            },
+            model_used=settings.llm_model_fast,
+        )
+    )
+    await db.commit()
+    await db.refresh(doc_row)
+
+    if doc_row.fact_check_status != "passed":
+        raise FactCheckFailed(doc_row)
+    return doc_row
+
+
+@router.post("/me/resume/generate", response_model=GeneratedDocumentResponse)
+async def generate_resume(
+    body: ResumeGenerateRequest,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> GeneratedDocumentResponse:
+    profile = await _get_or_create_profile(db, user)
+    try:
+        doc_row = await _run_document_generation(db, profile, "resume", body.target_job_description)
+    except DocumentGenerationUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except FactCheckFailed as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "fact_check_failed", "findings": exc.document.fact_check_findings},
+        ) from exc
+
+    # PDF rendering only happens after a passing fact-check (FR-5.1) — never render/
+    # deliver a PDF for content that failed the guardrail above.
+    try:
+        pdf_bytes = render_resume_pdf(doc_row.content)
+    except PdfGenerationUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    try:
+        public_url, storage_key = upload_file(
+            pdf_bytes, public_id=f"resumes/{profile.id}/{doc_row.id}", resource_type="raw"
+        )
+    except StorageUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    file_row = File(owner_user_id=user.id, storage_key=storage_key, public_url=public_url, file_type="resume")
+    db.add(file_row)
+    await db.commit()
+    await db.refresh(file_row)
+
+    doc_row.file_id = file_row.id
+    await db.commit()
+    await db.refresh(doc_row)
+
+    return _to_document_response(doc_row, file_url=public_url)
+
+
+@router.post("/me/cover-letter/generate", response_model=GeneratedDocumentResponse)
+async def generate_cover_letter(
+    body: CoverLetterGenerateRequest,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> GeneratedDocumentResponse:
+    profile = await _get_or_create_profile(db, user)
+    try:
+        doc_row = await _run_document_generation(
+            db, profile, "cover_letter", body.target_job_description
+        )
+    except DocumentGenerationUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except FactCheckFailed as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "fact_check_failed", "findings": exc.document.fact_check_findings},
+        ) from exc
+    return _to_document_response(doc_row)
+
+
+@router.get("/me/documents", response_model=list[GeneratedDocumentResponse])
+async def list_my_documents(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> list[GeneratedDocumentResponse]:
+    profile = await _get_or_create_profile(db, user)
+    result = await db.execute(
+        select(GeneratedDocument)
+        .where(GeneratedDocument.candidate_id == profile.id)
+        .order_by(GeneratedDocument.generated_at.desc())
+    )
+    docs = result.scalars().all()
+
+    file_ids = [d.file_id for d in docs if d.file_id]
+    file_urls: dict = {}
+    if file_ids:
+        file_result = await db.execute(select(File).where(File.id.in_(file_ids)))
+        file_urls = {f.id: f.public_url for f in file_result.scalars().all()}
+
+    return [_to_document_response(d, file_url=file_urls.get(d.file_id)) for d in docs]
+
+
+@router.post("/me/portfolio/publish", response_model=CandidateProfileResponse)
+async def publish_portfolio(
+    body: PortfolioPublishRequest,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateProfile:
+    username = body.username.strip().lower()
+    if not _USERNAME_PATTERN.match(username) or username in _RESERVED_USERNAMES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_username")
+
+    profile = await _get_or_create_profile(db, user)
+    existing = await db.execute(
+        select(CandidateProfile).where(
+            CandidateProfile.username == username, CandidateProfile.id != profile.id
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
+
+    profile.username = username
+    profile.portfolio_published = True
+    await db.commit()
+    await db.refresh(profile)
+    return profile
+
+
+@router.post("/me/portfolio/unpublish", response_model=CandidateProfileResponse)
+async def unpublish_portfolio(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateProfile:
+    profile = await _get_or_create_profile(db, user)
+    profile.portfolio_published = False
+    await db.commit()
+    await db.refresh(profile)
+    return profile
