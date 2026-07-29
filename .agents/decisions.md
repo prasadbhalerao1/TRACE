@@ -132,7 +132,7 @@ Qdrant corpus, embedding model unavailable — rather than fabricating a number.
 re-normalization is what absorbs all of this gracefully; a fresh candidate's first score is expected to
 have 3 of 7 sub-scores renormalized away until Module 03 exists and keys are configured.
 → `services/agents/candidate_intelligence/tools/mechanical_scores.py`,
-`services/agents/candidate_intelligence/tools/judgment_scores.py`
+  `services/agents/candidate_intelligence/tools/judgment_scores.py`
 
 **GitHub OAuth callback: kept `GITHUB_OAUTH_REDIRECT_URI` pointed at the frontend
 (`localhost:3000/api/auth/github/callback`) and added a pure-passthrough Next.js Route Handler that
@@ -151,7 +151,7 @@ superstep (fanning out from `START`); returning the entire state dict from each 
 keys) makes every parallel branch write the same value to every channel, and langgraph's default
 "last value" channel raises `InvalidUpdateError` the moment two branches write to one key in the same
 step — even identical values. `conflicts` specifically needed an `Annotated[list[str], operator.add]`
-reducer since multiple nodes genuinely contribute _different_ new entries to it in parallel. Caught by
+reducer since multiple nodes genuinely contribute *different* new entries to it in parallel. Caught by
 running the graph directly (bypassing HTTP/auth) against a synthetic `GithubAnalysis` before wiring the
 frontend — worth repeating for future modules' graphs before assuming a node contract's `run()` shape
 is fine to write full-state returns.
@@ -164,134 +164,7 @@ rather than stubbed — they'll raise a clear `ResumeExtractionUnavailable` / `S
 at runtime until real keys are added, never silently fabricate data. Add real keys before testing
 resume upload or Project-Quality/Innovation LLM judgment end-to-end.
 → `services/api/core/config.py`, `services/agents/candidate_intelligence/tools/resume.py`,
-`services/api/core/storage.py`
-
-<<<<<<< HEAD
-**Qdrant switched from local docker-compose to Qdrant Cloud (managed), per user request** — same
-pattern already applied to Postgres/Neon. `QDRANT_URL`/`QDRANT_API_KEY` in `.env` now point at a real
-Qdrant Cloud cluster; no code change needed since `judgment_scores.py` already read both settings and
-passed `api_key=settings.qdrant_api_key or None` to `QdrantClient` (local Qdrant has no auth, so this
-path was already conditional). Local `qdrant` docker-compose service left defined but stopped/unused,
-same as `postgres`, for anyone who wants to switch back.
-→ `.env`, `infra/docker-compose.yml` (unchanged, service just not started), `DEV_SERVERS.md`,
-`scripts/dev-up.ps1`
-
----
-
-## 2026-07-29 — Phase 1, Module 01: Candidate Intelligence — FR-5 (Resume & Portfolio Builder)
-
-**Cross-checked both doc sets before building:** `doc/SRS/01` FR-5.1-5.4 (lines 63-67) for the
-requirement text, `doc/multi-agent-architecture/01` §3 Flow B + §4 agent registry for the
-generate→fact-check→retry-or-deliver shape, and `doc/multi-agent-architecture/00` §2.1 for the
-SSR carve-out (`/[username]` is one of only two SSR pages in the whole app — the other is the
-hackathon leaderboard, out of scope here). No conflicts found between the two doc sets on FR-5
-specifically — the "Known Differences" table in `.agents/DOCUMENTATION_MAP.md` doesn't list
-anything under module 01's resume/portfolio feature, so no doc-set pick was needed here (unlike
-FR-1/2/3's files/consents/candidate-table picks earlier in this log).
-
-**`candidate_profiles.username` + `portfolio_published` added — neither doc set names a slug
-column for FR-5.2's public route, but the SSR page can't exist without one.** Nullable + unique;
-no username until the candidate opts in via `POST /candidates/me/portfolio/publish`. Publishing
-validates the username against a hand-maintained reserved-word list (`dashboard`, `jobs`, `users`,
-etc.) — same root cause as the route-group-collision entry above (Next.js route groups add no URL
-prefix, so every role group's leaf page names are actually top-level segments a candidate-chosen
-username could shadow). No dynamic route registry exists to check this automatically; the list in
-`services/api/routers/candidates.py` (`_RESERVED_USERNAMES`) must be updated by hand if new
-top-level pages are added.
-→ `packages/db/models.py` (`CandidateProfile.username`/`.portfolio_published`), migration
-`a76c622e4c08`, `services/api/routers/candidates.py`, `services/api/routers/public.py`
-
-**One `generated_documents` table for both resumes and cover letters** (`document_type` column),
-not two separate tables — neither doc set specifies a table here at all (doc 01 §5/§7's data
-model stops at `career_recommendations`). One row per generation attempt (not a mutable "current
-resume" singleton) so candidates keep a history, matching the existing `career_recommendations`/
-`talent_scores` pattern of append-only generation rows elsewhere in this module.
-→ `packages/db/models.py` (`GeneratedDocument`), migration `a76c622e4c08`
-
-**Flow B (on-demand resume/cover-letter builder) is a separate compiled graph
-(`resume_graph.py` + `document_state.py`), not added to `graph.py`/`state.py`.** Flow A's ingestion
-graph fans out from `START` on signup/webhook/cron; Flow B is triggered per-request from the API
-and has its own generate→fact-check retry loop (doc 01 §3's second mermaid diagram) that has
-nothing to do with Flow A's parallel-branch shape or state shape. Capped at 2 generate-and-recheck
-attempts (`resume_graph.MAX_ATTEMPTS`) — neither doc specifies a retry cap; uncapped retries risk
-an infinite loop against a model that keeps producing unsupported claims, and doc 01 §10's "zero
-tolerance for fabrication" means the API must refuse to deliver the document rather than give up
-by relaxing the check, so a cap-then-refuse design was chosen over cap-then-deliver-anyway.
-→ `services/agents/candidate_intelligence/resume_graph.py`,
-`services/agents/candidate_intelligence/document_state.py`
-
-**Fact-Check Agent failure (missing `ANTHROPIC_API_KEY`, API error) is treated as a FAILED check,
-never a silent pass.** Doc 01 §10 says "zero tolerance for fabricated experience" — an
-unverifiable document is exactly the case that guardrail exists for, so
-`nodes/fact_check.py` maps `FactCheckUnavailable` to `fact_check_status: "failed"` rather than
-letting the exception (or a default "trust it") skip the check. The API layer then refuses to hand
-the candidate that document (`FactCheckFailed`, HTTP 422 with the findings) rather than silently
-downgrading to an unchecked delivery.
-→ `services/agents/candidate_intelligence/nodes/fact_check.py`,
-`services/api/routers/candidates.py` (`FactCheckFailed`)
-
-**Cover-letter generation routed to Sonnet (`llm_model_judgment`), not Haiku**, even though doc
-01 §4's agent registry table only lists a Sonnet tier explicitly for the "Resume Generator Agent"
-and doesn't name a separate cover-letter agent. Constraints.md §5's model-routing policy puts
-"human-facing judgments" (persuasive, audience-aware writing) on Sonnet and reserves Haiku for
-extraction/tagging-style tasks — a cover letter is squarely the former, so it was routed the same
-as resume generation rather than defaulting to the cheaper tier.
-→ `services/agents/candidate_intelligence/tools/document_generation.py`
-
-**Cover letter/resume JD input is free text (`target_job_description: str`), not a `job_id`
-FK.** `doc/SRS/01` §6 and `doc/multi-agent-architecture/01` §9 both show
-`cover-letter/generate` taking a `job_id`/`target_job_id`, implying a link into module 02's
-`jobs` table — but module 02 isn't built yet in this codebase (no `jobs` table, no router,
-explicitly out of scope: "Don't touch Module 04... or Module 01 FR-4" per this session's brief
-plus module 02 depends on module 01 per `.agents/DOCUMENTATION_MAP.md`'s build-order chain, so
-it comes after). Free-text JD satisfies FR-5.3's actual requirement ("parameterized by target job
-description") without inventing a dependency on an unbuilt module; revisit to add an optional
-`job_id` alongside free text once module 02 exists, rather than replacing it (a candidate pasting
-an external JD they're not applying through this platform for is still a valid use case).
-→ `packages/shared_schemas/candidates.py` (`ResumeGenerateRequest`/`CoverLetterGenerateRequest`)
-
-**FR-5 endpoints live under `/candidates/me/...`, not `/candidates/{id}/...`** as both docs'
-API sections literally show. Matches the self-service auth pattern every other FR-1/2/3 endpoint
-in this router already uses (`/candidates/me/score`, `/candidates/me/dashboard`, etc.) — the
-`{id}` form in the docs predates that established convention being picked in the earlier FR-1/2/3
-session.
-→ `services/api/routers/candidates.py`
-
-**WeasyPrint (doc 01 §9's named PDF library) installs cleanly via `uv pip install` but its Python
-import requires native GTK/Pango/cairo shared libraries not present on this Windows dev box** —
-confirmed: `OSError: cannot load library 'libgobject-2.0-0'`. The import is deferred into
-`render_resume_pdf()` (not top-level in `tools/resume_pdf.py`) so a missing native lib doesn't
-crash the whole API process at import time; callers get a typed `PdfGenerationUnavailable`,
-matching the `ResumeExtractionUnavailable`/`StorageUnavailable` pattern. Not swapped for a
-pure-Python alternative — WeasyPrint is still the right tool per doc 9 and will work as-is once
-GTK is available (e.g. in a Linux container), so the fix belongs in deployment/dev-env setup, not
-in the code.
-→ `services/agents/candidate_intelligence/tools/resume_pdf.py`
-
-**Migration `a76c622e4c08` chains onto `44fd41ed1de0`, the DB's actual current head** (verified via
-`alembic current` against the live Neon dev DB, not assumed from the latest file in
-`packages/db/migrations/versions/` by filename/mtime — `bfa4df0973c6`'s down_revision chain
-resolves through `44fd41ed1de0`, not directly to itself). Sibling agents are adding migrations
-concurrently in other worktrees against the same DB; this migration was generated but
-**deliberately not applied** (`alembic upgrade head` was never run) to avoid moving the shared dev
-DB out from under any other in-flight agent — will need rebasing (regenerating the down_revision,
-and possibly re-running autogenerate) once branches merge in a single order.
-→ `packages/db/migrations/versions/a76c622e4c08_resume_portfolio_builder_tables.py`
-
-**Could not live-test the Anthropic (resume/cover-letter generation, fact-check) or Cloudinary
-(resume PDF upload) paths end-to-end** — same `ANTHROPIC_API_KEY`/`CLOUDINARY_URL` gap noted
-above, still unresolved. The migration itself was also deliberately never applied (see above), so
-there's no live `generated_documents`/`candidate_profiles.username` schema to test the ORM against
-either. Verified correctness instead via: `alembic revision --autogenerate` against the live Neon
-DB cleanly detecting exactly the intended diff (new table + two new columns + one unique
-constraint, nothing else) with no manual edits needed beyond naming the autogenerated unique
-constraint; synthetic `ainvoke()` runs against `resume_graph` with mocked tool functions (no-key
-path ends with `generation_error` set and fact-check skipped; a fail-then-pass fact-check path
-loops back through the generator exactly once before ending `passed`); `npx tsc --noEmit`,
-`npm run lint`, and `npm run build` all clean, with the production build's route table confirming
-`/[username]` resolves as a server-rendered dynamic route with no collisions.
-→ all FR-5 files listed above
-=======
+  `services/api/core/storage.py`
 
 ---
 
@@ -330,7 +203,7 @@ several modules are being built in parallel worktrees right now.
 **No `arq` background worker — the subgraph is invoked synchronously from `POST /presentations/upload`**,
 same as Module 01's Flow A. Doc 04 §9/§6 call for `arq` so the upload response never blocks on the
 pipeline, but no `arq` worker entrypoint exists anywhere in this repo yet (checked `services/` — only
-`arq` the _dependency_ is installed, no worker process). Building a whole shared worker infrastructure
+`arq` the *dependency* is installed, no worker process). Building a whole shared worker infrastructure
 just for this one module's upload endpoint was judged out of scope for this pass; revisit once a real
 worker entrypoint exists for any module (`services/workers/` is sketched in doc 10 §1 but unbuilt).
 `GET /presentations/{id}/status` still exists and is real (reads a genuine `processing`/`done`/`failed`
@@ -352,7 +225,7 @@ Module 01's own entry above.
 
 **FR-6's AI-content heuristic uses burstiness + lexical-diversity statistics, not a GPT-2 perplexity
 model via `transformers`.** Doc 08's own ground rules explicitly allow a simpler statistical fallback as
-a legitimate scope-reduction for the _code_-plagiarism algorithm (§3) "if integrating [the real
+a legitimate scope-reduction for the *code*-plagiarism algorithm (§3) "if integrating [the real
 approach] is still too heavy in the time you have" — the same reasoning was applied here: a GPT-2-based
 perplexity signal needs a model download at runtime (no guaranteed network access, multi-hundred-MB),
 where a pure-stdlib statistical signal has zero extra runtime dependency and still produces a
@@ -371,7 +244,7 @@ detection, and cut to keep the number of real Anthropic calls per upload bounded
 
 **Route split: upload is `(candidate)/pitch-deck/page.tsx` (candidate-only, guarded by that route
 group's existing layout); the report view is `/pitch-deck/[id]/page.tsx`, OUTSIDE any role group.**
-Doc/SRS/04 §2's actor table has Candidate/Team upload but Judge/Recruiter/Investor _view_ the scored
+Doc/SRS/04 §2's actor table has Candidate/Team upload but Judge/Recruiter/Investor *view* the scored
 report — putting the report page inside `(candidate)` would incorrectly block those other roles via
 that group's role-guard `layout.tsx`. This is the exact same problem and fix already recorded above for
 `/dashboard`: a route needed by multiple roles can't live inside any single role's parenthesized group,
@@ -382,7 +255,6 @@ so it goes directly under `src/app/` instead. The backend enforces the actual ac
 **Two real bugs found and fixed via direct `graph.ainvoke()` / router-function smoke tests against a
 real python-pptx deck and the real Neon dev DB** (following the same "test the graph directly before
 wiring the frontend" practice recorded in Module 01's parallel fan-out entry above):
-
 1. `python-pptx`'s `slide.shapes.title` returns a **new proxy object on every property access**, so
    `shape is not slide.shapes.title` (identity comparison) never actually excluded the title shape from
    the body text — every slide's title was being duplicated into its own body. Fixed by comparing
@@ -410,6 +282,4 @@ matching (local Qdrant wasn't running during this session), and legacy `.ppt` co
 binary on this host) — all four require infrastructure/keys not present in this environment and degrade
 via the typed-error paths described above rather than being stubbed.
 → verified interactively, not committed as test files (no test runner/fixtures exist yet in this repo
-for either `services/agents` or `services/api` — worth adding in a follow-up pass)
-
-> > > > > > > worktree-agent-a65b3f366de8e6465
+  for either `services/agents` or `services/api` — worth adding in a follow-up pass)
