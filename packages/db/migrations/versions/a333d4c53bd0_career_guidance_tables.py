@@ -33,7 +33,7 @@ depends_on: Union[str, Sequence[str], None] = None
 _INSERT_COURSE_SQL = sa.text(
     """
     INSERT INTO course_catalog (id, provider, title, url, skill_tags, level, estimated_hours, is_free)
-    VALUES (:id, :provider, :title, :url, CAST(:skill_tags AS JSONB), :level, :estimated_hours, :is_free)
+    VALUES (CAST(:id AS UUID), :provider, :title, :url, CAST(:skill_tags AS JSONB), :level, :estimated_hours, :is_free)
     """
 )
 
