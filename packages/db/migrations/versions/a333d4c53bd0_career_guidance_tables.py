@@ -1,7 +1,7 @@
 """career guidance tables (FR-4)
 
 Revision ID: a333d4c53bd0
-Revises: 44fd41ed1de0
+Revises: a76c622e4c08
 Create Date: 2026-07-29 16:40:00.000000
 
 Hand-written (not `alembic revision --autogenerate`) — this worktree doesn't carry a
@@ -20,7 +20,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'a333d4c53bd0'
-down_revision: Union[str, Sequence[str], None] = '44fd41ed1de0'
+down_revision: Union[str, Sequence[str], None] = 'a76c622e4c08'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
