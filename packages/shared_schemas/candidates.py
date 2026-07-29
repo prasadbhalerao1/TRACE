@@ -66,3 +66,21 @@ class DashboardResponse(BaseModel):
     latest_score: TalentScoreResponse | None
     score_history: list[TalentScoreResponse]
     badges: list[BadgeResponse]
+
+
+# --- FR-4: AI Career Guidance System ---
+
+
+class CareerGuidanceResponse(BaseModel):
+    """FR-4.1-4.5. `salary_estimate_low`/`salary_estimate_high` are a range only —
+    never a point estimate (doc 01 §8) — and are `None` together when no Talent Score
+    or no trained salary model is available yet (cold start, not fabrication)."""
+
+    target_role: str | None
+    skill_gaps: list[dict]  # [{skill, similarity, weight, priority}], worst gap first
+    recommended_courses: list[dict]  # course_catalog rows matched to the gaps above
+    roadmap: dict  # {"stages": [{"stage","skills","estimated_weeks","description"}]}
+    salary_estimate_low: int | None
+    salary_estimate_high: int | None
+    salary_rationale: str | None = None
+    generated_at: datetime
