@@ -165,3 +165,12 @@ at runtime until real keys are added, never silently fabricate data. Add real ke
 resume upload or Project-Quality/Innovation LLM judgment end-to-end.
 → `services/api/core/config.py`, `services/agents/candidate_intelligence/tools/resume.py`,
   `services/api/core/storage.py`
+
+**Qdrant switched from local docker-compose to Qdrant Cloud (managed), per user request** — same
+pattern already applied to Postgres/Neon. `QDRANT_URL`/`QDRANT_API_KEY` in `.env` now point at a real
+Qdrant Cloud cluster; no code change needed since `judgment_scores.py` already read both settings and
+passed `api_key=settings.qdrant_api_key or None` to `QdrantClient` (local Qdrant has no auth, so this
+path was already conditional). Local `qdrant` docker-compose service left defined but stopped/unused,
+same as `postgres`, for anyone who wants to switch back.
+→ `.env`, `infra/docker-compose.yml` (unchanged, service just not started), `DEV_SERVERS.md`,
+  `scripts/dev-up.ps1`

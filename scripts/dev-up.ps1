@@ -1,6 +1,7 @@
-# Starts everything needed for local development: Docker infra (redis, qdrant),
-# the FastAPI backend, and the Next.js frontend. Run from anywhere; paths are
-# resolved relative to this script's location.
+# Starts everything needed for local development: Docker infra (redis), the FastAPI
+# backend, and the Next.js frontend. Postgres and Qdrant are both managed/remote
+# (Neon, Qdrant Cloud) — no local containers for either. Run from anywhere; paths
+# are resolved relative to this script's location.
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1
 
@@ -9,7 +10,7 @@ $root = Split-Path -Parent $PSScriptRoot
 
 Write-Host "== DataAxle dev environment ==" -ForegroundColor Cyan
 
-# --- 1. Docker Desktop + redis/qdrant -----------------------------------------
+# --- 1. Docker Desktop + redis -----------------------------------------
 $dockerOk = $true
 try {
     docker info 2>$null | Out-Null
@@ -36,10 +37,10 @@ if (-not $dockerOk) {
 }
 
 if ($dockerOk) {
-    Write-Host "Starting redis + qdrant containers..." -ForegroundColor Green
-    docker compose -f "$root\infra\docker-compose.yml" up -d redis qdrant
+    Write-Host "Starting redis container..." -ForegroundColor Green
+    docker compose -f "$root\infra\docker-compose.yml" up -d redis
 } else {
-    Write-Host "Skipping redis/qdrant — Docker not available." -ForegroundColor Red
+    Write-Host "Skipping redis — Docker not available." -ForegroundColor Red
 }
 
 # --- 2. FastAPI backend --------------------------------------------------------
@@ -61,4 +62,3 @@ Write-Host ""
 Write-Host "== Started. See DEV_SERVERS.md for the full list of local URLs. ==" -ForegroundColor Cyan
 Write-Host "  Frontend : http://localhost:3000"
 Write-Host "  API      : http://localhost:8000  (docs at /docs)"
-Write-Host "  Qdrant   : http://localhost:6333/dashboard"

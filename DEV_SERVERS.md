@@ -1,8 +1,9 @@
 # Local Dev Servers & Links
 
 Run `scripts\dev-up.ps1` (PowerShell) to start everything below in one shot. It opens
-two new PowerShell windows (API, web) and starts the `redis`/`qdrant` Docker
-containers, launching Docker Desktop first if it isn't already running.
+two new PowerShell windows (API, web) and starts the `redis` Docker container,
+launching Docker Desktop first if it isn't already running. Postgres and Qdrant are
+both managed/remote (Neon, Qdrant Cloud) — no local containers needed for either.
 
 ## App
 
@@ -35,7 +36,7 @@ All under the API base URL, require a candidate's Clerk bearer token:
 |---|---|---|
 | Postgres | Neon (managed, remote) | See `DATABASE_URL` in `.env` — no local container; `infra/docker-compose.yml`'s `postgres` service is unused in dev per `.agents/decisions.md` |
 | Redis | `localhost:6379` | `docker compose -f infra/docker-compose.yml up -d redis` |
-| Qdrant | http://localhost:6333 | REST API. Dashboard UI: http://localhost:6333/dashboard |
+| Qdrant | Qdrant Cloud (managed, remote) | See `QDRANT_URL`/`QDRANT_API_KEY` in `.env` — no local container; `infra/docker-compose.yml`'s `qdrant` service is unused in dev (same pattern as Postgres/Neon) |
 
 ## External integrations (status as of this build)
 
@@ -45,7 +46,7 @@ All under the API base URL, require a candidate's Clerk bearer token:
 | GitHub OAuth | ✅ real keys in `.env` | `FR-1.1` GitHub profile ingestion |
 | Anthropic (`ANTHROPIC_API_KEY`) | ❌ empty | Resume structured extraction, Project Quality/Innovation sub-scores, certificate OCR vision fallback — these call the real Anthropic API and will error until a key is added |
 | Cloudinary (`CLOUDINARY_URL` etc.) | ❌ placeholder values | Resume/certificate file uploads — real upload calls, will error until real credentials are added |
-| Qdrant API key | not required | Local Qdrant has no auth by default |
+| Qdrant Cloud | ✅ real cluster + API key in `.env` | Innovation sub-score novelty search, skill-taxonomy embeddings |
 | Langfuse | ❌ empty | Agent run tracing — optional, not required to run the app |
 
 Fill these into `.env` (not `.env.example`) when ready to test the LLM-dependent
@@ -54,7 +55,7 @@ and file-upload paths end-to-end.
 ## Stopping everything
 
 ```
-docker compose -f infra/docker-compose.yml stop redis qdrant
+docker compose -f infra/docker-compose.yml stop redis
 ```
 Close the two PowerShell windows opened by `dev-up.ps1` (or Ctrl+C in each) to stop
 the API and web servers.
