@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     qdrant_api_key: str = ""
     embedding_model: str = "BAAI/bge-large-en-v1.5"
 
+    # FR-4.4 salary regression — see tools/train_salary_model.py for how this artifact
+    # gets produced (offline, from a downloaded Stack Overflow Developer Survey CSV).
+    salary_model_path: str = "data/models/salary_regressor.joblib"
+
 
 @lru_cache
 def get_settings() -> Settings:

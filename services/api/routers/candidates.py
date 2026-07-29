@@ -1,6 +1,7 @@
 import secrets
 import time
 from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -13,8 +14,10 @@ from packages.db.models import (
     AgentRun,
     Badge,
     CandidateProfile,
+    CareerRecommendation,
     Certification,
     Consent,
+    CourseCatalogEntry,
     GithubSnapshot,
     TalentScore,
     User,
@@ -22,15 +25,24 @@ from packages.db.models import (
 from packages.shared_schemas.candidates import (
     BadgeResponse,
     CandidateProfileResponse,
+    CareerGuidanceResponse,
     DashboardResponse,
     SubScore,
     TalentScoreResponse,
 )
+from services.agents.candidate_intelligence.career_guidance_graph import get_career_guidance_graph
 from services.agents.candidate_intelligence.graph import get_graph
-from services.agents.candidate_intelligence.state import CandidateProfileState
+from services.agents.candidate_intelligence.state import CandidateProfileState, CareerGuidanceState
+from services.agents.candidate_intelligence.tools.role_taxonomy import ROLE_SKILL_TAXONOMY
+from services.agents.candidate_intelligence.tools.roadmap import RoadmapGenerationUnavailable
+from services.agents.candidate_intelligence.tools.skill_gap import CareerGuidanceUnavailable
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
+
+# How long a cached FR-4 career-guidance result is served before a `GET` recomputes it
+# (LLM roadmap generation + Qdrant calls aren't cheap to run on every dashboard load).
+_CAREER_RECOMMENDATION_TTL = timedelta(hours=24)
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
@@ -365,3 +377,140 @@ async def get_my_dashboard(
         score_history=scores,
         badges=badges,
     )
+
+
+def _years_experience_proxy(profile: CandidateProfile) -> float:
+    """Same "years-of-experience-proxy" doc 01 §8 asks the salary model for — total
+    resume-claimed years, since GitHub-activity-span is already folded into the
+    experience field by profile_merge (FR-1.5)."""
+    return float(sum((e.get("years") or 0) for e in (profile.experience or [])))
+
+
+def _to_career_guidance_response(row: CareerRecommendation) -> CareerGuidanceResponse:
+    return CareerGuidanceResponse(
+        target_role=row.target_role,
+        skill_gaps=row.skill_gaps or [],
+        recommended_courses=row.recommended_courses or [],
+        roadmap=row.roadmap or {"stages": []},
+        salary_estimate_low=row.salary_estimate_low,
+        salary_estimate_high=row.salary_estimate_high,
+        salary_rationale=row.salary_rationale,
+        generated_at=row.generated_at,
+    )
+
+
+@router.get("/me/career-guidance", response_model=CareerGuidanceResponse)
+async def get_my_career_guidance(
+    target_role: str | None = None,
+    refresh: bool = False,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> CareerGuidanceResponse:
+    if target_role and target_role not in ROLE_SKILL_TAXONOMY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unknown_target_role. Known roles: {sorted(ROLE_SKILL_TAXONOMY)}",
+        )
+
+    profile = await _get_or_create_profile(db, user)
+
+    if not refresh:
+        cached_result = await db.execute(
+            select(CareerRecommendation)
+            .where(
+                CareerRecommendation.candidate_id == profile.id,
+                CareerRecommendation.target_role == target_role,
+            )
+            .order_by(CareerRecommendation.generated_at.desc())
+            .limit(1)
+        )
+        cached = cached_result.scalar_one_or_none()
+        if cached is not None and (datetime.now(timezone.utc) - cached.generated_at) < _CAREER_RECOMMENDATION_TTL:
+            return _to_career_guidance_response(cached)
+
+    score_result = await db.execute(
+        select(TalentScore)
+        .where(TalentScore.candidate_id == profile.id)
+        .order_by(TalentScore.computed_at.desc())
+        .limit(1)
+    )
+    latest_score = score_result.scalar_one_or_none()
+
+    catalog_result = await db.execute(select(CourseCatalogEntry))
+    catalog = [
+        {
+            "id": str(c.id),
+            "provider": c.provider,
+            "title": c.title,
+            "url": c.url,
+            "skill_tags": c.skill_tags,
+            "level": c.level,
+            "estimated_hours": c.estimated_hours,
+            "is_free": c.is_free,
+        }
+        for c in catalog_result.scalars().all()
+    ]
+
+    candidate_skills = [s.get("name") for s in (profile.skills or []) if s.get("name")]
+
+    initial_state: CareerGuidanceState = {
+        "candidate_id": str(profile.id),
+        "candidate_skills": candidate_skills,
+        "location": profile.location,
+        "years_experience_proxy": _years_experience_proxy(profile),
+        "talent_score": latest_score.overall if latest_score else None,
+        "target_role": target_role,
+        "course_catalog": catalog,
+        "resolved_target_role": None,
+        "skill_gaps": [],
+        "covered_skills": [],
+        "recommended_courses": [],
+        "roadmap": None,
+        "salary_estimate_low": None,
+        "salary_estimate_high": None,
+        "salary_rationale": None,
+    }
+
+    try:
+        result_state = await get_career_guidance_graph().ainvoke(initial_state)
+    except (CareerGuidanceUnavailable, RoadmapGenerationUnavailable) as exc:
+        # FR-4.1 (skill gaps, needs Qdrant) and FR-4.3 (roadmap, needs Anthropic) are
+        # the core of this endpoint's value — unlike salary_prediction's graceful
+        # degrade (see nodes/salary_prediction.py), these fail the whole request rather
+        # than silently returning a partial/fabricated result.
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    row = CareerRecommendation(
+        candidate_id=profile.id,
+        target_role=result_state.get("resolved_target_role") or target_role,
+        skill_gaps=result_state.get("skill_gaps", []),
+        recommended_courses=result_state.get("recommended_courses", []),
+        roadmap=result_state.get("roadmap") or {"stages": []},
+        salary_estimate_low=result_state.get("salary_estimate_low"),
+        salary_estimate_high=result_state.get("salary_estimate_high"),
+        salary_rationale=result_state.get("salary_rationale"),
+    )
+    db.add(row)
+
+    settings = get_settings()
+    db.add(
+        AgentRun(
+            agent_name="career_guidance_agent",
+            subject_type="candidate",
+            subject_id=profile.id,
+            input_ref={"target_role": target_role, "candidate_skills": candidate_skills},
+            output={
+                "resolved_target_role": row.target_role,
+                "skill_gaps": row.skill_gaps,
+                "recommended_courses": row.recommended_courses,
+                "roadmap": row.roadmap,
+                "salary_estimate_low": row.salary_estimate_low,
+                "salary_estimate_high": row.salary_estimate_high,
+            },
+            model_used=settings.llm_model_judgment,
+        )
+    )
+
+    await db.commit()
+    await db.refresh(row)
+    return _to_career_guidance_response(row)
