@@ -3,12 +3,13 @@ import uuid
 from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
+    Index,
     Text,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
-from sqlalchemy.types import Boolean, DateTime
+from sqlalchemy.types import Boolean, DateTime, Float, Integer
 
 
 class Base(DeclarativeBase):
@@ -88,7 +89,7 @@ class Consent(Base):
     __table_args__ = (
         CheckConstraint(
             "consent_type IN ('resume_parsing','linkedin_export','ai_interview',"
-            "'perceptual_photo_hash','ai_assessment')",
+            "'perceptual_photo_hash','ai_assessment','github_ingestion')",
             name="ck_consents_consent_type",
         ),
         CheckConstraint("status IN ('granted','revoked')", name="ck_consents_status"),
@@ -131,3 +132,102 @@ class AuditLog(Base):
     target_type: Mapped[str | None] = mapped_column(Text)
     target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CandidateProfile(Base):
+    """Module 1 (Candidate Intelligence) — canonical merged profile.
+
+    Schema follows doc/multi-agent-architecture/01 §7 (adds `score_version`-adjacent
+    provenance via merged_conflicts) over doc/SRS/01 §5 — same pick as Phase 0's
+    files/consents resolution in .agents/decisions.md.
+    """
+
+    __tablename__ = "candidate_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
+    github_username: Mapped[str | None] = mapped_column(Text)
+    headline: Mapped[str | None] = mapped_column(Text)
+    location: Mapped[str | None] = mapped_column(Text)
+    skills: Mapped[list | None] = mapped_column(JSONB)  # [{name, source, confidence}]
+    experience: Mapped[list | None] = mapped_column(JSONB)
+    education: Mapped[list | None] = mapped_column(JSONB)
+    merged_conflicts: Mapped[list | None] = mapped_column(JSONB)
+    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GithubSnapshot(Base):
+    __tablename__ = "github_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=False
+    )
+    repo_full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    stars: Mapped[int | None] = mapped_column(Integer)
+    forks: Mapped[int | None] = mapped_column(Integer)
+    commit_count: Mapped[int | None] = mapped_column(Integer)
+    pr_count: Mapped[int | None] = mapped_column(Integer)
+    issue_count: Mapped[int | None] = mapped_column(Integer)
+    languages: Mapped[dict | None] = mapped_column(JSONB)
+    is_fork: Mapped[bool | None] = mapped_column(Boolean)
+    fetched_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Certification(Base):
+    __tablename__ = "certifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=False
+    )
+    file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id"))
+    issuer: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(Text)
+    issue_date: Mapped[object | None] = mapped_column(DateTime(timezone=True))
+    credential_id: Mapped[str | None] = mapped_column(Text)
+    ocr_confidence: Mapped[float | None] = mapped_column(Float)
+    verification_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="unverified")
+
+    __table_args__ = (
+        CheckConstraint(
+            "verification_status IN ('unverified','pending','verified','rejected')",
+            name="ck_certifications_verification_status",
+        ),
+    )
+
+
+class TalentScore(Base):
+    __tablename__ = "talent_scores"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=False
+    )
+    coding_ability: Mapped[float | None] = mapped_column(Float)
+    project_quality: Mapped[float | None] = mapped_column(Float)
+    leadership: Mapped[float | None] = mapped_column(Float)
+    problem_solving: Mapped[float | None] = mapped_column(Float)
+    innovation: Mapped[float | None] = mapped_column(Float)
+    community_participation: Mapped[float | None] = mapped_column(Float)
+    technical_consistency: Mapped[float | None] = mapped_column(Float)
+    overall: Mapped[float | None] = mapped_column(Float)
+    # Which sub-scores were N/A and had their weight re-normalized away (doc 08 §1.1) —
+    # part of the provenance trail, never a silent adjustment.
+    renormalized_subscores: Mapped[list | None] = mapped_column(JSONB)
+    score_version: Mapped[str] = mapped_column(Text, nullable=False, server_default="v1")
+    computed_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("idx_scores_candidate_time", "candidate_id", "computed_at"),)
+
+
+class Badge(Base):
+    __tablename__ = "badges"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=False
+    )
+    skill_name: Mapped[str] = mapped_column(Text, nullable=False)
+    corroboration_sources: Mapped[list] = mapped_column(JSONB, nullable=False)
+    awarded_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
