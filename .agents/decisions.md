@@ -371,3 +371,64 @@ analytics endpoints; Copilot correctly fails closed with a typed 503 given empty
 **not** get an authenticated browser click-through (no `chromium-cli`, no Clerk test-user
 credentials in this repo) — routes were confirmed rendering (200, no crash) via direct curl only.
 → `services/api/routers/recruitment.py`, `apps/web/src/app/(recruiter)/*`, `apps/web/src/app/(candidate)/applications/page.tsx`
+
+---
+
+## 2026-07-29 — Phase 1, Module 03: Assessment & Verification System
+
+**Sandbox stays 100% client-side (Pyodide/Web Worker), no backend execution ever** — architecture
+doc §2's finalized design over SRS's server-side Piston mention. The backend never sees candidate
+code except as text to statically analyze (`radon`/`lizard`/`bandit`); test pass/fail is computed
+in-browser and only that boolean result is sent back. `apps/web/src/lib/pyodideRunner.ts` loads
+Pyodide from a CDN (`indexURL`), not bundled — the standard integration pattern given the WASM
+runtime + stdlib assets are too large to ship in the Next.js webpack bundle. Every coding
+assessment's entry point is a function named `solve_problem` taking one argument — a convention,
+not enforced by any doc, matching the pre-existing stub page's example.
+
+**Interview is turn-based REST, not WebSocket** — architecture doc §3 already finalizes this;
+matches Module 02's Copilot decision. Each `POST .../turn` is one `ainvoke()`; conversation state
+(`topic_plan`, `current_topic_idx`, `transcript`, `per_topic_scores`,
+`follow_up_count_this_topic`) is persisted manually to `interview_sessions.state` JSONB between
+calls — no LangGraph checkpointer, consistent with every other module. The turn graph routes from
+`START` on a `mode: "start" | "turn"` flag (not graph-loop-based) since the very first call (no
+answer to evaluate yet) and a mid-interview call (evaluate → maybe follow-up → maybe next
+question) need genuinely different entry behavior.
+
+**Web Speech STT/TTS is entirely client-side** — the backend never sees or stores audio, only the
+transcript text the browser already converted (architecture doc §3).
+
+**GitHub data via PyGithub REST, not GraphQL** — reuses `candidate_intelligence/tools/github.py`'s
+exact client pattern rather than adding a new GraphQL dependency. `lines_survived` (doc 03 §7's
+"lines changed that survive to HEAD") is approximated as net commit-level additions, not a true
+git-blame pass — documented in `tools/github_contribution.py`, not hidden.
+
+**Contribution weighting**: each raw component (lines/commits/PRs-opened/PRs-reviewed) is min-max
+scaled against the team's own max *before* the doc's stated weights are applied — otherwise
+`lines_survived` (often hundreds) would numerically dominate `commits_count` (often single digits)
+regardless of the stated 0.35/0.25/0.20/0.20 weights. Final shares are then normalized to sum to 1,
+per the formula's own "normalize(...)". Not specified by either doc; implementation detail logged
+since it changes the actual numbers a recruiter sees.
+
+**Additive schema**: `contribution_reports.github_username` (a team member who isn't yet a
+platform candidate still needs to appear in the report; `candidate_id` stays nullable exactly as
+both docs' own SQL already has it).
+
+**`project_analysis` submissions fetch only public repo content, unauthenticated** — no candidate
+GitHub token is ever persisted server-side (FR-1.1's rule), and re-collecting a fresh token at
+submission time was out of scope for this pass. Documented as a real limitation in
+`_fetch_repo_sample_source`'s docstring, not silently assumed away.
+
+**Fixed a pre-existing frontend bug while wiring**: `(recruiter)/reports/submission/[id]/page.tsx`
+contained Module 04 (PPT Analyzer) pitch-deck-report content instead of Module 03's coding/MCQ
+submission report — a scaffolding copy-paste mistake (Module 04 already has its own correct report
+at `/pitch-deck/[id]`). Replaced with the real report.
+
+**Verified live against the real Neon DB** (same dependency-override-bypassing-Clerk technique as
+Modules 01/02): MCQ submission succeeds end-to-end with no LLM dependency (score computed purely
+by rules); coding submission and interview start both fail closed with a typed 503 given the
+still-empty `ANTHROPIC_API_KEY`; team contribution report generation ran a real GitHub API call
+against `octocat/Hello-World` and persisted correct results. `tsc --noEmit`, `eslint`, `next build`
+all clean, no route collisions.
+→ `packages/db/models/assessment.py`, `services/agents/assessment/`,
+`services/api/routers/assessments.py`, `apps/web/src/app/(candidate)/assessments/`,
+`apps/web/src/app/(candidate)/interview/`, `apps/web/src/app/(recruiter)/reports/`
