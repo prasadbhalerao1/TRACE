@@ -281,3 +281,23 @@ loops back through the generator exactly once before ending `passed`); `npx tsc 
 `npm run lint`, and `npm run build` all clean, with the production build's route table confirming
 `/[username]` resolves as a server-rendered dynamic route with no collisions.
 → all FR-5 files listed above
+
+---
+
+## 2026-07-29 — Phase 1, Module 01: Candidate Intelligence — FR-4 (AI Career Guidance)
+
+**Linearized Alembic Migration (`a333d4c53bd0`)**: Chains after FR-5 (`a76c622e4c08`). Adds `career_recommendations` table and `course_catalog` table (seeded with initial courses). ORM models `CareerRecommendation` and `CourseCatalogEntry` defined in `packages/db/models.py`.
+
+**Parallel Fan-Out Graph (`career_guidance_graph.py`)**: Executes `skill_gap_analysis`, `salary_prediction`, and `certification_mapping` in parallel superstep, followed sequentially by `career_roadmap`. Uses `CareerGuidanceState` with discrete return keys to prevent LangGraph parallel state collision.
+
+**Qdrant Vector Cosine Matching**: Computes skill gaps against target role taxonomies stored in Qdrant Cloud. Offline Stack Overflow regressor tool (`train_salary_model.py`) trains a 2-quantile GBR model for salary interval predictions.
+
+---
+
+## 2026-07-29 — Phase 1, Module 04: PPT Pitch Deck Analyzer
+
+**Linearized Alembic Migration (`e8a55dc975da`)**: Chains after FR-4 (`a333d4c53bd0`). Adds `presentations` and `presentation_slide_embeddings` tables to store slide metadata, extracted text, and vector embeddings.
+
+**5-Agent Rubric Scoring & Plagiarism Pipeline**: Extracts text/OCR from PowerPoint decks, runs 5 parallel AI rubric agents (Innovation, Technical Feasibility, Presentation Quality, Business Potential, AI-Content Signal), checks slide vector similarity in Qdrant for plagiarism, and synthesizes a presentation report.
+
+**Standalone Multi-Role Route**: Report view lives at `/pitch-deck/[id]` outside role groups so candidates, judges, recruiters, and investors can view pitch deck reports without role restrictions. Upload lives in `(candidate)/pitch-deck/page.tsx` and is linked directly from the Candidate Dashboard.

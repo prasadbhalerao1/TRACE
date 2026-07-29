@@ -1,4 +1,4 @@
-﻿// Client-side helpers only — per doc 00 §2.1, Next.js never runs business logic or
+// Client-side helpers only — per doc 00 §2.1, Next.js never runs business logic or
 // guards routes itself; components call FastAPI directly with the Clerk token they
 // already have client-side. No Server Actions, no app/api/* proxying.
 
@@ -391,6 +391,104 @@ export async function fetchCareerGuidance(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail ? String(body.detail) : `GET career-guidance failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// --- Module 04: PPT Pitch Deck Analyzer ---
+
+export const PITCH_SCORE_LABELS: Record<string, string> = {
+  innovation: "Innovation & Impact",
+  technical_feasibility: "Technical Feasibility",
+  presentation_quality: "Presentation & Design Quality",
+  business_potential: "Business & Market Potential",
+};
+
+export interface AIContentSignal {
+  score: number | null;
+  confidence_label: string;
+  flagged_sections: string[];
+  rationale: string;
+}
+
+export interface RubricScore {
+  value: number | null;
+  rationale: string | null;
+  gaps: string[];
+}
+
+export interface PlagiarismMatchOut {
+  id: string;
+  presentation_id: string;
+  matched_presentation_id: string;
+  slide_index: number;
+  similarity: number;
+  flagged_at: string;
+}
+
+export interface SlideOut {
+  slide_index: number;
+  title: string | null;
+  body: string | null;
+  notes: string | null;
+  has_image: boolean;
+  ocr_text: string | null;
+}
+
+export interface PresentationUploadResponse {
+  presentation_id: string;
+  status: string;
+}
+
+export interface PresentationReportResponse {
+  presentation_id: string;
+  status: string;
+  linked_repo: string | null;
+  slides: SlideOut[];
+  scores: Record<string, RubricScore>;
+  overall_pitch_score: number | null;
+  renormalized_scores: string[];
+  summary: string | null;
+  suggestions: string[];
+  ai_content_signal: AIContentSignal | null;
+  plagiarism_matches: PlagiarismMatchOut[];
+  computed_at: string | null;
+}
+
+export async function uploadPresentation(
+  token: string,
+  file: File,
+  linkedRepoUrl?: string,
+): Promise<PresentationUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (linkedRepoUrl) formData.append("linked_repo_url", linkedRepoUrl);
+
+  const res = await fetch(`${API_URL}/presentations/upload`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`POST /presentations/upload failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export async function fetchPresentationReport(
+  token: string,
+  presentationId: string,
+): Promise<PresentationReportResponse> {
+  const res = await fetch(`${API_URL}/presentations/${presentationId}/report`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`GET /presentations/${presentationId}/report failed: ${detail}`);
   }
   return res.json();
 }

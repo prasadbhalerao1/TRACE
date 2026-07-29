@@ -88,12 +88,18 @@ export function CandidateDashboard() {
         </CardContent>
       </Card>
 
-      <div className="flex gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Button variant="outline" render={<Link href="/profile/edit" />}>
           {profile.github_username ? "Update your evidence" : "Connect more evidence"}
         </Button>
         <Button variant="outline" render={<Link href="/resume-builder" />}>
           Build resume & portfolio
+        </Button>
+        <Button variant="outline" render={<Link href="/career" />}>
+          AI Career Guidance
+        </Button>
+        <Button variant="outline" render={<Link href="/pitch-deck" />}>
+          Pitch Deck Analyzer
         </Button>
       </div>
     </div>

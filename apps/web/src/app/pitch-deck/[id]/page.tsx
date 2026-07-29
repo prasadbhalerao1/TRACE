@@ -126,7 +126,7 @@ export default function PitchDeckReportPage() {
                 {sub?.rationale && <p className="mt-0.5 text-xs text-muted-foreground">{sub.rationale}</p>}
                 {sub?.gaps && sub.gaps.length > 0 && (
                   <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">
-                    {sub.gaps.map((gap) => (
+                    {sub.gaps.map((gap: string) => (
                       <li key={gap}>{gap}</li>
                     ))}
                   </ul>
@@ -153,7 +153,7 @@ export default function PitchDeckReportPage() {
           </CardHeader>
           <CardContent>
             <ul className="list-inside list-disc space-y-1 text-sm text-foreground">
-              {report.suggestions.map((s) => (
+              {report.suggestions.map((s: string) => (
                 <li key={s}>{s}</li>
               ))}
             </ul>

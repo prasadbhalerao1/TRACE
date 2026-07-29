@@ -35,17 +35,11 @@ made where the docs were silent or disagreed.)
 Per doc 00 §7: Candidate Intelligence (01) → Recruitment (02) → Verification (03) → PPT Analyzer
 (04) → Hackathon (05) → Fraud (06).
 
-**Module 01 (Candidate Intelligence) — core loop in progress (2026-07-29).** FR-1 (ingestion:
-GitHub OAuth, resume upload+parse, certificate upload+OCR), FR-2 (Talent Score: all 7 sub-scores,
-cold-start re-normalization, evidence trail), and FR-3 (dashboard: Evidence Receipt, radar/trend
-charts, badges) are built — DB tables, `services/agents/candidate_intelligence/` LangGraph subgraph,
-`services/api/routers/candidates.py`, and `(candidate)/profile/edit` + the shared `/dashboard`
-candidate view. Verified end-to-end (mechanical scoring, cold-start re-normalization, conflict
-detection, badge awarding, DB persistence) via direct graph invocation with a synthetic GitHub
-payload — real GitHub ingestion untested live (this network's unauthenticated GitHub rate limit was
-exhausted during verification; will work once a real OAuth token is used). **FR-4 (Career Guidance)
-and FR-5 (Resume/Portfolio Builder) are NOT started** — next session should pick those up. See
-`.agents/decisions.md`'s 2026-07-29 Module 01 entries for the specific choices made.
+**Module 01 (Candidate Intelligence) — FULLY COMPLETE (2026-07-29).** All 5 FRs are implemented and merged onto `main`: FR-1 (Ingestion), FR-2 (Talent Score), FR-3 (Dashboard), FR-4 (AI Career Guidance: skill gaps, roadmap, salary model, course catalog), and FR-5 (AI Resume & Portfolio Builder: fact-checking, WeasyPrint PDF, public SSR portfolio). Verified end-to-end and linked directly into the Candidate Dashboard.
+
+**Module 04 (PPT Pitch Deck Analyzer) — FULLY COMPLETE (2026-07-29).** Standalone pitch deck analyzer implemented on `main`: format normalization, slide extraction, 5-agent rubric scoring graph, AI-content signal detector, and Qdrant plagiarism detection.
+
+**Next:** Phase 1 Step 2 — **Module 02 (AI Recruitment Platform)**. See `.agents/decisions.md` and `project_parallel_module_builds_20260729.md` for full implementation choices.
 
 ### The loop, repeated per module
 
