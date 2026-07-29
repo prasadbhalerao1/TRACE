@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     # gets produced (offline, from a downloaded Stack Overflow Developer Survey CSV).
     salary_model_path: str = "data/models/salary_regressor.joblib"
 
+    # Module 4 (PPT Analyzer) — see doc/SRS/04 §9.
+    presentation_max_file_size_mb: int = 50
+    # LibreOffice headless binary for legacy .ppt -> .pptx conversion (doc 04 §4). Not
+    # bundled with this repo's Python venv — degrades gracefully (LegacyPptConversionUnavailable)
+    # if not found on PATH, same "typed error, never fabricate" pattern as Anthropic/Cloudinary.
+    libreoffice_binary: str = "soffice"
+
+
 
 @lru_cache
 def get_settings() -> Settings:
