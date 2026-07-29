@@ -22,6 +22,14 @@ from packages.db.models.candidate import (
 from packages.db.models.consent import Consent
 from packages.db.models.event import Event
 from packages.db.models.file import File
+from packages.db.models.hackathon import (
+    Hackathon,
+    HackathonRanking,
+    HackathonSubmission,
+    HackathonTeam,
+    HackathonTeamMember,
+    RecruiterWatchlist,
+)
 from packages.db.models.organization import Organization
 from packages.db.models.presentation import (
     PlagiarismMatch,
@@ -72,4 +80,10 @@ __all__ = [
     "InterviewTranscriptTurn",
     "InterviewReport",
     "ContributionReport",
+    "Hackathon",
+    "HackathonTeam",
+    "HackathonTeamMember",
+    "HackathonSubmission",
+    "HackathonRanking",
+    "RecruiterWatchlist",
 ]
