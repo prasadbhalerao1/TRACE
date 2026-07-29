@@ -1,20 +1,45 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { submitJudgeScore } from "@/lib/api";
 
 export default function JudgeRubricPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const hackathonId = searchParams.get("hackathonId");
+  const { getToken } = useAuth();
   const [score, setScore] = useState("90");
   const [rationale, setRationale] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    if (!hackathonId) {
+      setError("Missing hackathonId — open this page from the Evaluations Queue.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      await submitJudgeScore(token, hackathonId, params.id, {
+        score: Number(score),
+        rationale: rationale || null,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit evaluation");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -57,12 +82,15 @@ export default function JudgeRubricPage() {
                     onChange={(e) => setRationale(e.target.value)}
                   />
                 </div>
-                <Button type="submit" className="w-full">Submit Evaluation</Button>
+                {error && <p className="text-sm text-rose-flagged">{error}</p>}
+                <Button type="submit" className="w-full" disabled={submitting}>
+                  {submitting ? "Submitting…" : "Submit Evaluation"}
+                </Button>
               </form>
             ) : (
               <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded text-sm">
                 <h4 className="font-semibold text-emerald-800 dark:text-emerald-400">Evaluation Submitted</h4>
-                <p className="text-xs text-slate mt-1">Rubric grading successfully logged. Standing computations will run when other judges finish grading.</p>
+                <p className="text-xs text-slate mt-1">Rubric grading successfully logged. Standing computations will run when the organizer finalizes rankings.</p>
               </div>
             )}
           </CardContent>
@@ -75,23 +103,14 @@ export default function JudgeRubricPage() {
             </CardHeader>
             <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
               <p>Ratings are evaluated on:
-                <br />• **Code Quality**: Design patterns & coverage.
-                <br />• **Feasibility**: Practical operation.
-                <br />• **Innovation**: Uniqueness of concept.
+                <br />• <strong>Code Quality</strong>: Design patterns & coverage.
+                <br />• <strong>Feasibility</strong>: Practical operation.
+                <br />• <strong>Innovation</strong>: Uniqueness of concept.
               </p>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">Technical Reference: doc/SRS/05-SRS-Hackathon-to-Hiring-Pipeline.md</CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-slate space-y-2">
-          <p>**Submission Evaluation Schema**: Saves directly to the `judge_evaluations` table, which maps to project teams, events, and judging metadata.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

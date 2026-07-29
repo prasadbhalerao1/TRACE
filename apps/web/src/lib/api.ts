@@ -886,3 +886,252 @@ export function generateContributionReport(
 export function fetchContributionReports(token: string, repoFullName: string): Promise<ContributionReportResponse[]> {
   return assessmentJson(`/contribution-reports?repo_full_name=${encodeURIComponent(repoFullName)}`, token);
 }
+
+// --- Hackathon Pipeline (Module 05) ---
+
+async function hackathonJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+export interface HackathonResponse {
+  id: string;
+  organizer_org_id: string | null;
+  organizer_user_id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  tracks: string[] | null;
+  ingestion_mode: "manual_csv" | "webhook" | "direct";
+  status: "draft" | "active" | "judging" | "finalized";
+  created_at: string;
+}
+
+export function createHackathon(
+  token: string,
+  body: { name: string; start_date?: string | null; end_date?: string | null; tracks?: string[]; ingestion_mode?: string },
+): Promise<HackathonResponse> {
+  return hackathonJson(`/hackathons`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tracks: [], ingestion_mode: "direct", ...body }),
+  });
+}
+
+export function fetchMyHackathons(token: string): Promise<HackathonResponse[]> {
+  return hackathonJson(`/hackathons`, token);
+}
+
+export function fetchHackathon(token: string, hackathonId: string): Promise<HackathonResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}`, token);
+}
+
+export interface TeamMemberInput {
+  github_username?: string | null;
+  display_name?: string | null;
+  role?: string;
+}
+
+export interface TeamSubmissionInput {
+  team_name: string;
+  track?: string | null;
+  members?: TeamMemberInput[];
+  repo_url?: string | null;
+  presentation_id?: string | null;
+  judge_score?: number | null;
+}
+
+export interface CSVImportRowError {
+  row_index: number;
+  team_name: string | null;
+  error: string;
+}
+
+export interface CSVImportResponse {
+  teams_created: number;
+  members_created: number;
+  row_errors: CSVImportRowError[];
+}
+
+export function importHackathonTeamsCsv(
+  token: string,
+  hackathonId: string,
+  teams: TeamSubmissionInput[],
+): Promise<CSVImportResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}/import/csv`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teams }),
+  });
+}
+
+export interface TeamResponse {
+  id: string;
+  hackathon_id: string;
+  team_name: string;
+  track: string | null;
+}
+
+export function submitHackathonProject(
+  token: string,
+  hackathonId: string,
+  body: TeamSubmissionInput,
+): Promise<TeamResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}/submissions`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchHackathonTeams(token: string, hackathonId: string): Promise<TeamResponse[]> {
+  return hackathonJson(`/hackathons/${hackathonId}/teams`, token);
+}
+
+export interface TeamMemberResponse {
+  id: string;
+  candidate_id: string | null;
+  github_username: string | null;
+  display_name: string | null;
+  role: string;
+}
+
+export interface HackathonSubmissionResponse {
+  id: string;
+  team_id: string;
+  repo_url: string | null;
+  presentation_id: string | null;
+  repo_analysis_submission_id: string | null;
+  judge_score: number | null;
+  judge_rationale: string | null;
+  submitted_at: string;
+}
+
+export interface ScoreBreakdown {
+  judge_score: number | null;
+  pitch_score: number | null;
+  repo_quality_score: number | null;
+  novelty_score: number | null;
+  renormalized: string[];
+}
+
+export interface RankingResponse {
+  id: string;
+  hackathon_id: string;
+  team_id: string;
+  team_name: string | null;
+  rank: number;
+  composite_score: number;
+  score_breakdown: ScoreBreakdown | null;
+  finalized_at: string;
+}
+
+export interface TeamDetailResponse {
+  team: TeamResponse;
+  members: TeamMemberResponse[];
+  submission: HackathonSubmissionResponse | null;
+  ranking: RankingResponse | null;
+}
+
+export function fetchHackathonTeamDetail(token: string, hackathonId: string, teamId: string): Promise<TeamDetailResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}/teams/${teamId}`, token);
+}
+
+export interface JudgeQueueEntry {
+  submission_id: string;
+  hackathon_id: string;
+  hackathon_name: string;
+  team_id: string;
+  team_name: string;
+  repo_url: string | null;
+  presentation_id: string | null;
+  judge_score: number | null;
+  judge_rationale: string | null;
+}
+
+export function fetchJudgingQueue(token: string): Promise<JudgeQueueEntry[]> {
+  return hackathonJson(`/judging/queue`, token);
+}
+
+export function submitJudgeScore(
+  token: string,
+  hackathonId: string,
+  submissionId: string,
+  body: { score: number; rationale?: string | null },
+): Promise<HackathonSubmissionResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}/submissions/${submissionId}/judge-score`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export interface FinalizeRankingsResponse {
+  hackathon_id: string;
+  rankings: RankingResponse[];
+}
+
+export function finalizeHackathonRankings(token: string, hackathonId: string): Promise<FinalizeRankingsResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}/rankings/finalize`, token, { method: "POST" });
+}
+
+export function fetchHackathonRankings(token: string, hackathonId: string): Promise<RankingResponse[]> {
+  return hackathonJson(`/hackathons/${hackathonId}/rankings`, token);
+}
+
+export function createRecruiterWatchlist(
+  token: string,
+  body: { track?: string | null; min_rank?: number | null; skills?: string[] },
+): Promise<{ id: string; recruiter_id: string; criteria: Record<string, unknown> | null; created_at: string }> {
+  return hackathonJson(`/recruiters/me/watchlists`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export interface TopPerformerEntry {
+  hackathon_id: string;
+  hackathon_name: string;
+  team_id: string;
+  team_name: string;
+  rank: number;
+  composite_score: number;
+  candidate_id: string | null;
+  candidate_headline: string | null;
+  candidate_github_username: string | null;
+}
+
+export function fetchTopPerformersFeed(token: string): Promise<{ entries: TopPerformerEntry[] }> {
+  return hackathonJson(`/recruiters/me/top-performers-feed`, token);
+}
+
+// Public reads (doc 05 §8's leaderboard/team pages) — these three router endpoints have
+// no `Depends(require_role(...))` at all, so no Clerk token is needed or sent.
+async function publicHackathonJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  return res.json();
+}
+
+export function fetchPublicHackathonRankings(hackathonId: string): Promise<RankingResponse[]> {
+  return publicHackathonJson(`/hackathons/${hackathonId}/rankings`);
+}
+
+export function fetchPublicHackathonTeamDetail(hackathonId: string, teamId: string): Promise<TeamDetailResponse> {
+  return publicHackathonJson(`/hackathons/${hackathonId}/teams/${teamId}`);
+}
+
+export function fetchPublicHackathon(hackathonId: string): Promise<HackathonResponse> {
+  return publicHackathonJson(`/hackathons/${hackathonId}`);
+}
