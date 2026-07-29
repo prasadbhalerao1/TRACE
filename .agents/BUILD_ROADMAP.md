@@ -39,7 +39,9 @@ Per doc 00 §7: Candidate Intelligence (01) → Recruitment (02) → Verificatio
 
 **Module 04 (PPT Pitch Deck Analyzer) — FULLY COMPLETE (2026-07-29).** Standalone pitch deck analyzer implemented on `main`: format normalization, slide extraction, 5-agent rubric scoring graph, AI-content signal detector, and Qdrant plagiarism detection.
 
-**Next:** Phase 1 Step 2 — **Module 02 (AI Recruitment Platform)**. See `.agents/decisions.md` and `project_parallel_module_builds_20260729.md` for full implementation choices.
+**Module 02 (AI Recruitment Platform) — FULLY COMPLETE (2026-07-29).** FR-1 through FR-4 implemented on `main`: Recruiter Dashboard, AI Job Matching Engine (Flow B), Recruiter Copilot (Flow A, REST not WebSocket — see `.agents/decisions.md`), and Hiring Analytics. Verified end-to-end against the live Neon DB; `top-performers`/`reports/*` deliberately deferred to Phase 2 (they're Module 03/05 output).
+
+**Next:** Phase 1 Step 3 — **Module 03 (Assessment & Verification System)**. See `.agents/decisions.md` for implementation choices made in Modules 01/02/04 so far.
 
 ### The loop, repeated per module
 

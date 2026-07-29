@@ -301,3 +301,73 @@ loops back through the generator exactly once before ending `passed`); `npx tsc 
 **5-Agent Rubric Scoring & Plagiarism Pipeline**: Extracts text/OCR from PowerPoint decks, runs 5 parallel AI rubric agents (Innovation, Technical Feasibility, Presentation Quality, Business Potential, AI-Content Signal), checks slide vector similarity in Qdrant for plagiarism, and synthesizes a presentation report.
 
 **Standalone Multi-Role Route**: Report view lives at `/pitch-deck/[id]` outside role groups so candidates, judges, recruiters, and investors can view pitch deck reports without role restrictions. Upload lives in `(candidate)/pitch-deck/page.tsx` and is linked directly from the Candidate Dashboard.
+
+---
+
+## 2026-07-29 — DB migration bug found on Module 01: alembic stamped-not-applied
+
+**The Neon dev DB's `alembic_version` was at head (`e8a55dc975da`) but the FR-4/FR-5 migrations'
+DDL had never actually run** — `candidate_profiles.username`/`portfolio_published`,
+`career_recommendations`, `generated_documents`, and `course_catalog` were all missing. Root cause:
+`a333d4c53bd0`'s course-catalog seed insert bound `:id` as a bare `sa.text()` param, which the
+driver inferred as VARCHAR against a UUID PK column — Postgres rejected it, and someone stamped
+past the failure instead of fixing it. This is what surfaced as `/candidates/me/dashboard` 500ing
+(misreported as a CORS error by the browser, since Starlette's `ServerErrorMiddleware` generates
+500s outside `CORSMiddleware`). Fixed with `CAST(:id AS UUID)`, then re-applied for real (stamped
+back to `44fd41ed1de0`, ran `alembic upgrade head`; Module 04's tables already existed
+byte-for-byte outside the migration chain, verified column-by-column before stamping past that one
+revision rather than re-running it).
+→ `packages/db/migrations/versions/a333d4c53bd0_career_guidance_tables.py`
+
+**Lesson for future migration work**: `alembic heads`/`alembic current` matching does NOT prove the
+DDL actually ran — always spot-check that a recent migration's columns/tables actually exist in the
+live DB before trusting the version marker.
+
+---
+
+## 2026-07-29 — Phase 1, Module 02: AI Recruitment Platform
+
+**Cultural Fit scoring omitted entirely.** This is a documented "Known Difference" in
+`.agents/DOCUMENTATION_MAP.md` (multi-agent-architecture/02 says removed; SRS/02 has one NFR trace
+of it). Resolved in favor of removal: the canonical formula in `doc/multi-agent-architecture/08`
+§2 (the single source of truth for scoring math) has no Cultural Fit term at all.
+
+**Recruiter Copilot built as plain REST (`POST /copilot/query`), not WebSocket streaming** — user's
+explicit choice when asked, since no other module in this codebase uses WebSockets yet and the
+3-stage cost-bounded design (doc 02 §2) is fast enough without token-level streaming. Revisit if a
+future session wants the literal streaming UX doc 02 §7 describes for `CopilotChat.tsx`.
+
+**Match formula weights are this session's tunable defaults** (doc 08 §2 explicitly calls them
+unvalidated): w1=0.35 SkillOverlap, w2=0.30 SemanticSimilarity, w3=0.15 ExperienceMatch, w4=0.20
+TalentScoreAlignment; SemanticSimilarity's internal blend uses doc 08's own α=0.70.
+→ `services/agents/recruitment/tools/matching.py`
+
+**Additive schema, not in either doc's SQL**: `applications.source` (needed for FR-4.3's
+source-of-hire breakdown) and `match_scores`'s per-term columns (`semantic_similarity`,
+`experience_match`, `talent_score_alignment` — needed so the 4-term breakdown can actually be
+persisted and redisplayed, not just computed transiently). `applications.stage` uses the
+architecture doc's 6-value vocabulary (`sourced,screened,interview_scheduled,offered,rejected,
+hired`) — the most complete of three inconsistent stage lists found across SRS/02,
+architecture/02, and two pre-existing frontend mock pages; SRS FR-1.4's extra `assessed` stage is
+deferred until Module 03 exists.
+→ `packages/db/models/recruitment.py`, `packages/db/migrations/versions/ac395e67db4e_recruitment_tables.py`
+
+**No LangGraph checkpointer for the Copilot's multi-turn conversation** — nothing else in this
+codebase uses one; `copilot_conversations.messages`/`structured_filters` are loaded into initial
+state and re-saved after each turn by the router instead, matching every other module's manual-DB
+-persistence convention.
+→ `services/agents/recruitment/copilot_graph.py`, `services/api/routers/recruitment.py`
+
+**`(recruiter)/top-performers` and `(recruiter)/reports/*` deliberately NOT wired** — they surface
+Module 03 (interview/contribution reports) and Module 05 (hackathon rankings) output via the
+cross-module events bus, which is explicitly a Phase 2 ("Integration pass, after all 6 modules
+exist independently") task per `.agents/BUILD_ROADMAP.md`, not part of Module 02 in isolation.
+
+**Verified live against the real Neon DB** (dependency-override script bypassing Clerk auth, same
+technique used to catch the Module 01 migration bug above): job creation → real Flow B matching →
+persisted 4-term scores; candidate apply + duplicate-apply (409); kanban stage PATCH; all three
+analytics endpoints; Copilot correctly fails closed with a typed 503 given empty
+`ANTHROPIC_API_KEY`. `tsc --noEmit`, `eslint`, `next build` all clean, no route collisions. Did
+**not** get an authenticated browser click-through (no `chromium-cli`, no Clerk test-user
+credentials in this repo) — routes were confirmed rendering (200, no crash) via direct curl only.
+→ `services/api/routers/recruitment.py`, `apps/web/src/app/(recruiter)/*`, `apps/web/src/app/(candidate)/applications/page.tsx`
