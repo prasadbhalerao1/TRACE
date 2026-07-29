@@ -8,24 +8,20 @@ session, every time you resume.
 
 ## Status as of this writing
 
-Modules 01 (Candidate Intelligence), 02 (AI Recruitment), 04 (PPT Analyzer) are **fully merged on
-`main`**. Module 03 (Assessment & Verification) is **in progress right now, same session that wrote
-this file** — DB schema + all three LangGraph subgraphs done, router + frontend not yet built.
-Modules 05 (Hackathon Pipeline) and 06 (Trust & Fraud Prevention) are **not started**.
+Modules 01 (Candidate Intelligence), 02 (AI Recruitment), 03 (Assessment & Verification), and 04
+(PPT Analyzer) are **all fully merged on `main`** as of 2026-07-29 — DB, agents, router, and
+frontend, live-verified against the real Neon DB. `submissions`/`contribution_reports` (which
+Modules 05/06 read) exist on `main` now. Modules 05 (Hackathon Pipeline) and 06 (Trust & Fraud
+Prevention) are **not started**.
 
 ## The 4 tracks
 
 | # | Owner | Track | Depends on (read-only) | Status |
 |---|---|---|---|---|
-| 1 | You (this session) | Module 03 — Assessment & Verification | Module 01 (candidate_profiles) | In progress |
-| 2 | Person 2 | Module 05 — Hackathon-to-Hiring Pipeline | Module 01, 03 (submissions/contribution_reports), 04 | Not started |
-| 3 | Person 3 | Module 06 — Trust & Fraud Prevention | Module 01, 03 (submissions), 04 | Not started |
+| 1 | You (this session) | Module 03 — Assessment & Verification | Module 01 (candidate_profiles) | **Done, merged on `main`** |
+| 2 | Person 2 | Module 05 — Hackathon-to-Hiring Pipeline | Module 01, 03 (submissions/contribution_reports), 04 | Not started — Module 03's tables are now on `main`, no need to stub |
+| 3 | Person 3 | Module 06 — Trust & Fraud Prevention | Module 01, 03 (submissions), 04 | Not started — Module 03's tables are now on `main`, no need to stub |
 | 4 | Person 4 | Platform Hardening & Observability | None — can start immediately | Not started |
-
-Modules 05 and 06 both **read** Module 03 tables (`submissions`, `contribution_reports`) that don't
-exist on `main` yet as of this writing. Don't block on that: build your own schema/router/agents
-against your own tables now, and treat any Module 03 read as a `TODO` you wire up once you `git
-pull main` and see it land. Do not modify Module 03's files to "help" — see boundaries below.
 
 ## Hard file-ownership boundaries
 
