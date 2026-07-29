@@ -231,3 +231,90 @@ class Badge(Base):
     skill_name: Mapped[str] = mapped_column(Text, nullable=False)
     corroboration_sources: Mapped[list] = mapped_column(JSONB, nullable=False)
     awarded_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Presentation(Base):
+    """Module 4 (PPT Analyzer) — owns its own tables, per doc/multi-agent-architecture/00
+    §1's "every module owns its own tables" rule. Only FKs into shared core tables
+    (`users`, `files`) — never into another module's private tables.
+
+    `hackathon_submission_id` is a plain nullable UUID, NOT a foreign key: doc 05
+    (Hackathon Pipeline) doesn't exist yet, and per the master architecture rule modules
+    never FK directly into another module's private table anyway — this is designed so
+    doc 05 can start writing/reading it via the `events` bus (or a later join) without a
+    schema change here.
+    """
+
+    __tablename__ = "presentations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id"))
+    linked_repo: Mapped[str | None] = mapped_column(Text)
+    hackathon_submission_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # processing | done | failed — status-polling per doc 04 §6 GET /status endpoint
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="processing")
+    status_detail: Mapped[str | None] = mapped_column(Text)
+    uploaded_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('processing','done','failed')", name="ck_presentations_status"),
+    )
+
+
+class Slide(Base):
+    __tablename__ = "slides"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    presentation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("presentations.id"), nullable=False
+    )
+    slide_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(Text)
+    body: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    has_image: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    # Not in the doc's minimal SQL sketch verbatim — added so FR-2/FR-5's "embedded
+    # images" and OCR/vision text (Slide Image/OCR Agent) has somewhere to persist per
+    # slide rather than being discarded after the graph run.
+    ocr_text: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (Index("idx_slides_presentation_index", "presentation_id", "slide_index"),)
+
+
+class PresentationScore(Base):
+    __tablename__ = "presentation_scores"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    presentation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("presentations.id"), nullable=False
+    )
+    innovation_score: Mapped[float | None] = mapped_column(Float)
+    technical_feasibility_score: Mapped[float | None] = mapped_column(Float)
+    presentation_quality_score: Mapped[float | None] = mapped_column(Float)
+    business_potential_score: Mapped[float | None] = mapped_column(Float)
+    overall_pitch_score: Mapped[float | None] = mapped_column(Float)
+    # Which of the 4 components were N/A and had their weight re-normalized away
+    # (same cold-start pattern as doc 08 §1.1 / TalentScore.renormalized_subscores).
+    renormalized_scores: Mapped[list | None] = mapped_column(JSONB)
+    summary: Mapped[str | None] = mapped_column(Text)
+    suggestions: Mapped[list | None] = mapped_column(JSONB)
+    ai_content_signal: Mapped[dict | None] = mapped_column(JSONB)  # {score, confidence_label, flagged_sections}
+    computed_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("idx_presentation_scores_presentation_time", "presentation_id", "computed_at"),)
+
+
+class PlagiarismMatch(Base):
+    __tablename__ = "plagiarism_matches"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    presentation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("presentations.id"), nullable=False
+    )
+    matched_presentation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("presentations.id"), nullable=False
+    )
+    slide_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    similarity: Mapped[float] = mapped_column(Float, nullable=False)
+    flagged_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())

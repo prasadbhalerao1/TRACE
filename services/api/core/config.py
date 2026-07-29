@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     qdrant_api_key: str = ""
     embedding_model: str = "BAAI/bge-large-en-v1.5"
 
+    # Module 4 (PPT Analyzer) — see doc/SRS/04 §9.
+    presentation_max_file_size_mb: int = 50
+    # LibreOffice headless binary for legacy .ppt -> .pptx conversion (doc 04 §4). Not
+    # bundled with this repo's Python venv — degrades gracefully (LegacyPptConversionUnavailable)
+    # if not found on PATH, same "typed error, never fabricate" pattern as Anthropic/Cloudinary.
+    libreoffice_binary: str = "soffice"
+
 
 @lru_cache
 def get_settings() -> Settings:
