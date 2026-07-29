@@ -702,3 +702,187 @@ export function fetchSourceBreakdown(token: string, jobId?: string): Promise<Sou
   const query = jobId ? `?job_id=${jobId}` : "";
   return recruitmentJson(`/analytics/source-breakdown${query}`, token);
 }
+
+// --- Assessment & Verification (Module 03) ---
+
+export interface HiddenTest {
+  input: unknown;
+  expected: unknown;
+}
+
+export interface CodingAssessmentSpec {
+  problem_statement: string;
+  starter_code?: string;
+  hidden_tests: HiddenTest[];
+}
+
+export interface MCQQuestion {
+  id: string;
+  text: string;
+  options?: string[];
+  correct_answer: string;
+}
+
+export interface MCQAssessmentSpec {
+  questions: MCQQuestion[];
+}
+
+export interface AssessmentResponse {
+  id: string;
+  job_id: string | null;
+  type: "coding" | "mcq" | "project_analysis";
+  spec: CodingAssessmentSpec | MCQAssessmentSpec | Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface TestResult {
+  test_name: string;
+  passed: boolean;
+}
+
+export interface StaticAnalysisReport {
+  syntax_valid?: boolean;
+  radon?: Record<string, unknown>;
+  lizard?: Record<string, unknown>;
+  bandit?: Record<string, unknown>;
+  skipped?: string;
+}
+
+export interface CodeReviewRubric {
+  readability: number | null;
+  architecture: number | null;
+  red_flags: string[];
+  rationale: string | null;
+}
+
+export interface SubmissionResponse {
+  id: string;
+  assessment_id: string;
+  candidate_id: string;
+  code_or_answers: Record<string, unknown> | null;
+  test_results: { results: TestResult[]; rationale: string | null } | null;
+  static_analysis: StaticAnalysisReport | null;
+  llm_review: CodeReviewRubric | null;
+  score: number | null;
+  submitted_at: string;
+}
+
+async function assessmentJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export function fetchAssessment(token: string, assessmentId: string): Promise<AssessmentResponse> {
+  return assessmentJson(`/assessments/${assessmentId}`, token);
+}
+
+export function submitAssessment(
+  token: string,
+  assessmentId: string,
+  body: { code_or_answers: Record<string, unknown>; test_results?: TestResult[] },
+): Promise<SubmissionResponse> {
+  return assessmentJson(`/assessments/${assessmentId}/submit`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code_or_answers: body.code_or_answers, test_results: body.test_results ?? [] }),
+  });
+}
+
+export function fetchSubmission(token: string, submissionId: string): Promise<SubmissionResponse> {
+  return assessmentJson(`/submissions/${submissionId}`, token);
+}
+
+// --- FR-2: AI Interview Agent ---
+
+export interface InterviewTurnResponse {
+  session_id: string;
+  question: string | null;
+  topics_remaining: number;
+  status: "in_progress" | "completed";
+}
+
+export interface TranscriptTurn {
+  turn_index: number;
+  role: "agent" | "candidate";
+  text: string;
+  ts: string;
+}
+
+export interface InterviewReportResponse {
+  id: string;
+  session_id: string;
+  response_confidence_signal: number | null;
+  technical_rating: number | null;
+  communication_rating: number | null;
+  hiring_recommendation: string | null;
+  generated_at: string;
+  transcript: TranscriptTurn[];
+}
+
+export function startInterview(
+  token: string,
+  body?: { job_id?: string; topic_plan?: string[] },
+): Promise<InterviewTurnResponse> {
+  return assessmentJson(`/interview-sessions`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ job_id: body?.job_id ?? null, topic_plan: body?.topic_plan ?? [] }),
+  });
+}
+
+export function interviewTurn(token: string, sessionId: string, answerText: string): Promise<InterviewTurnResponse> {
+  return assessmentJson(`/interview-sessions/${sessionId}/turn`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answer_text: answerText }),
+  });
+}
+
+export function endInterview(token: string, sessionId: string): Promise<InterviewReportResponse> {
+  return assessmentJson(`/interview-sessions/${sessionId}/end`, token, { method: "POST" });
+}
+
+export function fetchInterviewReport(token: string, sessionId: string): Promise<InterviewReportResponse> {
+  return assessmentJson(`/interview-sessions/${sessionId}/report`, token);
+}
+
+// --- FR-3: Team Contribution Analytics ---
+
+export interface ContributionReportResponse {
+  id: string;
+  repo_full_name: string;
+  candidate_id: string | null;
+  github_username: string | null;
+  contribution_share: number | null;
+  commits: number | null;
+  lines_survived: number | null;
+  prs_opened: number | null;
+  prs_reviewed: number | null;
+  anomaly_note: string | null;
+  generated_at: string;
+}
+
+export function generateContributionReport(
+  token: string,
+  repoFullName: string,
+  githubUsernames: string[],
+): Promise<ContributionReportResponse[]> {
+  return assessmentJson(`/contribution-reports/generate`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo_full_name: repoFullName, github_usernames: githubUsernames }),
+  });
+}
+
+export function fetchContributionReports(token: string, repoFullName: string): Promise<ContributionReportResponse[]> {
+  return assessmentJson(`/contribution-reports?repo_full_name=${encodeURIComponent(repoFullName)}`, token);
+}

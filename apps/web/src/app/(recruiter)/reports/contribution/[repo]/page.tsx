@@ -1,69 +1,94 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ContributionBarChart } from "@/components/ContributionBarChart";
+import { fetchContributionReports, type ContributionReportResponse } from "@/lib/api";
 
 export default function RecruiterContributionReportPage() {
   const params = useParams<{ repo: string }>();
+  const repoFullName = decodeURIComponent(params.repo);
+  const { getToken } = useAuth();
+  const [reports, setReports] = useState<ContributionReportResponse[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("No session token");
+        const result = await fetchContributionReports(token, repoFullName);
+        if (!cancelled) setReports(result);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load contribution report");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, repoFullName]);
+
+  if (error) return <div className="p-8 text-rose-flagged">{error}</div>;
+  if (!reports) return <div className="p-8 text-slate">Loading contribution report…</div>;
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Code Contribution Report</h1>
-        <p className="text-sm text-slate">Analyze static codebase complexity, commit history details, and code originality.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Team Contribution Report</h1>
+        <p className="text-sm text-slate">Commit attribution and weighted contribution share per team member.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 space-y-4">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Repository: {params.repo}</CardTitle>
-            <CardDescription>GitHub static code analysis diagnostics.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between border-b pb-2">
-              <span className="text-sm font-semibold">Authenticity Score</span>
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">96 / 100</span>
-            </div>
-            <div className="space-y-3 text-sm text-slate">
-              <h4 className="text-sm font-semibold text-ink">Complexity Details</h4>
-              <div className="flex justify-between">
-                <span>Total Commits Analyzed:</span>
-                <span className="font-semibold text-ink dark:text-zinc-50">42</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Code Duplication / Plagiarism check:</span>
-                <span className="font-semibold text-ink dark:text-zinc-50">0% Similarity</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Lizard Cyclomatic Complexity:</span>
-                <span className="font-semibold text-ink dark:text-zinc-50">Avg 4.8 (Very Clean)</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div>
-          <Card>
+      {reports.length === 0 ? (
+        <p className="text-sm text-slate">No contribution report generated yet for this repo.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="md:col-span-2 space-y-4">
             <CardHeader>
-              <CardTitle className="text-base font-semibold">Plagiarism Analysis</CardTitle>
+              <CardTitle className="text-base font-semibold">Repository: {repoFullName}</CardTitle>
+              <CardDescription>
+                contribution_share = normalize(0.35·lines_survived + 0.25·commits + 0.20·PRs_opened + 0.20·PR_reviews)
+              </CardDescription>
             </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>System verified code originality against public corpora using Qdrant vector embedding lookups.</p>
-              <Badge variant="outline">0 Matches Found</Badge>
+            <CardContent className="space-y-4">
+              <ContributionBarChart reports={reports} />
+              <div className="space-y-3">
+                {reports.map((r) => (
+                  <div key={r.id} className="flex justify-between items-center border-b pb-2 text-sm">
+                    <div>
+                      <span className="font-semibold text-ink dark:text-zinc-50">{r.github_username}</span>
+                      {r.anomaly_note && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">{r.anomaly_note}</p>
+                      )}
+                    </div>
+                    <div className="text-right text-xs text-slate">
+                      <p className="font-semibold text-ink dark:text-zinc-50">
+                        {((r.contribution_share ?? 0) * 100).toFixed(0)}% share
+                      </p>
+                      <p>{r.commits} commits · {r.prs_opened} PRs opened · {r.prs_reviewed} reviews</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">Technical Reference: doc/SRS/03-SRS-Assessment-Verification-System.md</CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-slate space-y-2">
-          <p>**Static Analysis Engine**: Fetches repository logs, runs cyclomatic complexity audits via the Lizard package, and checks vector embeddings in Qdrant collections to verify code authorship authenticity (FR-2.2).</p>
-        </CardContent>
-      </Card>
+          <div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Reading This Report</CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
+                <p>Anomalies (zero attributable contribution despite team membership) are a report note for human review, never an automatic penalty.</p>
+                <Badge variant="outline">Raw components shown, not just the final share</Badge>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
