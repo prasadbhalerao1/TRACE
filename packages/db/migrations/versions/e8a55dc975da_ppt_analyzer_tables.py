@@ -1,7 +1,7 @@
 """ppt analyzer tables
 
 Revision ID: e8a55dc975da
-Revises: 44fd41ed1de0
+Revises: a333d4c53bd0
 Create Date: 2026-07-29 15:59:38.872893
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'e8a55dc975da'
-down_revision: Union[str, Sequence[str], None] = '44fd41ed1de0'
+down_revision: Union[str, Sequence[str], None] = 'a333d4c53bd0'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
