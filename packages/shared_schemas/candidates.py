@@ -25,7 +25,9 @@ class CandidateProfileResponse(BaseModel):
 
     id: UUID
     user_id: UUID
+    full_name: str | None = None
     github_username: str | None
+    leetcode_username: str | None
     headline: str | None
     location: str | None
     skills: list[dict] | None
@@ -34,7 +36,14 @@ class CandidateProfileResponse(BaseModel):
     merged_conflicts: list[dict] | None
     username: str | None
     portfolio_published: bool
+    github_stats: dict | None
+    leetcode_stats: dict | None
+    stats_refreshed_at: datetime | None
     updated_at: datetime
+
+
+class LeetcodeConnectRequest(BaseModel):
+    leetcode_username: str
 
 
 class ConflictResolution(BaseModel):
@@ -55,7 +64,7 @@ class BadgeResponse(BaseModel):
 
     id: UUID
     skill_name: str
-    corroboration_sources: list[dict]
+    corroboration_sources: list[str]
     awarded_at: datetime
 
 
@@ -63,11 +72,40 @@ class GithubIngestRequest(BaseModel):
     github_username: str
 
 
+class PublicPortfolioProject(BaseModel):
+    repo_full_name: str
+    stars: int | None
+    forks: int | None
+    languages: dict | None
+    topics: list[str] | None = None
+    pushed_at: datetime | None = None
+    description: str | None = None
+    commit_count: int | None = None
+    pr_count: int | None = None
+    issue_count: int | None = None
+
+
+class GithubSummary(BaseModel):
+    total_stars: int
+    total_commits: int
+    total_prs: int
+    total_issues: int
+    total_forks: int
+    # From candidate.github_stats (services/agents/candidate_intelligence/tools/github.py
+    # GithubAnalysis, merged in during ingestion) — 0 until a candidate has connected
+    # GitHub and run ingestion at least once, not a sentinel for "no data".
+    owned_repo_count: int
+    external_contributions: int
+    pr_review_count: int
+    projects: list[PublicPortfolioProject]
+
+
 class DashboardResponse(BaseModel):
     profile: CandidateProfileResponse
     latest_score: TalentScoreResponse | None
     score_history: list[TalentScoreResponse]
     badges: list[BadgeResponse]
+    github_summary: GithubSummary
 
 
 # --- FR-5: AI Resume & Portfolio Builder ---
@@ -110,13 +148,6 @@ class PortfolioPublishRequest(BaseModel):
     username: str
 
 
-class PublicPortfolioProject(BaseModel):
-    repo_full_name: str
-    stars: int | None
-    forks: int | None
-    languages: dict | None
-
-
 class PublicPortfolioResponse(BaseModel):
     """FR-5.2 — payload for the public, unauthenticated, SSR `/[username]` route.
     Read-only, no PII beyond what the candidate chose to publish (no email/user_id)."""
@@ -130,6 +161,15 @@ class PublicPortfolioResponse(BaseModel):
     projects: list[PublicPortfolioProject]
     badges: list[BadgeResponse]
     overall_score: float | None
+    # Codolio-style split: Development Stats (GitHub calendar/streak/languages) and
+    # Problem Solving Stats (LeetCode). Both are cached snapshots (candidate.github_stats /
+    # .leetcode_stats), never fetched live on a public page view.
+    github_username: str | None
+    leetcode_username: str | None
+    github_stats: dict | None
+    github_summary: GithubSummary
+    leetcode_stats: dict | None
+    stats_refreshed_at: datetime | None
     updated_at: datetime
 
 

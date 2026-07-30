@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from sqlalchemy.types import Boolean, DateTime, Float, Integer
 
@@ -22,6 +22,16 @@ class CandidateProfile(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
     github_username: Mapped[str | None] = mapped_column(Text)
+    # Codolio-style "Development Stats" (GitHub calendar/streak/languages, GraphQL-sourced
+    # — see services/agents/candidate_intelligence/tools/github_calendar.py) and "Problem
+    # Solving Stats" (LeetCode, tools/leetcode.py). Cached rather than fetched live on
+    # every profile view: both are third-party calls with their own rate limits, so the
+    # public portfolio page reads from these columns and a candidate-triggered refresh
+    # (cooldown-gated, POST /candidates/me/stats/refresh) repopulates them.
+    leetcode_username: Mapped[str | None] = mapped_column(Text)
+    github_stats: Mapped[dict | None] = mapped_column(JSONB)
+    leetcode_stats: Mapped[dict | None] = mapped_column(JSONB)
+    stats_refreshed_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
     headline: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(Text)
     skills: Mapped[list | None] = mapped_column(JSONB)  # [{name, source, confidence}]
@@ -34,6 +44,12 @@ class CandidateProfile(Base):
     username: Mapped[str | None] = mapped_column(Text, unique=True)
     portfolio_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship("User", lazy="joined")
+
+    @property
+    def full_name(self) -> str | None:
+        return self.user.full_name if self.user else None
 
 
 class GithubSnapshot(Base):
@@ -51,6 +67,11 @@ class GithubSnapshot(Base):
     issue_count: Mapped[int | None] = mapped_column(Integer)
     languages: Mapped[dict | None] = mapped_column(JSONB)
     is_fork: Mapped[bool | None] = mapped_column(Boolean)
+    # Repository analytics dashboard (Skills section categorization, "recently updated"
+    # sort) — GitHub REST `topics`/`pushed_at`, additive to the original doc 01 schema.
+    topics: Mapped[list | None] = mapped_column(JSONB)
+    pushed_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
+    description: Mapped[str | None] = mapped_column(Text)
     fetched_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
