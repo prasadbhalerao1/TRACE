@@ -730,6 +730,7 @@ export interface MCQAssessmentSpec {
 export interface AssessmentResponse {
   id: string;
   job_id: string | null;
+  candidate_id: string | null;
   type: "coding" | "mcq" | "project_analysis";
   spec: CodingAssessmentSpec | MCQAssessmentSpec | Record<string, unknown> | null;
   created_at: string;
@@ -781,8 +782,34 @@ async function assessmentJson<T>(path: string, token: string, init?: RequestInit
   return res.json();
 }
 
+/** Recruiter-only (QA Recruiter #1 fix): creates an assessment, optionally assigning it
+ * directly to a candidate via `candidateId` (Track 3's "Assign Assessment" pipeline
+ * button calls this with a real candidate_id; omitting it authors a reusable template
+ * for later assignment). See .agents/decisions.md for the exact request/response shape. */
+export function createAssessment(
+  token: string,
+  body: { type: "coding" | "mcq" | "project_analysis"; spec: Record<string, unknown>; jobId?: string | null; candidateId?: string | null },
+): Promise<AssessmentResponse> {
+  return assessmentJson(`/assessments`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      job_id: body.jobId ?? null,
+      candidate_id: body.candidateId ?? null,
+      type: body.type,
+      spec: body.spec,
+    }),
+  });
+}
+
 export function fetchAssessment(token: string, assessmentId: string): Promise<AssessmentResponse> {
   return assessmentJson(`/assessments/${assessmentId}`, token);
+}
+
+/** Candidate-self-serve inbox (QA Candidate #4 fix): every assessment assigned to the
+ * authenticated candidate, newest first. Powers `(candidate)/assessments/page.tsx`. */
+export function fetchMyAssessments(token: string): Promise<AssessmentResponse[]> {
+  return assessmentJson(`/assessments/mine`, token);
 }
 
 export function submitAssessment(
