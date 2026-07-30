@@ -6,6 +6,7 @@ server-side token) so rate limits and access scope are the candidate's own.
 
 import statistics
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from github import Github
 from github.GithubException import GithubException
@@ -21,6 +22,9 @@ class RepoSnapshot:
     issue_count: int
     languages: dict[str, int]
     is_fork: bool
+    topics: list[str] = field(default_factory=list)
+    pushed_at: datetime | None = None
+    description: str | None = None
 
 
 @dataclass
@@ -77,6 +81,11 @@ def fetch_github_analysis(
         except GithubException:
             issue_count = 0
 
+        try:
+            topics = repo.get_topics()
+        except GithubException:
+            topics = []
+
         analysis.repos.append(
             RepoSnapshot(
                 repo_full_name=repo.full_name,
@@ -87,6 +96,9 @@ def fetch_github_analysis(
                 issue_count=issue_count,
                 languages=languages,
                 is_fork=is_fork,
+                topics=topics,
+                pushed_at=repo.pushed_at,
+                description=repo.description,
             )
         )
         analysis.total_stars += repo.stargazers_count

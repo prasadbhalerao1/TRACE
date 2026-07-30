@@ -10,7 +10,6 @@ environment. Doc 08 §1.1's cold-start re-normalization is what absorbs that gra
 import base64
 import uuid
 
-import anthropic
 from github import Github
 from github.GithubException import GithubException
 from qdrant_client import QdrantClient
@@ -20,6 +19,16 @@ from radon.complexity import cc_visit
 from packages.shared_schemas.candidates import SubScore
 from services.agents.candidate_intelligence.tools.github import GithubAnalysis
 from services.api.core.config import get_settings
+from services.api.core.llm import LLMUnavailable, generate_structured
+
+_JUDGMENT_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "number", "description": "0-100"},
+        "rationale": {"type": "string"},
+    },
+    "required": ["score", "rationale"],
+}
 
 _QDRANT_COLLECTION = "candidate_project_embeddings"
 
@@ -62,44 +71,24 @@ def _sample_complexity(
 
 
 def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple[float | None, str | None]:
-    if not settings.anthropic_api_key or not project_summaries:
+    if not project_summaries:
         return None, None
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    schema = {
-        "name": "project_quality_judgment",
-        "description": "Rate architecture/README quality of a candidate's projects.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "score": {"type": "number", "description": "0-100"},
-                "rationale": {"type": "string"},
-            },
-            "required": ["score", "rationale"],
-        },
-    }
+    prompt = (
+        "Rate the architecture and README quality of these projects (0-100), "
+        "grounded only in what's described, no speculation:\n\n" + "\n---\n".join(project_summaries)
+    )
     try:
-        response = client.messages.create(
-            model=settings.llm_model_judgment,
+        result = generate_structured(
+            schema_name="project_quality_judgment",
+            schema_description="Rate architecture/README quality of a candidate's projects.",
+            parameters=_JUDGMENT_PARAMETERS,
+            prompt=prompt,
             max_tokens=512,
-            tools=[schema],
-            tool_choice={"type": "tool", "name": "project_quality_judgment"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Rate the architecture and README quality of these projects (0-100), "
-                        "grounded only in what's described, no speculation:\n\n"
-                        + "\n---\n".join(project_summaries)
-                    ),
-                }
-            ],
+            agent_name="candidate_intelligence.judgment_scores.llm_quality_judgment",
         )
-    except anthropic.APIError:
+    except LLMUnavailable:
         return None, None
-    for block in response.content:
-        if block.type == "tool_use":
-            return float(block.input["score"]), block.input.get("rationale")
-    return None, None
+    return float(result["score"]), result.get("rationale")
 
 
 def project_quality(

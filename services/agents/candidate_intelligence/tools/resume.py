@@ -8,55 +8,50 @@ callers get a clear `ResumeExtractionUnavailable`, never a fabricated/empty prof
 import io
 import json
 
-import anthropic
 import docx
 import pdfplumber
 
-from services.api.core.config import get_settings
+from services.api.core.llm import LLMUnavailable, generate_structured
 
-RESUME_EXTRACTION_SCHEMA = {
-    "name": "extracted_resume",
-    "description": "Structured fields extracted from a candidate resume.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "headline": {"type": "string"},
-            "location": {"type": "string"},
-            "skills": {
-                "type": "array",
-                "items": {"type": "object", "properties": {"name": {"type": "string"}}},
-            },
-            "experience": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "company": {"type": "string"},
-                        "years": {"type": "number"},
-                        "description": {"type": "string"},
-                    },
-                },
-            },
-            "education": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "institution": {"type": "string"},
-                        "degree": {"type": "string"},
-                        "year": {"type": "string"},
-                    },
+RESUME_EXTRACTION_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "headline": {"type": "string"},
+        "location": {"type": "string"},
+        "skills": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"name": {"type": "string"}}},
+        },
+        "experience": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "company": {"type": "string"},
+                    "years": {"type": "number"},
+                    "description": {"type": "string"},
                 },
             },
         },
-        "required": ["skills", "experience", "education"],
+        "education": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "institution": {"type": "string"},
+                    "degree": {"type": "string"},
+                    "year": {"type": "string"},
+                },
+            },
+        },
     },
+    "required": ["skills", "experience", "education"],
 }
 
 
-class ResumeExtractionUnavailable(RuntimeError):
-    """Raised when the LLM structured-extraction call can't run (e.g. no API key)."""
+# Raised when the LLM structured-extraction call can't run (e.g. no/misconfigured provider key).
+ResumeExtractionUnavailable = LLMUnavailable
 
 
 def extract_resume_text(file_bytes: bytes, content_type: str) -> str:
@@ -73,33 +68,15 @@ def extract_resume_text(file_bytes: bytes, content_type: str) -> str:
 
 
 def extract_resume_fields(resume_text: str) -> dict:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        raise ResumeExtractionUnavailable(
-            "ANTHROPIC_API_KEY is not configured — resume structured extraction requires it."
-        )
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    try:
-        response = client.messages.create(
-            model=settings.llm_model_fast,
-            max_tokens=2048,
-            tools=[RESUME_EXTRACTION_SCHEMA],
-            tool_choice={"type": "tool", "name": "extracted_resume"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Extract structured fields from this resume:\n\n{resume_text}",
-                }
-            ],
-        )
-    except anthropic.APIError as exc:
-        raise ResumeExtractionUnavailable(f"Anthropic API call failed: {exc}") from exc
-
-    for block in response.content:
-        if block.type == "tool_use":
-            return block.input
-    raise ResumeExtractionUnavailable("Model did not return structured tool output.")
+    return generate_structured(
+        schema_name="extracted_resume",
+        schema_description="Structured fields extracted from a candidate resume.",
+        parameters=RESUME_EXTRACTION_PARAMETERS,
+        prompt=f"Extract structured fields from this resume:\n\n{resume_text}",
+        is_fast=True,
+        max_tokens=2048,
+        agent_name="candidate_intelligence.resume_extraction",
+    )
 
 
 def to_json_evidence(payload: dict) -> str:

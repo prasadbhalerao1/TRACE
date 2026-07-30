@@ -15,9 +15,7 @@ not treated as sufficient on its own.
 
 import json
 
-import anthropic
-
-from services.api.core.config import get_settings
+from services.api.core.llm import LLMUnavailable, generate_structured
 
 _GROUNDING_RULE = (
     "You must use ONLY facts present in the CANDIDATE PROFILE JSON below. Never invent "
@@ -27,96 +25,74 @@ _GROUNDING_RULE = (
     "rather than filling it in."
 )
 
-RESUME_GENERATION_SCHEMA = {
-    "name": "generated_resume",
-    "description": "ATS-friendly resume content generated strictly from the candidate's own profile data.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "headline": {"type": "string"},
-            "summary": {"type": "string", "description": "2-3 sentence professional summary."},
-            "skills": {"type": "array", "items": {"type": "string"}},
-            "experience": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "company": {"type": "string"},
-                        "years": {"type": "string"},
-                        "bullets": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Achievement bullet points, grounded in the profile only.",
-                        },
+RESUME_GENERATION_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "headline": {"type": "string"},
+        "summary": {"type": "string", "description": "2-3 sentence professional summary."},
+        "skills": {"type": "array", "items": {"type": "string"}},
+        "experience": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "company": {"type": "string"},
+                    "years": {"type": "string"},
+                    "bullets": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Achievement bullet points, grounded in the profile only.",
                     },
-                    "required": ["title", "bullets"],
                 },
+                "required": ["title", "bullets"],
             },
-            "education": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "institution": {"type": "string"},
-                        "degree": {"type": "string"},
-                        "year": {"type": "string"},
-                    },
+        },
+        "education": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "institution": {"type": "string"},
+                    "degree": {"type": "string"},
+                    "year": {"type": "string"},
                 },
             },
         },
-        "required": ["headline", "summary", "skills", "experience", "education"],
     },
+    "required": ["headline", "summary", "skills", "experience", "education"],
 }
 
-COVER_LETTER_GENERATION_SCHEMA = {
-    "name": "generated_cover_letter",
-    "description": "A cover letter grounded strictly in the candidate's own profile data.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "subject": {"type": "string"},
-            "body": {
-                "type": "string",
-                "description": "Full cover letter body text, 3-4 paragraphs.",
-            },
+COVER_LETTER_GENERATION_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "subject": {"type": "string"},
+        "body": {
+            "type": "string",
+            "description": "Full cover letter body text, 3-4 paragraphs.",
         },
-        "required": ["subject", "body"],
     },
+    "required": ["subject", "body"],
 }
 
 
-class DocumentGenerationUnavailable(RuntimeError):
-    """Raised when the LLM generation call can't run (e.g. no API key, API failure)."""
+# Raised when the LLM generation call can't run (e.g. no/misconfigured provider key, API failure).
+DocumentGenerationUnavailable = LLMUnavailable
 
 
-def _call_structured(schema: dict, prompt: str, model: str) -> dict:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        raise DocumentGenerationUnavailable(
-            "ANTHROPIC_API_KEY is not configured — document generation requires it."
-        )
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=2048,
-            tools=[schema],
-            tool_choice={"type": "tool", "name": schema["name"]},
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APIError as exc:
-        raise DocumentGenerationUnavailable(f"Anthropic API call failed: {exc}") from exc
-
-    for block in response.content:
-        if block.type == "tool_use":
-            return block.input
-    raise DocumentGenerationUnavailable("Model did not return structured tool output.")
+def _call_structured(schema_name: str, schema_description: str, parameters: dict, prompt: str, *, is_fast: bool) -> dict:
+    return generate_structured(
+        schema_name=schema_name,
+        schema_description=schema_description,
+        parameters=parameters,
+        prompt=prompt,
+        is_fast=is_fast,
+        max_tokens=2048,
+        agent_name=f"candidate_intelligence.document_generation.{schema_name}",
+    )
 
 
 def generate_resume_content(merged_profile: dict, target_job_description: str | None) -> dict:
-    settings = get_settings()
     jd_instruction = (
         (
             "\n\nTARGET JOB DESCRIPTION (FR-5.4 optimization): re-rank and re-word the "
@@ -135,11 +111,16 @@ def generate_resume_content(merged_profile: dict, target_job_description: str | 
         "Generate ATS-friendly resume content: plain structure, no tables/graphics, "
         "standard section headings only."
     )
-    return _call_structured(RESUME_GENERATION_SCHEMA, prompt, settings.llm_model_judgment)
+    return _call_structured(
+        "generated_resume",
+        "ATS-friendly resume content generated strictly from the candidate's own profile data.",
+        RESUME_GENERATION_PARAMETERS,
+        prompt,
+        is_fast=False,
+    )
 
 
 def generate_cover_letter_content(merged_profile: dict, target_job_description: str) -> dict:
-    settings = get_settings()
     prompt = (
         f"{_GROUNDING_RULE}\n\n"
         f"CANDIDATE PROFILE JSON:\n{json.dumps(merged_profile, default=str)}\n\n"
@@ -148,4 +129,10 @@ def generate_cover_letter_content(merged_profile: dict, target_job_description: 
         "connections between the candidate's actual experience/skills and the role's "
         "requirements. Do not fabricate enthusiasm-driven claims not backed by the profile."
     )
-    return _call_structured(COVER_LETTER_GENERATION_SCHEMA, prompt, settings.llm_model_judgment)
+    return _call_structured(
+        "generated_cover_letter",
+        "A cover letter grounded strictly in the candidate's own profile data.",
+        COVER_LETTER_GENERATION_PARAMETERS,
+        prompt,
+        is_fast=False,
+    )
