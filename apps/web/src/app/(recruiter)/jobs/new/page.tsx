@@ -136,6 +136,13 @@ export default function RecruiterNewJobPage() {
                 <Button render={<Link href={`/jobs/${created.id}/matches`} />} className="w-full">
                   View Ranked Matches
                 </Button>
+                <Button
+                  render={<Link href={`/pipeline/${created.id}`} />}
+                  variant="outline"
+                  className="w-full"
+                >
+                  View Pipeline
+                </Button>
               </div>
             )}
           </CardContent>

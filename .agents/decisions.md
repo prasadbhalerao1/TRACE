@@ -889,3 +889,81 @@ verification pass covering all QA-fix tracks together).
 `b1c2d3e4f5a6`, `services/api/routers/assessments.py`,
 `apps/web/src/app/(candidate)/assessments/page.tsx`, `apps/web/src/app/(candidate)/layout.tsx`,
 `apps/web/src/lib/api.ts`
+
+---
+
+## 2026-07-30 — QA fix, Track 3: Recruiter navigation + fraud visibility + assign-assessment
+
+**Fraud visibility** (`Recruiter #4`): `fraud_flag_status` added to
+`ApplicationWithCandidateResponse`/`MatchScoreWithCandidateResponse`, populated by a read-only
+query against Module 06's `fraud_flags` table, collapsed to the single most-severe
+non-dismissed status per candidate (`upheld` > `under_review` > `raised`; `dismissed` flags are
+never shown at all). Never writes to `fraud_flags`; never affects application
+ranking/sort/filtering anywhere — purely a display badge on the kanban card, matching doc 06's
+explicit "decision stays mine" framing.
+
+**Report links** (`Recruiter #3`): `latest_submission_id`/`latest_interview_session_id`/
+`latest_contribution_repo_full_name` added to `ApplicationWithCandidateResponse`, each the
+candidate's most recent row of that type (read-only against Module 03's tables). The kanban
+card links to whichever is non-null, in that priority order (submission → interview →
+contribution) — a candidate can have more than one report type; this just picks the most
+recently available reachable one rather than showing three separate links.
+
+**Navigation**: new `apps/web/src/app/(recruiter)/jobs/page.tsx` job list page (uses the
+existing recruiter-scoped `GET /jobs`); `jobs/new`'s success state and `jobs/[id]/matches` both
+gained a "View Pipeline" link; `(recruiter)/layout.tsx`'s hardcoded fake `sample-job`/
+`sample-submission`/`sample-interview`/`sample-repo` sidebar links replaced with the real job
+list link (reports are now reached via kanban cards per the point above, not a generic sidebar
+link to nowhere).
+
+**Assign-assessment button**: `KanbanBoard.tsx`'s `CandidateCard` gained a small modal calling
+`POST /assessments` with `{job_id, candidate_id, type, spec}` — **this exact shape is Track 1's
+confirmed contract**, documented in this same file's Track 1 entry (dated the same day). A
+minimal `assignAssessment` client function was added to this worktree's `api.ts` matching that
+contract; expect this to be reconciled/merged with Track 1's fuller `createAssessment` addition
+at merge time rather than kept as a separate duplicate function long-term.
+
+**Verified**: Python syntax-checked clean (`ast.parse` on `recruitment.py`/
+`shared_schemas/recruitment.py`); all frontend changes read carefully for correctness — no
+live-DB run or `tsc`/`eslint`/`next build` performed in this pass (no `node_modules` installed
+in this worktree; deferred to the consolidated post-merge verification pass covering all
+QA-fix tracks together, run once against `main`'s checkout after merge).
+→ `packages/shared_schemas/recruitment.py`, `services/api/routers/recruitment.py`,
+`apps/web/src/app/(recruiter)/jobs/page.tsx`, `apps/web/src/app/(recruiter)/jobs/new/page.tsx`,
+`apps/web/src/app/(recruiter)/jobs/[id]/matches/page.tsx`, `apps/web/src/app/(recruiter)/layout.tsx`,
+`apps/web/src/components/KanbanBoard.tsx`, `apps/web/src/lib/api.ts`
+
+
+**Schema**: `candidate_id` added to `Assessment` and `AssessmentCreateRequest` as **nullable**,
+FK to `candidate_profiles` (not `users`) — matches the convention every other candidate-scoped
+column in this module already uses (`Submission.candidate_id`, `InterviewSession.candidate_id`,
+`ContributionReport.candidate_id`). Nullable because a recruiter can author a reusable assessment
+template (e.g. per `job_id`) before assigning it to any specific candidate — mirrors `job_id`'s
+own existing nullability, not a new pattern.
+
+**Exact contract other tracks depend on** (Track 3's kanban "Assign Assessment" button calls
+this):
+- `POST /assessments` — request body: `{"job_id": "<uuid>|null", "candidate_id": "<uuid>|null",
+  "type": "coding"|"mcq"|"project_analysis", "spec": {...}}`. Response: the full
+  `AssessmentResponse` (`id`, `job_id`, `candidate_id`, `type`, `spec`, `created_at`).
+- `GET /assessments/mine` — candidate-only (`require_role("candidate")`), no request body,
+  returns `AssessmentResponse[]` filtered to `candidate_id == <authenticated candidate's
+  candidate_profiles.id>`.
+
+**Frontend**: new `apps/web/src/app/(candidate)/assessments/page.tsx` inbox/list page calling
+`GET /assessments/mine`, replacing the previously-hardcoded dead `/assessments/sample-assessment`
+nav link in `(candidate)/layout.tsx`.
+
+**Migration hygiene note**: this worktree's branch predates Module 06's merge to `main`, so its
+own local copy of Module 06's migration (`54e04d937561`) briefly existed as a stray duplicate
+file in this worktree — deleted before commit since it was byte-identical to what's already on
+`main`; this track's own migration (`b1c2d3e4f5a6`) correctly chains its `down_revision` onto
+`54e04d937561` regardless.
+
+**Verified**: Python syntax-checked clean (`ast.parse`); router/model/schema read carefully for
+correctness (no live-DB run performed in this pass — deferred to the consolidated post-merge
+verification pass covering all QA-fix tracks together).
+→ `packages/shared_schemas/assessment.py`, `packages/db/models/assessment.py`, migration
+`b1c2d3e4f5a6`, `services/api/routers/assessments.py`,
+`apps/web/src/app/(candidate)/assessments/page.tsx`, `apps/web/src/app/(candidate)/layout.tsx`,
+`apps/web/src/lib/api.ts`

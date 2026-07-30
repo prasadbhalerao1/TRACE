@@ -64,6 +64,19 @@ class ApplicationWithCandidateResponse(ApplicationResponse):
     candidate_headline: str | None
     candidate_github_username: str | None
     candidate_overall_talent_score: float | None
+    # Additive — QA finding "Recruiter #4": doc 06's display-only fraud indicator never
+    # existed anywhere in the recruiter-facing API. Read-only lookup against Module 06's
+    # `fraud_flags` (never written to here) — the most severe non-dismissed flag's status
+    # for this candidate ("upheld" > "under_review" > "raised"), or None if the candidate
+    # has no open flag. Display-only: never used to filter/sort/affect ranking anywhere.
+    fraud_flag_status: str | None = None
+    # Additive — QA finding "Recruiter #3": no click-path from a kanban card to that
+    # candidate's actual report. Read-only lookups against Module 03's tables (never
+    # written to here); each is the candidate's most recent report of that type, or None
+    # if they don't have one yet. The frontend links to whichever is non-null.
+    latest_submission_id: UUID | None = None
+    latest_interview_session_id: UUID | None = None
+    latest_contribution_repo_full_name: str | None = None
 
 
 class ApplicationStageUpdateRequest(BaseModel):
@@ -97,6 +110,9 @@ class MatchScoreWithCandidateResponse(MatchScoreResponse):
     candidate_location: str | None
     candidate_github_username: str | None
     candidate_overall_talent_score: float | None
+    # Additive — QA finding "Recruiter #4" names both response schemas explicitly.
+    # Same read-only, display-only fraud lookup as ApplicationWithCandidateResponse.
+    fraud_flag_status: str | None = None
 
 
 # --- FR-3: Recruiter AI Copilot ---

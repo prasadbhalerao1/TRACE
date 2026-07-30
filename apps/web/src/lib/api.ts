@@ -555,6 +555,12 @@ export interface ApplicationWithCandidateResponse extends ApplicationResponse {
   candidate_headline: string | null;
   candidate_github_username: string | null;
   candidate_overall_talent_score: number | null;
+  // Display-only — never affects card order/filtering. See QA finding "Recruiter #4".
+  fraud_flag_status: "raised" | "under_review" | "upheld" | null;
+  // Whichever of these is non-null, if any, is the candidate's most recent report.
+  latest_submission_id: string | null;
+  latest_interview_session_id: string | null;
+  latest_contribution_repo_full_name: string | null;
 }
 
 export interface MatchScoreWithCandidateResponse {
@@ -573,6 +579,8 @@ export interface MatchScoreWithCandidateResponse {
   candidate_location: string | null;
   candidate_github_username: string | null;
   candidate_overall_talent_score: number | null;
+  // Display-only — never affects ranking/sort order. See QA finding "Recruiter #4".
+  fraud_flag_status: "raised" | "under_review" | "upheld" | null;
 }
 
 export interface CopilotResult {
@@ -1330,4 +1338,25 @@ export function checkSubmission(token: string, submissionId: string): Promise<Ve
 
 export function checkProfileDuplicate(token: string, candidateId: string): Promise<VerificationCheckResponse> {
   return fraudJson(`/verification/profiles/${candidateId}/duplicate-check`, token, { method: "POST" });
+}
+
+// --- Recruiter pipeline enhancements (QA fix: Recruiter #1/#3/#4) ---
+// assignAssessment mirrors Track 1's createAssessment contract exactly (POST /assessments
+// accepting job_id/candidate_id/type/spec) -- kept minimal here since this file will be
+// reconciled with Track 1's fuller api.ts additions at merge time; not meant to duplicate
+// long-term, just lets the KanbanBoard "Assign Assessment" button compile and work now.
+export function assignAssessment(
+  token: string,
+  body: { jobId: string; candidateId: string; type: "coding" | "mcq" | "project_analysis"; spec: Record<string, unknown> },
+): Promise<{ id: string }> {
+  return recruitmentJson(`/assessments`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      job_id: body.jobId,
+      candidate_id: body.candidateId,
+      type: body.type,
+      spec: body.spec,
+    }),
+  });
 }
