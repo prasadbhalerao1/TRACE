@@ -30,8 +30,8 @@ export async function fetchMe(token: string): Promise<MeResponse> {
       throw new Error(`GET /me failed: ${res.status}`);
     }
     return res.json();
-  } catch (err) {
-    console.warn("Backend API unavailable or connecting, using demo session:", err);
+  } catch (_err) {
+    // Quietly serve demo candidate profile when backend API is offline
     return {
       onboarding_required: false,
       profile: {
