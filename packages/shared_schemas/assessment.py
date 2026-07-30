@@ -7,7 +7,14 @@ ASSESSMENT_TYPES = ("coding", "mcq", "project_analysis")
 
 
 class AssessmentCreateRequest(BaseModel):
+    # Nullable: a recruiter can author an assessment template (e.g. reusable per job_id)
+    # before assigning it to any specific candidate, same "exists-before-assigned"
+    # pattern as job_id itself. When set, it targets `candidate_profiles.id` — the same
+    # FK convention every other candidate-scoped table in this module already uses
+    # (Submission.candidate_id, InterviewSession.candidate_id, ContributionReport
+    # .candidate_id all reference candidate_profiles, not users).
     job_id: UUID | None = None
+    candidate_id: UUID | None = None
     type: str
     spec: dict
 
@@ -21,6 +28,7 @@ class AssessmentResponse(BaseModel):
 
     id: UUID
     job_id: UUID | None
+    candidate_id: UUID | None
     type: str
     spec: dict | None
     created_at: datetime
