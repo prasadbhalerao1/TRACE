@@ -67,6 +67,7 @@ from services.agents.fraud.tools.report_llm import generate_fraud_risk_report
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
+from services.api.core.tracing import record_agent_trace
 from services.api.routers.candidates import _require_consent
 
 router = APIRouter(tags=["fraud"])
@@ -160,14 +161,17 @@ async def _persist_check_result(
         )
 
     settings = get_settings()
+    fraud_input = {"subject_type": subject_type, "subject_id": str(subject_id)}
+    fraud_output = {"signals": signals, "verdict": verdict}
     db.add(
         AgentRun(
             agent_name=agent_name,
             subject_type=subject_type,
             subject_id=subject_id,
-            input_ref={"subject_type": subject_type, "subject_id": str(subject_id)},
-            output={"signals": signals, "verdict": verdict},
+            input_ref=fraud_input,
+            output=fraud_output,
             model_used=settings.llm_model_judgment,
+            langfuse_trace_id=record_agent_trace(agent_name, fraud_input, fraud_output, settings.llm_model_judgment),
         )
     )
 

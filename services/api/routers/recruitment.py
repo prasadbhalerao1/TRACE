@@ -58,6 +58,7 @@ from services.agents.recruitment.tools.embeddings import RecruitmentUnavailable
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
+from services.api.core.tracing import record_agent_trace
 
 router = APIRouter(tags=["recruitment"])
 
@@ -181,17 +182,22 @@ async def _run_matching_and_persist(db: AsyncSession, job: Job) -> list[MatchSco
         row.computed_at = datetime.now(timezone.utc)
         rows.append(row)
 
+    score_aggregation_input = {"candidate_count": len(candidate_pool), "required_skills": job.required_skills}
+    score_aggregation_output = {"match_count": len(result_state["match_results"])}
     db.add(
         AgentRun(
             agent_name="score_aggregation_agent",
             subject_type="job",
             subject_id=job.id,
-            input_ref={"candidate_count": len(candidate_pool), "required_skills": job.required_skills},
-            output={"match_count": len(result_state["match_results"])},
+            input_ref=score_aggregation_input,
+            output=score_aggregation_output,
             # Rules + embedding similarity, no chat LLM in Flow B — the embedding model
             # is the only "model" involved, per the agent registry's own "no LLM needed
             # for the numeric score" note.
             model_used=settings.embedding_model,
+            langfuse_trace_id=record_agent_trace(
+                "score_aggregation_agent", score_aggregation_input, score_aggregation_output, settings.embedding_model
+            ),
         )
     )
     await db.commit()
@@ -610,17 +616,22 @@ async def copilot_query(
         },
     ]
     conversation.structured_filters = result_state["structured_filters"]
+    copilot_input = {"raw_query": body.message, "structured_filters": result_state["structured_filters"]}
+    copilot_output = {"result_count": len(results), "ranked_candidate_ids": result_state["ranked_candidate_ids"]}
     db.add(
         AgentRun(
             agent_name="recruiter_copilot",
             subject_type="copilot_conversation",
             subject_id=conversation.id,
-            input_ref={"raw_query": body.message, "structured_filters": result_state["structured_filters"]},
-            output={"result_count": len(results), "ranked_candidate_ids": result_state["ranked_candidate_ids"]},
+            input_ref=copilot_input,
+            output=copilot_output,
             # Query understanding + explanation run on the fast tier, re-ranking on the
             # judgment tier — recorded as the judgment model since that's the
             # highest-consequence step (it decides final ordering).
             model_used=settings.llm_model_judgment,
+            langfuse_trace_id=record_agent_trace(
+                "recruiter_copilot", copilot_input, copilot_output, settings.llm_model_judgment
+            ),
         )
     )
     await db.commit()

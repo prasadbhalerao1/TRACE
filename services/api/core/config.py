@@ -42,6 +42,24 @@ class Settings(BaseSettings):
     # if not found on PATH, same "typed error, never fabricate" pattern as Anthropic/Cloudinary.
     libreoffice_binary: str = "soffice"
 
+    # Platform Hardening & Observability track (2026-07-30) — see .agents/decisions.md's
+    # dated entry for what's wired vs. still gated on real credentials.
+    # Langfuse tracing (services/api/core/tracing.py) — empty/placeholder keys mean a
+    # clean no-op (langfuse_trace_id stays None on every AgentRun, same as before this
+    # track), never a crash. Same "typed empty default, fails closed" pattern as
+    # anthropic_api_key/cloudinary_url above.
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
+
+    # Sentry error reporting (services/api/main.py startup) — empty DSN means
+    # sentry_sdk.init() is never called at all.
+    sentry_dsn: str = ""
+
+    # In-memory rate-limit middleware (services/api/core/rate_limit.py). Hackathon-demo
+    # scale (<=20 users) — no Redis dependency added for this; see .agents/decisions.md.
+    rate_limit_per_minute: int = 60
+
 
 
 @lru_cache

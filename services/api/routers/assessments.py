@@ -46,6 +46,7 @@ from services.agents.assessment.verification_graph import get_verification_graph
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
+from services.api.core.tracing import record_agent_trace
 from services.api.routers.candidates import _get_or_create_profile, _require_consent
 
 router = APIRouter(tags=["assessments"])
@@ -181,14 +182,19 @@ async def submit_assessment(
     await db.flush()
 
     settings = get_settings()
+    verification_input = {"assessment_type": assessment.type, "tests_total": result_state["tests_total"]}
+    verification_output = {"score": result_state["score"], "tests_passed": result_state["tests_passed"]}
     db.add(
         AgentRun(
             agent_name="verification_report_agent",
             subject_type="submission",
             subject_id=submission.id,
-            input_ref={"assessment_type": assessment.type, "tests_total": result_state["tests_total"]},
-            output={"score": result_state["score"], "tests_passed": result_state["tests_passed"]},
+            input_ref=verification_input,
+            output=verification_output,
             model_used=settings.llm_model_judgment,
+            langfuse_trace_id=record_agent_trace(
+                "verification_report_agent", verification_input, verification_output, settings.llm_model_judgment
+            ),
         )
     )
     await db.commit()
@@ -404,14 +410,19 @@ async def end_interview(
     db.add(report)
 
     settings = get_settings()
+    interview_input = {"topic_count": len(saved.get("topic_plan", []))}
+    interview_output = dict(result_state)
     db.add(
         AgentRun(
             agent_name="interview_report_agent",
             subject_type="interview_session",
             subject_id=session.id,
-            input_ref={"topic_count": len(saved.get("topic_plan", []))},
-            output=dict(result_state),
+            input_ref=interview_input,
+            output=interview_output,
             model_used=settings.llm_model_judgment,
+            langfuse_trace_id=record_agent_trace(
+                "interview_report_agent", interview_input, interview_output, settings.llm_model_judgment
+            ),
         )
     )
     await db.commit()
@@ -512,14 +523,19 @@ async def generate_contribution_report(
         rows.append(row)
 
     settings = get_settings()
+    contribution_input = {"repo_full_name": body.repo_full_name, "member_count": len(body.github_usernames)}
+    contribution_output = {"results": result_state["results"]}
     db.add(
         AgentRun(
             agent_name="contribution_weighting_agent",
             subject_type="repo",
             subject_id=uuid.uuid5(uuid.NAMESPACE_URL, body.repo_full_name),
-            input_ref={"repo_full_name": body.repo_full_name, "member_count": len(body.github_usernames)},
-            output={"results": result_state["results"]},
+            input_ref=contribution_input,
+            output=contribution_output,
             model_used=settings.embedding_model,
+            langfuse_trace_id=record_agent_trace(
+                "contribution_weighting_agent", contribution_input, contribution_output, settings.embedding_model
+            ),
         )
     )
     await db.commit()

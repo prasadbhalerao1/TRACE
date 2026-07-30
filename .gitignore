@@ -28,6 +28,14 @@ services/api/.venv/
 .env
 .env.local
 .env.*.local
+apps/web/.env.test
+
+# Playwright E2E (apps/web/e2e) — local run artifacts, never committed
+apps/web/e2e/report/
+apps/web/e2e/test-results/
+apps/web/blob-report/
+apps/web/playwright-report/
+apps/web/test-results/
 
 # macOS
 .DS_Store

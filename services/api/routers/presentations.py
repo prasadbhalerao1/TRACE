@@ -31,6 +31,7 @@ from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import get_current_user, require_role
 from services.api.core.storage import StorageUnavailable, upload_file
+from services.api.core.tracing import record_agent_trace
 
 router = APIRouter(prefix="/presentations", tags=["presentations"])
 
@@ -46,6 +47,10 @@ async def _get_presentation_or_404(db: AsyncSession, presentation_id: uuid.UUID)
 def _log_agent_run(
     db: AsyncSession, agent_name: str, presentation_id: uuid.UUID, input_ref: dict, output: dict, model_used: str | None
 ) -> None:
+    # Langfuse trace id (Platform Hardening track, 2026-07-30) — record_agent_trace() is
+    # a clean no-op returning None while LANGFUSE_* keys are unconfigured, see
+    # services/api/core/tracing.py.
+    trace_id = record_agent_trace(agent_name, input_ref, output, model_used)
     db.add(
         AgentRun(
             agent_name=agent_name,
@@ -54,6 +59,7 @@ def _log_agent_run(
             input_ref=input_ref,
             output=output,
             model_used=model_used,
+            langfuse_trace_id=trace_id,
         )
     )
 

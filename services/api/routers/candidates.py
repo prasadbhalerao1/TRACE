@@ -56,6 +56,7 @@ from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
 from services.api.core.storage import StorageUnavailable, upload_file
+from services.api.core.tracing import record_agent_trace
 
 # How long a cached FR-4 career-guidance result is served before a `GET` recomputes it
 # (LLM roadmap generation + Qdrant calls aren't cheap to run on every dashboard load).
@@ -207,14 +208,21 @@ async def _run_ingestion_and_persist(
         )
         db.add(score_row)
 
+        talent_scoring_input = {"github_username": profile.github_username}
+        talent_scoring_output = {
+            name: asdict(s) if hasattr(s, "__dataclass_fields__") else s.model_dump() for name, s in sub_scores.items()
+        }
         db.add(
             AgentRun(
                 agent_name="talent_scoring_agent",
                 subject_type="candidate",
                 subject_id=profile.id,
-                input_ref={"github_username": profile.github_username},
-                output={name: asdict(s) if hasattr(s, "__dataclass_fields__") else s.model_dump() for name, s in sub_scores.items()},
+                input_ref=talent_scoring_input,
+                output=talent_scoring_output,
                 model_used=settings.llm_model_judgment,
+                langfuse_trace_id=record_agent_trace(
+                    "talent_scoring_agent", talent_scoring_input, talent_scoring_output, settings.llm_model_judgment
+                ),
             )
         )
 
@@ -489,17 +497,22 @@ async def _run_document_generation(
     # Explainability trail for the fact-check verdict (constraints.md §4) — the
     # generated_documents row itself carries the same data, but agent_runs is the one
     # place every AI verdict in this platform is guaranteed to be found.
+    fact_check_input = {"document_type": document_type, "target_job_description": target_job_description}
+    fact_check_output = {
+        "fact_check_status": result_state["fact_check_status"],
+        "findings": result_state["fact_check_findings"],
+    }
     db.add(
         AgentRun(
             agent_name="fact_check_agent",
             subject_type="candidate",
             subject_id=profile.id,
-            input_ref={"document_type": document_type, "target_job_description": target_job_description},
-            output={
-                "fact_check_status": result_state["fact_check_status"],
-                "findings": result_state["fact_check_findings"],
-            },
+            input_ref=fact_check_input,
+            output=fact_check_output,
             model_used=settings.llm_model_fast,
+            langfuse_trace_id=record_agent_trace(
+                "fact_check_agent", fact_check_input, fact_check_output, settings.llm_model_fast
+            ),
         )
     )
     await db.commit()
@@ -751,21 +764,26 @@ async def get_my_career_guidance(
     db.add(row)
 
     settings = get_settings()
+    career_guidance_input = {"target_role": target_role, "candidate_skills": candidate_skills}
+    career_guidance_output = {
+        "resolved_target_role": row.target_role,
+        "skill_gaps": row.skill_gaps,
+        "recommended_courses": row.recommended_courses,
+        "roadmap": row.roadmap,
+        "salary_estimate_low": row.salary_estimate_low,
+        "salary_estimate_high": row.salary_estimate_high,
+    }
     db.add(
         AgentRun(
             agent_name="career_guidance_agent",
             subject_type="candidate",
             subject_id=profile.id,
-            input_ref={"target_role": target_role, "candidate_skills": candidate_skills},
-            output={
-                "resolved_target_role": row.target_role,
-                "skill_gaps": row.skill_gaps,
-                "recommended_courses": row.recommended_courses,
-                "roadmap": row.roadmap,
-                "salary_estimate_low": row.salary_estimate_low,
-                "salary_estimate_high": row.salary_estimate_high,
-            },
+            input_ref=career_guidance_input,
+            output=career_guidance_output,
             model_used=settings.llm_model_judgment,
+            langfuse_trace_id=record_agent_trace(
+                "career_guidance_agent", career_guidance_input, career_guidance_output, settings.llm_model_judgment
+            ),
         )
     )
 

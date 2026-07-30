@@ -60,6 +60,7 @@ from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.event_consumer import get_matching_top_performers_for_recruiter
 from services.api.core.rbac import require_role
+from services.api.core.tracing import record_agent_trace
 
 router = APIRouter(tags=["hackathons"])
 
@@ -541,14 +542,19 @@ async def finalize_rankings(
     hackathon.status = "finalized"
 
     settings = get_settings()
+    hackathon_ranking_input = {"team_count": len(teams)}
+    hackathon_ranking_output = {"final_rankings": result_state["final_rankings"]}
     db.add(
         AgentRun(
             agent_name="hackathon_ranking_agent",
             subject_type="hackathon",
             subject_id=hackathon_id,
-            input_ref={"team_count": len(teams)},
-            output={"final_rankings": result_state["final_rankings"]},
+            input_ref=hackathon_ranking_input,
+            output=hackathon_ranking_output,
             model_used=settings.llm_model_judgment,
+            langfuse_trace_id=record_agent_trace(
+                "hackathon_ranking_agent", hackathon_ranking_input, hackathon_ranking_output, settings.llm_model_judgment
+            ),
         )
     )
     db.add(Event(event_type="hackathon.rankings.finalized", payload=result_state["notification_event_payload"]))
