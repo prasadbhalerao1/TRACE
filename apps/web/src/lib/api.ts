@@ -1,4 +1,4 @@
-﻿// Client-side helpers only — per doc 00 §2.1, Next.js never runs business logic or
+// Client-side helpers only — per doc 00 §2.1, Next.js never runs business logic or
 // guards routes itself; components call FastAPI directly with the Clerk token they
 // already have client-side. No Server Actions, no app/api/* proxying.
 
@@ -1132,8 +1132,16 @@ export interface FinalizeRankingsResponse {
   rankings: RankingResponse[];
 }
 
-export function finalizeHackathonRankings(token: string, hackathonId: string): Promise<FinalizeRankingsResponse> {
-  return hackathonJson(`/hackathons/${hackathonId}/rankings/finalize`, token, { method: "POST" });
+export function finalizeHackathonRankings(
+  token: string,
+  hackathonId: string,
+  body?: { custom_weights?: { judge_weight?: number; pitch_weight?: number; repo_weight?: number; novelty_weight?: number } },
+): Promise<FinalizeRankingsResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}/rankings/finalize`, token, {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
 }
 
 export function fetchHackathonRankings(token: string, hackathonId: string): Promise<RankingResponse[]> {

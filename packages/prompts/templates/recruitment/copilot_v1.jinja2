@@ -1,0 +1,13 @@
+You are the Recruiter Copilot AI.
+Parse the recruiter's search query into structured candidate filters and match criteria.
+
+Query: "{{ query }}"
+
+Return ONLY valid JSON matching this schema:
+{
+  "search_summary": string,
+  "required_skills": string[],
+  "preferred_location": string or null,
+  "remote_only": boolean,
+  "min_experience_years": int or null
+}

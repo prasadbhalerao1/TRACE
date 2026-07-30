@@ -55,14 +55,9 @@ def _client(settings) -> anthropic.Anthropic:
 def classify_intent(raw_request: str) -> dict:
     settings = get_settings()
     client = _client(settings)
-    prompt = (
-        "You are the Supervisor's intent classifier for an AI talent intelligence and "
-        "recruitment platform. Read the request below and classify which module should "
-        "handle it. Only choose 'job_match' if the request is clearly about matching "
-        "candidates to a job posting (finding/ranking/re-ranking candidates for a role); "
-        "otherwise choose 'candidate_score'.\n\n"
-        f'REQUEST: "{raw_request}"'
-    )
+    from packages.prompts import render_prompt
+
+    prompt = render_prompt("supervisor/classifier_v1.jinja2", query=raw_request)
     try:
         response = client.messages.create(
             model=settings.llm_model_fast,

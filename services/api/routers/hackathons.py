@@ -37,6 +37,7 @@ from packages.shared_schemas.hackathon import (
     CSVImportRequest,
     CSVImportResponse,
     CSVImportRowError,
+    FinalizeRankingsRequest,
     FinalizeRankingsResponse,
     HackathonCreateRequest,
     HackathonResponse,
@@ -408,6 +409,7 @@ async def _resolve_repo_candidate(db: AsyncSession, member_candidate_ids: list[u
 @router.post("/hackathons/{hackathon_id}/rankings/finalize", response_model=FinalizeRankingsResponse)
 async def finalize_rankings(
     hackathon_id: uuid.UUID,
+    body: FinalizeRankingsRequest | None = None,
     user: User = Depends(require_role("organizer")),
     db: AsyncSession = Depends(get_db),
 ) -> FinalizeRankingsResponse:

@@ -46,6 +46,30 @@ async def update_user_role(
     return target
 
 
+@router.patch("/users/{user_id}/organization", response_model=AdminUserOut)
+async def assign_user_organization(
+    user_id: uuid.UUID,
+    org_id: uuid.UUID | None = None,
+    admin: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    target = await db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+
+    target.organization_id = org_id
+    await log_action(
+        db,
+        actor_user_id=admin.id,
+        action="user_organization_updated",
+        target_type="user",
+        target_id=target.id,
+    )
+    await db.commit()
+    await db.refresh(target)
+    return target
+
+
 @router.get("/audit-log", response_model=list[AuditLogOut])
 async def get_audit_log(
     limit: int = 100,

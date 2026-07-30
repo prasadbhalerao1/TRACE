@@ -16,6 +16,11 @@ export default function OrganizerRankingsPage() {
   const [finalizing, setFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [judgeWeight, setJudgeWeight] = useState(0.25);
+  const [pitchWeight, setPitchWeight] = useState(0.25);
+  const [repoWeight, setRepoWeight] = useState(0.25);
+  const [noveltyWeight, setNoveltyWeight] = useState(0.25);
+
   const load = useCallback(async () => {
     const token = await getToken();
     if (!token) return;
@@ -36,7 +41,14 @@ export default function OrganizerRankingsPage() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      const result = await finalizeHackathonRankings(token, params.id);
+      const result = await finalizeHackathonRankings(token, params.id, {
+        custom_weights: {
+          judge_weight: judgeWeight,
+          pitch_weight: pitchWeight,
+          repo_weight: repoWeight,
+          novelty_weight: noveltyWeight,
+        },
+      });
       setRankings(result.rankings);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to finalize rankings");

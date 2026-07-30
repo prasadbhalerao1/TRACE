@@ -172,6 +172,17 @@ class RankingResponse(BaseModel):
     finalized_at: datetime
 
 
+class ScoringWeightsConfig(BaseModel):
+    judge_weight: float = 0.25
+    pitch_weight: float = 0.25
+    repo_weight: float = 0.25
+    novelty_weight: float = 0.25
+
+
+class FinalizeRankingsRequest(BaseModel):
+    custom_weights: ScoringWeightsConfig | None = None
+
+
 class FinalizeRankingsResponse(BaseModel):
     hackathon_id: UUID
     rankings: list[RankingResponse]
