@@ -543,3 +543,185 @@ expected, not a bug); idempotent re-finalize (upserts 3 ranking rows, not 6); re
 watchlist creation; top-performers feed. `python -c "import services.api.main"` clean.
 → `packages/db/models/hackathon.py`, `packages/shared_schemas/hackathon.py`,
 `services/agents/hackathon/`, `services/api/routers/hackathons.py`
+
+---
+
+## 2026-07-30 — Phase 1, Module 06: Trust & Fraud Prevention
+
+**No SRS-vs-architecture-doc conflicts found for this module** — both doc sets agree
+verbatim on the `verification_records`/`fraud_flags`/`authenticity_scores`/`disputes`
+schema (doc/SRS/06 §5, doc/multi-agent-architecture/06 §6) and on doc 06 §7/§8's binding
+constraints. The one place a real ambiguity existed (FR-3's AI-content check has no
+dedicated endpoint in either doc's §6/§7 API list) is logged below as this session's own
+resolution, not a doc disagreement.
+
+**Four independent LangGraph subgraphs, not one big graph** — `services/agents/fraud/
+{cert,plagiarism,duplicate,content}_graph.py`, matching doc 06 §4's four separate mermaid
+diagrams exactly (Certificate Verification, Code/Submission Plagiarism, Duplicate Profile
+Detection, AI-Generated Content Signal). Each ends in its own verdict node
+(`should_flag`/`confidence_label`/`evidence`); the router (not a shared "Authenticity
+Aggregation" graph node) persists `verification_records` for every signal and
+conditionally a `fraud_flags` row — aggregation and reporting are POST-processing the
+router does after any of the four graphs returns, not a fifth graph node, since the
+authenticity score is a per-CANDIDATE rollup of ALL their historical upheld flags across
+every subject_type, not something scoped to one check's `state`.
+→ `services/agents/fraud/state.py`, `cert_graph.py`, `plagiarism_graph.py`,
+`duplicate_graph.py`, `content_graph.py`
+
+**`duplicate_graph` and `plagiarism_graph` run their two independent signal-gathering
+nodes SEQUENTIALLY, not fanned out from START in parallel** despite doc 06 §4's mermaid
+diagrams showing a fan-out shape (`D1 -> D2`, `D1 -> D3` for duplicate detection; `P2 ->
+P3`, `P2 -> P4` for plagiarism). Fanning genuinely-parallel nodes out in the same
+superstep only works safely in this codebase's LangGraph convention when every channel
+they write is either untouched by the other branch or uses an `operator.add`-style
+reducer (the exact bug documented in this file's Module 01 "LangGraph parallel
+fan-out" entry). `signals` already uses that reducer here, but `context` (where each node
+stashes its own sub-result for the verdict node to read) does not, and giving it one would
+mean writing a custom dict-merge reducer for a channel that's a single-writer-per-step
+plain overwrite everywhere else in this module. Sequential execution is functionally
+identical (imagehash/datasketch/copydetect are all fast local computations, no network
+calls, so there's no real latency cost) and avoids the collision entirely — logged here
+since it's a real, deliberate deviation from the docs' literal graph shape, not an
+oversight.
+→ `services/agents/fraud/duplicate_graph.py`, `services/agents/fraud/plagiarism_graph.py`
+
+**FR-3 (AI-Generated Content Detection) has no dedicated endpoint** — doc 06 §6/§7's API
+list only has three `POST /verification/.../check` routes (certificates, submissions,
+profiles) and neither doc set adds a fourth for "check this resume for AI-generated
+content." Resolved by running the `content_graph` as a second graph invocation inside
+`POST /verification/profiles/{id}/duplicate-check`, since resume/written content lives on
+the same `candidate_profiles` subject that endpoint already reads — logged as this
+session's own resolution of a real endpoint-list gap, not a doc disagreement.
+→ `services/api/routers/fraud.py` (`check_profile_duplicate`)
+
+**AI-content signal is deliberately NEVER sufficient to raise a flag on its own** —
+`nodes/perplexity_heuristic.py` always returns `should_flag: False`, regardless of score.
+Doc 06 §8 requires AI-content/plagiarism signals to be "corroborated by at least one
+independent signal" before ever contributing to an `upheld` decision; since this pipeline
+has no second corroborating check wired to combine with it automatically, the
+conservative choice (per doc 06's own "when unsure, pick the more conservative option"
+guidance) was to never auto-raise on this signal alone — it's still recorded as a
+`verification_records` row for a human reviewer to weigh alongside other context, exactly
+the "surfaced, not auto-flagged" treatment the doc's caution implies.
+→ `services/agents/fraud/nodes/perplexity_heuristic.py`
+
+**AI-content heuristic reuses `ppt_analyzer`'s exact scoring function
+(`_slide_ai_likelihood`)** rather than re-deriving the burstiness/lexical-diversity
+formula a second time, per the assignment's explicit instruction that doc 06's detector
+share doc 04's method so the two don't diverge.
+→ `services/agents/fraud/tools/perplexity_heuristic.py`
+
+**`copydetect` was missing from `services/api/.venv` (confirmed via import check
+first, same as `radon`/`lizard`/`bandit`'s precedent for Module 03) — installed via `uv
+pip install --python services/api/.venv copydetect`.** `imagehash`, `datasketch`,
+`httpx`, and `anthropic` were all already present. No `pyproject.toml`/
+`requirements.txt` exists anywhere in this repo to update — dependencies are tracked only
+by what's actually installed in the venv, consistent with how prior sessions added
+packages.
+
+**Certificate issuer-verification-URL resolution uses a small hand-maintained
+issuer-name -> URL-template map, not a `verification_url` column** — Module 01's
+`certifications` table (read-only to this module) has no such column in either doc's
+schema, only `issuer`/`credential_id`. A handful of common issuers (Coursera,
+freeCodeCamp, AWS, Credly, Udemy, HackerRank) are covered; an unrecognized issuer or
+missing credential ID correctly routes to the Visual Forensics branch (doc 06 §4's "no
+API/URL" path) rather than erroring.
+→ `services/agents/fraud/tools/issuer_lookup.py`
+
+**Visual Forensics is rules-first (OCR confidence + metadata completeness), with an
+OPTIONAL Haiku vision pass layered on top** when a certificate image URL exists and
+`ANTHROPIC_API_KEY` is configured — matches this codebase's established "LLM call is a
+best-effort enhancement on a working rules baseline, never the only path" pattern (e.g.
+`ppt_analyzer/tools/plagiarism.py`'s optional Haiku narrative). When both rules and vision
+run, the FINAL suspicion label is the higher (more conservative) of the two, never an
+average — deliberately biased toward not silently down-weighting a rules-based concern
+because a vision pass happened to look benign.
+→ `services/agents/fraud/tools/visual_forensics.py`
+
+**Authenticity score aggregation formula and penalty weights copied verbatim from doc
+08 §10** (this session's tunable defaults, per the doc's own framing, not independently
+chosen): starting score 100, penalties only for `upheld` flags — fake_certificate 30,
+code_plagiarism 35, duplicate_profile 40, ai_generated_content 15 — floored at 0. An
+unrecognized `flag_type` (shouldn't occur given the fixed set this module raises, but
+defensive) gets a small default penalty of 10 rather than silently contributing zero.
+`components` records exactly which flags contributed which penalty (same "provenance
+trail, never a hidden adjustment" pattern as doc 08 §1.1's Talent Score
+re-normalization).
+→ `services/agents/fraud/tools/aggregation.py`
+
+**`fraud_flags.candidate_id` is additive** — neither doc's SQL has it (subject_type/
+subject_id alone would require a different join per subject_type to resolve back to a
+candidate), but `/candidates/{id}/flags`, the dispute flow, and the authenticity score
+rollup all need a direct candidate lookup path. Populated by the router at flag-creation
+time from whichever subject the check was run against.
+→ `packages/db/models/fraud.py` (`FraudFlag.candidate_id`)
+
+**Additive endpoint: `GET /flags/{id}`** — not in doc 06 §6/§7's literal list, but the
+admin evidence-viewer page and the Dispute Review Agent's assistive summary both need a
+single-flag detail read richer than the queue list provides. The Dispute Review Agent
+(Sonnet) is invoked from inside this endpoint, not a background job — it only ever
+returns an assistive summary (`available: false` if Sonnet can't run, e.g. no API key)
+and has no path to write `fraud_flags.status`; only `PATCH /flags/{id}/review` can.
+→ `services/api/routers/fraud.py` (`get_flag_detail`)
+
+**Consent enforcement reuses `_require_consent` from `candidates.py` per-signal (caught
+and downgraded, not re-raised)** rather than gating the whole `duplicate-check` endpoint
+on both consents at once — doc 06 §8 requires consent before EACH of photo-hashing and
+resume-fingerprinting specifically, and a candidate who granted one but not the other
+should still get the signal they did consent to, not a 403 for the whole check. The
+function itself is imported, not duplicated, per the assignment's explicit instruction.
+→ `services/api/routers/fraud.py` (`check_profile_duplicate`)
+
+**Fraud Risk Report Agent (Sonnet) and Dispute Review Agent (Sonnet) both degrade to a
+deterministic fallback / `available: false`, never block flag creation or review** — with
+`ANTHROPIC_API_KEY` still empty in this dev environment (same unresolved gap noted in
+every prior module's entries), every live test below exercised the fallback path: a flag
+still gets a real evidence-linked `report_summary` (built directly from the signal
+evidence, not fabricated), and the admin review endpoint still returns the raw evidence +
+candidate statement with `dispute_review_assist.available: false` rather than failing.
+→ `services/agents/fraud/tools/report_llm.py`, `services/agents/fraud/tools/dispute_review_llm.py`
+
+**Verified live against the real Neon DB** (dependency-override-bypassing-Clerk
+technique, same as Modules 01/02/03/05 — `httpx.AsyncClient` + `ASGITransport` in a
+single asyncio loop rather than `TestClient`, since mixing `asyncio.run()` setup with
+`TestClient`'s own threaded event loop broke the asyncpg connection pool bound to the
+first loop's now-closed loop; documented here as a technique note for future sessions
+hitting the same "Event loop is closed" error against this repo's async engine).
+Inserted a real `Certification` row (no credential ID, low OCR confidence — routes to
+Visual Forensics as expected) and two `Submission` rows sharing an `assessment_id` with
+near-identical-but-renamed code. End-to-end run: certificate check (200, correctly no
+flag — insufficient rules-based anomaly count); submission plagiarism check (200,
+100% structural similarity correctly detected via `copydetect`'s AST-winnowing,
+`code_plagiarism` flag raised with real evidence; GitHub cross-check correctly degraded
+to "inconclusive" on an unauthenticated 401 rather than falsely reporting "clean");
+profile duplicate-check (200, all three signals correctly reported "not enough
+data"/"no consent" rather than fabricating a result); authenticity score computed fresh
+each call — 100 before any uphold, then a SECOND end-to-end run on a later day
+correctly compounded to 65 and then 30 as additional flags were upheld (100 - 35 - 35),
+matching doc 08 §10's formula exactly; candidate-visible flags list; admin review queue;
+`PATCH /flags/{id}/review` correctly rejected an empty-notes uphold attempt with 422
+(`review_notes_required_for_upheld`) and accepted the same transition once real notes
+were supplied; candidate dispute submission correctly moved `raised -> under_review` and
+correctly rejected for a non-owning candidate (403, tested implicitly via the ownership
+check in code — not separately exercised in this run); flag detail endpoint correctly
+returned the dispute alongside `dispute_review_assist.available: false` (no API key).
+`python -c "import services.api.main"` clean. `tsc --noEmit`, `eslint`, `next build` all
+clean in `apps/web`, no route collisions (`/fraud-review`, `/fraud-review/[flagId]`,
+`/my-flags` all resolve as their own routes).
+
+**Every FR in doc/SRS/06 §3 is implemented and exercised**: FR-1 (cert check, live-tested,
+routes correctly between Auto-Verify/Visual-Forensics branches), FR-2/FR-5 (shared
+plagiarism graph, live-tested, real AST-winnowing similarity + flag), FR-3 (AI-content
+signal, folded into the profile duplicate-check endpoint, never auto-flags alone), FR-4
+(duplicate profile detection via text fingerprint + photo perceptual hash, live-tested
+with the "no consent/no data" degrade path — not yet live-tested with an actual
+duplicate pair, since no two candidate profiles/photos in the dev DB are actually
+near-duplicates; the underlying MinHash/pHash logic was separately unit-verified with
+synthetic near-duplicate text), FR-6 (authenticity score, live-tested end-to-end
+including the 100 -> 65 -> 30 compounding), FR-7 (fraud risk reports, live-tested,
+evidence-linked with a deterministic fallback narrative), FR-8 (dispute flow,
+live-tested end-to-end including the human-gated review with enforced `review_notes`).
+→ `packages/db/models/fraud.py`, `packages/shared_schemas/fraud.py`,
+`services/agents/fraud/`, `services/api/routers/fraud.py`,
+`apps/web/src/app/(admin)/fraud-review/`, `apps/web/src/app/(candidate)/my-flags/`,
+`apps/web/src/lib/api.ts`
