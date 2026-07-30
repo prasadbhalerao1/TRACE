@@ -19,12 +19,21 @@ class Assessment(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.id"))
+    # Nullable — an assessment can be authored as a reusable template before it's
+    # assigned to any specific candidate (mirrors job_id's own nullability). FKs to
+    # candidate_profiles, not users, matching Submission/InterviewSession/
+    # ContributionReport's existing convention for every other candidate-scoped column
+    # in this module.
+    candidate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidate_profiles.id")
+    )
     type: Mapped[str] = mapped_column(Text, nullable=False)
     spec: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("type IN ('coding','mcq','project_analysis')", name="ck_assessments_type"),
+        Index("idx_assessments_candidate", "candidate_id"),
     )
 
 

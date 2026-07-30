@@ -88,11 +88,33 @@ async def create_assessment(
     user: User = Depends(require_role("recruiter")),
     db: AsyncSession = Depends(get_db),
 ) -> Assessment:
-    assessment = Assessment(job_id=body.job_id, type=body.type, spec=body.spec)
+    assessment = Assessment(
+        job_id=body.job_id, candidate_id=body.candidate_id, type=body.type, spec=body.spec
+    )
     db.add(assessment)
     await db.commit()
     await db.refresh(assessment)
     return assessment
+
+
+@router.get("/assessments/mine", response_model=list[AssessmentResponse])
+async def list_my_assessments(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Assessment]:
+    """Candidate-self-serve inbox (QA Recruiter #1 / Candidate #4 fix) — lists every
+    assessment assigned to the authenticated candidate's own profile, so
+    `(candidate)/assessments` has a real list of real IDs to link into
+    `(candidate)/assessments/[id]` instead of the old hardcoded `sample-assessment` 404.
+    Declared before `/assessments/{assessment_id}` so FastAPI's path-matching doesn't
+    swallow "mine" as a UUID path param."""
+    profile = await _get_or_create_profile(db, user)
+    result = await db.execute(
+        select(Assessment)
+        .where(Assessment.candidate_id == profile.id)
+        .order_by(Assessment.created_at.desc())
+    )
+    return list(result.scalars().all())
 
 
 @router.get("/assessments/{assessment_id}", response_model=AssessmentResponse)
