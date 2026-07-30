@@ -1,8 +1,13 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from services.api.core.config import get_settings
 from services.api.routers import assessments, candidates, hackathons, presentations, public, recruitment, users
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -23,6 +28,17 @@ app.include_router(public.router)
 app.include_router(recruitment.router)
 app.include_router(assessments.router)
 app.include_router(hackathons.router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Registering a handler for the base Exception keeps this inside Starlette's
+    # ExceptionMiddleware (which runs under CORSMiddleware), instead of letting it
+    # propagate to ServerErrorMiddleware (which runs outside CORSMiddleware and so
+    # sends back a response with no CORS headers — the browser then misreports a
+    # real 500 as a CORS failure, as happened with the Module 01 dashboard bug).
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "internal_server_error"})
 
 
 @app.get("/health")
