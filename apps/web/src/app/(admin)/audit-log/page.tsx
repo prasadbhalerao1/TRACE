@@ -1,12 +1,46 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchAuditLog, type AuditLogEntry } from "@/lib/api";
+
+function formatTimestamp(ts: string): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return ts;
+  return date.toLocaleString();
+}
+
+function formatAction(action: string): string {
+  return action
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 export default function AdminAuditLogsPage() {
-  const mockLogs = [
-    { id: "log-1", action: "Complete Onboarding", user: "alice@dataaxle.com", ip: "192.168.1.1", time: "2026-07-29 17:40" },
-    { id: "log-2", action: "Dismiss Fraud Anomaly Flag", user: "admin@platform.com", ip: "192.168.1.2", time: "2026-07-29 17:42" }
-  ];
+  const { getToken } = useAuth();
+  const [logs, setLogs] = useState<AuditLogEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("No session token");
+        const data = await fetchAuditLog(token);
+        if (cancelled) return;
+        setLogs(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load audit log");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -15,22 +49,30 @@ export default function AdminAuditLogsPage() {
         <p className="text-sm text-slate">Examine immutable platform activity logs, action tracking, and operator modifications.</p>
       </div>
 
+      {error && <p className="text-sm text-rose-flagged">{error}</p>}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 space-y-4">
           <CardHeader>
             <CardTitle className="text-base font-semibold">Audit Records</CardTitle>
-            <CardDescription>Activity details logged during user platform actions.</CardDescription>
+            <CardDescription>Most recent platform actions, newest first.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {mockLogs.map((log) => (
+            {logs === null && !error && <p className="text-sm text-slate">Loading…</p>}
+            {logs !== null && logs.length === 0 && (
+              <p className="text-sm text-slate">No audit log entries yet.</p>
+            )}
+            {logs?.map((log) => (
               <div key={log.id} className="p-3 border rounded-md text-xs bg-white dark:bg-zinc-900 shadow-sm space-y-1">
                 <div className="flex justify-between font-semibold">
-                  <span className="text-ink dark:text-zinc-50">{log.action}</span>
-                  <span className="text-slate font-normal">{log.time}</span>
+                  <span className="text-ink dark:text-zinc-50">{formatAction(log.action)}</span>
+                  <span className="text-slate font-normal">{formatTimestamp(log.created_at)}</span>
                 </div>
                 <div className="flex justify-between text-slate">
-                  <span>Operator: {log.user}</span>
-                  <span>IP: {log.ip}</span>
+                  <span>Actor: {log.actor_user_id ?? "system"}</span>
+                  <span>
+                    {log.target_type ? `${log.target_type}: ${log.target_id}` : "—"}
+                  </span>
                 </div>
               </div>
             ))}
@@ -44,7 +86,7 @@ export default function AdminAuditLogsPage() {
             </CardHeader>
             <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
               <p>All sensitive operations (role changes, onboarding, flags, disputes resolution) generate an immutable audit log entry.</p>
-              <p>Logs contain operator authentication signatures, source network addresses, and data changes.</p>
+              <p>Logs are append-only — no update or delete path exists in the API.</p>
             </CardContent>
           </Card>
         </div>
@@ -52,10 +94,10 @@ export default function AdminAuditLogsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Technical Reference: doc/SRS/00-Master-Architecture-and-Analysis.md</CardTitle>
+          <CardTitle className="text-base font-semibold">Technical Reference: doc/multi-agent-architecture/00-master-architecture.md §4</CardTitle>
         </CardHeader>
         <CardContent className="text-xs text-slate space-y-2">
-          <p>**Audit Logs Schema**: Logs are permanently saved to the `audit_logs` table. They cannot be edited or deleted by any user or administrator.</p>
+          <p>**Audit Logs Schema**: Logs are permanently saved to the `audit_logs` table (`actor_user_id`, `action`, `target_type`, `target_id`, `created_at`). They cannot be edited or deleted by any user or administrator.</p>
         </CardContent>
       </Card>
     </div>

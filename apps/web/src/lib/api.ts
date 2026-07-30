@@ -1135,3 +1135,53 @@ export function fetchPublicHackathonTeamDetail(hackathonId: string, teamId: stri
 export function fetchPublicHackathon(hackathonId: string): Promise<HackathonResponse> {
   return publicHackathonJson(`/hackathons/${hackathonId}`);
 }
+
+// --- Admin: user management + audit log ---
+
+export interface AdminUserResponse {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: Role;
+  organization_id: string | null;
+  is_active: boolean;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actor_user_id: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  created_at: string;
+}
+
+async function adminJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export function fetchAdminUsers(token: string): Promise<AdminUserResponse[]> {
+  return adminJson(`/admin/users`, token);
+}
+
+export function updateUserRole(token: string, userId: string, role: Role): Promise<AdminUserResponse> {
+  return adminJson(`/admin/users/${userId}/role`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function fetchAuditLog(token: string, limit = 100): Promise<AuditLogEntry[]> {
+  return adminJson(`/admin/audit-log?limit=${limit}`, token);
+}
