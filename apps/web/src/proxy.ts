@@ -1,16 +1,16 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
-const allowedParties = process.env.ALLOWED_PARTIES
-  ? process.env.ALLOWED_PARTIES.split(",").map((p) => p.trim()).filter(Boolean)
-  : undefined;
-
-export default clerkMiddleware({
-  authorizedParties: allowedParties,
-});
+export default clerkMiddleware();
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public assets (.svg, .png, .jpg, .css, .js)
+     */
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js)$).*)",
   ],
 };
