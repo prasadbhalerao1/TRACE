@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { APPLICATION_STAGE_LABELS, fetchMyApplications, type ApplicationWithJobResponse } from "@/lib/api";
@@ -45,7 +46,13 @@ export default function CandidateApplicationsPage() {
             {error && <p className="text-sm text-rose-flagged">{error}</p>}
             {!error && applications === null && <p className="text-sm text-slate">Loading…</p>}
             {applications !== null && applications.length === 0 && (
-              <p className="text-sm text-slate">No applications yet — apply to a job posting to see it tracked here.</p>
+              <p className="text-sm text-slate">
+                No applications yet —{" "}
+                <Link href="/jobs" className="text-primary underline underline-offset-2">
+                  apply to a job posting
+                </Link>{" "}
+                to see it tracked here.
+              </p>
             )}
             {applications?.map((app) => (
               <div

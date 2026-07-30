@@ -641,6 +641,14 @@ export function fetchJobs(token: string): Promise<JobResponse[]> {
   return recruitmentJson(`/jobs`, token);
 }
 
+// --- Candidate job discovery (QA fix: candidates couldn't browse/apply — `GET /jobs`
+// above is recruiter-only and 403s a candidate token; `GET /jobs/open` is the new,
+// additive, candidate-role read added alongside it. See .agents/decisions.md.)
+
+export function fetchOpenJobs(token: string): Promise<JobResponse[]> {
+  return recruitmentJson(`/jobs/open`, token);
+}
+
 export function fetchJobMatches(token: string, jobId: string): Promise<MatchScoreWithCandidateResponse[]> {
   return recruitmentJson(`/jobs/${jobId}/matches`, token);
 }
@@ -957,6 +965,14 @@ export function createHackathon(
 
 export function fetchMyHackathons(token: string): Promise<HackathonResponse[]> {
   return hackathonJson(`/hackathons`, token);
+}
+
+// --- Candidate hackathon discovery (QA fix: candidates couldn't browse/join — `GET
+// /hackathons` above is organizer-only and 403s a candidate token; `GET /hackathons/open`
+// is the new, additive, candidate-role read added alongside it. See .agents/decisions.md.)
+
+export function fetchOpenHackathons(token: string): Promise<HackathonResponse[]> {
+  return hackathonJson(`/hackathons/open`, token);
 }
 
 export function fetchHackathon(token: string, hackathonId: string): Promise<HackathonResponse> {

@@ -171,6 +171,31 @@ async def list_my_hackathons(
     return list(result.scalars().all())
 
 
+@router.get("/hackathons/open", response_model=list[HackathonResponse])
+async def list_open_hackathons(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Hackathon]:
+    """Additive, candidate-facing companion to `GET /hackathons` above (organizer-only,
+    scoped to `organizer_user_id`). Filters to `status in ("draft", "active")` — a
+    "judging" or "finalized" hackathon is no longer accepting new team submissions.
+    `status` defaults to "draft" and nothing in this module ever transitions one to
+    "active" (no publish step exists anywhere), so "draft" must stay in this filter or
+    every hackathon would be permanently invisible to candidates. Discovered gap, not
+    scope creep: see `.agents/decisions.md`'s dated entry for why this is a new route
+    rather than a role-branch inside `list_my_hackathons`.
+
+    MUST stay registered before `GET /hackathons/{hackathon_id}` immediately below —
+    both are single-segment paths under `/hackathons/`, and Starlette matches path
+    routes in registration order, so a later `/hackathons/open` would have "open" parsed
+    as a `hackathon_id` UUID by the dynamic route first and 422 instead of ever reaching
+    this handler."""
+    result = await db.execute(
+        select(Hackathon).where(Hackathon.status.in_(["draft", "active"])).order_by(Hackathon.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 @router.get("/hackathons/{hackathon_id}", response_model=HackathonResponse)
 async def get_hackathon(hackathon_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Hackathon:
     return await _get_hackathon_or_404(db, hackathon_id)

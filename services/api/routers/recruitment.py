@@ -250,6 +250,24 @@ async def list_jobs(
     return list(result.scalars().all())
 
 
+@router.get("/jobs/open", response_model=list[JobResponse])
+async def list_open_jobs(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> list[Job]:
+    """Additive, candidate-facing companion to `GET /jobs` above (recruiter-only,
+    scoped to the recruiter's own org/postings). `Job` has no status/is_open column —
+    every posting is implicitly open, since nothing in this module ever closes one — so
+    this simply returns every job across every organization, unfiltered by ownership, so
+    a candidate can discover and apply to any of them. Discovered gap, not scope creep:
+    see `.agents/decisions.md`'s dated entry for why this is a new route rather than a
+    role-branch inside `list_jobs`. Registered as a literal path ("/jobs/open") so it
+    can't collide with the `{job_id}` routes below regardless of declaration order (they
+    all have an extra path segment)."""
+    result = await db.execute(select(Job).order_by(Job.created_at.desc()))
+    return list(result.scalars().all())
+
+
 @router.get("/jobs/{job_id}/matches", response_model=list[MatchScoreWithCandidateResponse])
 async def get_job_matches(
     job_id: uuid.UUID,
