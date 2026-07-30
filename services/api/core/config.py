@@ -19,8 +19,13 @@ class Settings(BaseSettings):
     clerk_jwks_url: str
     clerk_issuer: str
 
-    # Module 1 (Candidate Intelligence) integrations — see doc/SRS/01 §9.
+    # Module 1 (Candidate Intelligence) & Multi-Provider LLM Gateway — see doc/SRS/01 §9.
+    llm_provider: str = "anthropic"  # "anthropic" | "openai" | "grok" | "gemini" | "openai_compatible"
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    grok_api_key: str = ""
+    gemini_api_key: str = ""
+    llm_base_url: str = ""
     llm_model_fast: str = "claude-haiku-4-5-20251001"
     llm_model_judgment: str = "claude-sonnet-4-6"
     github_client_id: str = ""
