@@ -17,6 +17,7 @@ import {
   uploadResume,
   fetchMe,
   updateProfile,
+  publishPortfolio,
   type CandidateProfileResponse,
 } from "@/lib/api";
 
@@ -29,6 +30,7 @@ export default function ProfileEditPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [leetcodeInput, setLeetcodeInput] = useState("");
+  const [usernameInput, setUsernameInput] = useState("");
   const resumeInputRef = useRef<HTMLInputElement>(null);
   const certificateInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,6 +56,7 @@ export default function ProfileEditPage() {
         const edu = dashboard.profile.education?.[0] as { institution?: string; degree?: string } | undefined;
         setCollege(edu?.institution ?? "");
         setDegree(edu?.degree ?? "");
+        setUsernameInput(dashboard.profile.username ?? "");
       }
       if (me.profile) {
         setFullName(me.profile.full_name ?? "");
@@ -191,6 +194,24 @@ export default function ProfileEditPage() {
       setNotice("Profile information updated successfully.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update profile information");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleSetUsername() {
+    const trimmed = usernameInput.trim().toLowerCase();
+    if (!trimmed) return;
+    setBusy("username");
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      const updated = await publishPortfolio(token, trimmed);
+      setProfile(updated);
+      setNotice(`Portfolio username set to "${trimmed}". Your public link is now active.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set username");
     } finally {
       setBusy(null);
     }
@@ -355,6 +376,51 @@ export default function ProfileEditPage() {
       </Card>
 
       <ConflictResolver profile={profile} />
+
+      {/* Portfolio Username — lets existing candidates set/change their URL slug */}
+      <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
+        <CardHeader className="pb-3 border-b border-zinc-100">
+          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-zinc-500 uppercase">Portfolio Username</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 pt-4">
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            Your unique public URL: <span className="font-mono text-indigo-600">/{profile.username ?? "not set"}</span>
+            {profile.username && (
+              <a
+                href={`/${profile.username}`}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-2 text-indigo-500 hover:underline"
+              >
+                View →
+              </a>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex flex-1 items-center rounded-md border border-zinc-200 bg-zinc-50/30 ring-offset-background focus-within:ring-2 focus-within:ring-indigo-500/30 focus-within:ring-offset-1">
+              <span className="select-none pl-3 text-sm text-zinc-400">yourdomain.com/</span>
+              <Input
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                placeholder={profile.username ?? "yourname"}
+                className="border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 pl-1"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <Button
+              onClick={handleSetUsername}
+              disabled={busy === "username" || !usernameInput.trim()}
+              className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium"
+            >
+              {busy === "username" ? "Saving…" : profile.username ? "Update" : "Set Username"}
+            </Button>
+          </div>
+          <p className="text-[11px] text-zinc-400">
+            Only lowercase letters, numbers, and hyphens. Min 2 chars.
+          </p>
+        </CardContent>
+      </Card>
 
       <Button variant="link" onClick={() => router.push("/dashboard")}>
         View your Talent Score →

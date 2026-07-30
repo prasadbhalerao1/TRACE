@@ -145,7 +145,18 @@ class GeneratedDocumentResponse(BaseModel):
 
 
 class PortfolioPublishRequest(BaseModel):
-    username: str
+    # Optional after onboarding: if the candidate already has a username slug set,
+    # a bare publish toggle doesn't need to re-supply it.
+    username: str | None = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    """PATCH /candidates/me — all fields optional; only supplied fields are applied."""
+    full_name: str | None = None
+    headline: str | None = None
+    location: str | None = None
+    college: str | None = None
+    degree: str | None = None
 
 
 class PublicPortfolioResponse(BaseModel):

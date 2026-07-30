@@ -41,6 +41,7 @@ from packages.shared_schemas.candidates import (
     GithubSummary,
     LeetcodeConnectRequest,
     PortfolioPublishRequest,
+    ProfileUpdateRequest,
     PublicPortfolioProject,
     ResumeGenerateRequest,
     SubScore,
@@ -95,15 +96,6 @@ _USERNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$")
 
 router = APIRouter(prefix="/candidates", tags=["Candidate Intelligence & Talent Scoring"])
 
-
-from pydantic import BaseModel
-
-class ProfileUpdateRequest(BaseModel):
-    full_name: str | None = None
-    headline: str | None = None
-    location: str | None = None
-    college: str | None = None
-    degree: str | None = None
 
 class FactCheckFailed(Exception):
     def __init__(self, document: GeneratedDocument) -> None:
@@ -801,20 +793,29 @@ async def publish_portfolio(
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> CandidateProfile:
-    username = body.username.strip().lower()
-    if not _USERNAME_PATTERN.match(username) or username in _RESERVED_USERNAMES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_username")
-
     profile = await _get_or_create_profile(db, user)
-    existing = await db.execute(
-        select(CandidateProfile).where(
-            CandidateProfile.username == username, CandidateProfile.id != profile.id
-        )
-    )
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
 
-    profile.username = username
+    # If a new username was supplied, validate and set it.
+    # If not supplied (just toggling publish), the existing profile.username is reused.
+    if body.username is not None:
+        username = body.username.strip().lower()
+        if not _USERNAME_PATTERN.match(username) or username in _RESERVED_USERNAMES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_username")
+        existing = await db.execute(
+            select(CandidateProfile).where(
+                CandidateProfile.username == username, CandidateProfile.id != profile.id
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
+        profile.username = username
+    elif not profile.username:
+        # Can't publish without a username — candidate must set one first.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="username_required: set a username before publishing your portfolio",
+        )
+
     profile.portfolio_published = True
     await db.commit()
     await db.refresh(profile)

@@ -48,7 +48,7 @@ export async function fetchMe(token: string): Promise<MeResponse> {
 
 export async function completeOnboarding(
   token: string,
-  input: { role: Role; full_name?: string },
+  input: { role: Role; full_name?: string; username?: string },
 ): Promise<UserProfile> {
   const res = await fetch(`${API_URL}/users/onboarding`, {
     method: "POST",
@@ -59,7 +59,9 @@ export async function completeOnboarding(
     body: JSON.stringify(input),
   });
   if (!res.ok) {
-    throw new Error(`POST /users/onboarding failed: ${res.status}`);
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`POST /users/onboarding failed: ${detail}`);
   }
   return res.json();
 }
@@ -290,7 +292,11 @@ export async function uploadResume(
     headers: authHeaders(token),
     body: formData,
   });
-  if (!res.ok) throw new Error(`POST /candidates/me/ingest/resume failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`POST /candidates/me/ingest/resume failed: ${detail}`);
+  }
   return res.json();
 }
 
@@ -305,7 +311,11 @@ export async function uploadCertificate(
     headers: authHeaders(token),
     body: formData,
   });
-  if (!res.ok) throw new Error(`POST /candidates/me/ingest/certificate failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`POST /candidates/me/ingest/certificate failed: ${detail}`);
+  }
   return res.json();
 }
 
@@ -403,18 +413,24 @@ export async function fetchMyDocuments(token: string): Promise<GeneratedDocument
     headers: authHeaders(token),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`GET /candidates/me/documents failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`GET /candidates/me/documents failed: ${detail}`);
+  }
   return res.json();
 }
 
 export async function publishPortfolio(
   token: string,
-  username: string,
+  username?: string,
 ): Promise<CandidateProfileResponse> {
   const res = await fetch(`${API_URL}/candidates/me/portfolio/publish`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ username }),
+    // Send username only if supplied (first-time set from /profile/edit).
+    // Omit it when just toggling the switch — backend uses existing profile.username.
+    body: JSON.stringify(username ? { username } : {}),
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
@@ -429,7 +445,11 @@ export async function unpublishPortfolio(token: string): Promise<CandidateProfil
     method: "POST",
     headers: authHeaders(token),
   });
-  if (!res.ok) throw new Error(`POST /candidates/me/portfolio/unpublish failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`POST /candidates/me/portfolio/unpublish failed: ${detail}`);
+  }
   return res.json();
 }
 
@@ -467,7 +487,11 @@ export async function fetchPublicPortfolio(
     cache: "no-store",
   });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GET /public/candidates/${username} failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`GET /public/candidates/${username} failed: ${detail}`);
+  }
   return res.json();
 }
 
@@ -1329,7 +1353,11 @@ export function fetchTopPerformersFeed(token: string): Promise<{ entries: TopPer
 // no `Depends(require_role(...))` at all, so no Clerk token is needed or sent.
 async function publicHackathonJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`GET ${path} failed: ${detail}`);
+  }
   return res.json();
 }
 
@@ -1582,7 +1610,11 @@ export async function updateProfile(token: string, body: ProfileUpdateRequest): 
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`PATCH /candidates/me failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`PATCH /candidates/me failed: ${detail}`);
+  }
   return res.json();
 }
 

@@ -124,7 +124,9 @@ def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
     same conversation's previous turn, if any) is given as context so a follow-up like
     "now only show ones open to remote" is understood as a refinement, not a fresh query
     that drops the earlier location/skills filters."""
-    context = (
+    from services.agents.prompts_loader import load_prompt
+
+    prior_context = (
         f"\n\nThe recruiter's PREVIOUS filters in this conversation were: "
         f"{json.dumps(prior_filters)}. If this new message is a refinement/follow-up "
         f"(e.g. 'now only show remote ones', 'add Python too'), merge sensibly with the "
@@ -133,15 +135,11 @@ def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
         if prior_filters
         else ""
     )
-    prompt = (
-        "You are the Query Understanding Agent for a recruiter search tool. Convert the "
-        "recruiter's natural-language message below into structured search filters, "
-        "extracting ONLY what was actually stated or clearly implied. Do not invent "
-        "filter values, do not assume a location or skill wasn't mentioned just because "
-        "it's common, and do not fabricate a minimum talent score unless the recruiter "
-        "asked for quality/seniority in some form.\n\n"
-        f'RECRUITER MESSAGE: "{raw_query}"'
-        f"{context}"
+    prompt = load_prompt(
+        "recruitment",
+        "understand_query",
+        raw_query=raw_query,
+        prior_context=prior_context,
     )
     schema_description = (
         "Convert a recruiter's natural-language candidate search into structured search "
@@ -180,15 +178,13 @@ def rerank_candidates(raw_query: str, candidates: list[dict]) -> list[str]:
     caller — this function does not itself limit the input, cost-bounding is the
     caller's responsibility per doc 02 §2's "LLM only on the final shortlist" rule).
     Returns `candidate_id`s in best-fit-first order."""
-    prompt = (
-        "You are the Re-ranking Agent for a recruiter search tool. The recruiter searched "
-        f'for: "{raw_query}"\n\n'
-        "Below is a shortlist of candidates that already passed a cheap filter+embedding "
-        "retrieval step. Re-order them by genuine fit to the recruiter's actual intent — "
-        "weigh concrete, verifiable evidence (real repos, real hackathon results, verified "
-        "certs, Talent Score) over superficial keyword overlap. Do not add or remove any "
-        "candidate_id, only reorder.\n\n"
-        f"CANDIDATES (JSON):\n{json.dumps(candidates, default=str)}"
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "recruitment",
+        "rerank_candidates",
+        raw_query=raw_query,
+        candidates_json=json.dumps(candidates, default=str),
     )
     result = _call_structured(
         "reranked_candidates",
@@ -207,16 +203,13 @@ def explain_matches(raw_query: str, candidates: list[dict]) -> dict[str, str]:
     concrete evidence fields (repo names, stars, hackathon wins, talent score) the
     explanation is allowed to cite — the prompt explicitly forbids inventing anything not
     present in that evidence, mirroring Module 01's fact-check guardrail language."""
-    prompt = (
-        "You are the Explanation Agent for a recruiter search tool. The recruiter searched "
-        f'for: "{raw_query}"\n\n'
-        "For each candidate below, write exactly one short sentence explaining why they "
-        "matched, grounded ONLY in the evidence fields given (repo names, stars, commit "
-        "activity, hackathon results, verified certificates, Talent Score, skills). Never "
-        "invent an achievement, statistic, or skill that isn't present in the evidence — "
-        "if the evidence is thin, say something honest and brief rather than fabricating "
-        "detail.\n\n"
-        f"CANDIDATES WITH EVIDENCE (JSON):\n{json.dumps(candidates, default=str)}"
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "recruitment",
+        "explain_matches",
+        raw_query=raw_query,
+        candidates_json=json.dumps(candidates, default=str),
     )
     result = _call_structured(
         "match_explanations",

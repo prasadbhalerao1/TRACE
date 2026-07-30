@@ -1,19 +1,16 @@
 import { useUser } from "@clerk/nextjs";
-import { Braces, Building2, Code2, GraduationCap, Link2, Mail, MapPin, Pencil, RefreshCw } from "lucide-react";
+import { Braces, Building2, Code2, GraduationCap, Link2, Mail, MapPin, Pencil, RefreshCw, Copy, Check } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { CandidateProfileResponse } from "@/lib/api";
 
 interface ProfileSidebarProps {
   profile: CandidateProfileResponse;
   onTogglePublic: (published: boolean) => void | Promise<void>;
-  onClaimUsername: (username: string) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
   refreshBusy: boolean;
   refreshCooldownUntil: Date | null;
@@ -41,7 +38,6 @@ function useCountdown(target: Date | null): string | null {
 export function ProfileSidebar({
   profile,
   onTogglePublic,
-  onClaimUsername,
   onRefresh,
   refreshBusy,
   refreshCooldownUntil,
@@ -49,8 +45,20 @@ export function ProfileSidebar({
   const { user } = useUser();
   const countdown = useCountdown(refreshCooldownUntil);
   const education = profile.education?.[0] as { institution?: string; degree?: string } | undefined;
-  const [usernameInput, setUsernameInput] = useState("");
+  const [copied, setCopied] = useState(false);
   const github = profile.github_stats;
+
+  const portfolioUrl = profile.username
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/${profile.username}`
+    : null;
+
+  function handleCopy() {
+    if (!portfolioUrl) return;
+    navigator.clipboard.writeText(portfolioUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   return (
     <motion.div
@@ -194,24 +202,45 @@ export function ProfileSidebar({
           {/* Visibility & Refresh Operations */}
           <div className="space-y-4 pt-4 border-t border-zinc-100">
             {profile.username ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Public Profile</span>
-                <Switch checked={profile.portfolio_published} onCheckedChange={onTogglePublic} />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Claim profile link</span>
-                <div className="flex gap-2">
-                  <Input
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    placeholder="username"
-                    className="h-8 text-xs border-zinc-200 bg-zinc-50 text-zinc-900 placeholder:text-zinc-400 focus-visible:ring-indigo-500/20"
-                  />
-                  <Button size="sm" className="h-8 bg-zinc-900 hover:bg-zinc-800 text-white font-medium" disabled={!usernameInput.trim()} onClick={() => onClaimUsername(usernameInput.trim())}>
-                    Publish
-                  </Button>
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Public Profile</span>
+                  <Switch checked={profile.portfolio_published} onCheckedChange={onTogglePublic} />
                 </div>
+                {/* Unique portfolio link — always visible once username is claimed */}
+                <div className="space-y-1.5">
+                  <span className="text-xs text-zinc-400">Your portfolio link</span>
+                  <div className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5">
+                    <Link
+                      href={`/${profile.username}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 truncate text-xs font-mono text-indigo-600 hover:underline"
+                    >
+                      /{profile.username}
+                    </Link>
+                    <button
+                      onClick={handleCopy}
+                      className="shrink-0 rounded p-0.5 text-zinc-400 hover:text-zinc-700 transition-colors"
+                      title="Copy link"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Portfolio Link</span>
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  Set a username to get your unique public link.
+                </p>
+                <Link
+                  href="/profile/edit"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline transition-colors"
+                >
+                  <Pencil className="h-3 w-3" /> Set username in Profile
+                </Link>
               </div>
             )}
 

@@ -38,9 +38,9 @@ _INTENT_PARAMETERS = {
 
 
 def classify_intent(raw_request: str) -> dict:
-    from packages.prompts import render_prompt
+    from services.agents.prompts_loader import load_prompt
 
-    prompt = render_prompt("supervisor/classifier_v1.jinja2", query=raw_request)
+    prompt = load_prompt("supervisor", "classifier", query=raw_request)
     return generate_structured(
         schema_name="classified_intent",
         schema_description="Classify which platform module should handle this natural-language request.",

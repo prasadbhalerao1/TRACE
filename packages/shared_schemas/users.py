@@ -32,6 +32,9 @@ class MeResponse(BaseModel):
 class OnboardingRequest(BaseModel):
     role: Role
     full_name: str | None = None
+    # Candidate-only: claim a unique profile URL slug at signup.
+    # If omitted, the slug remains unset until the candidate sets it in /profile/edit.
+    username: str | None = None
 
 
 # --- Admin: user management + audit log (added alongside the admin routes in

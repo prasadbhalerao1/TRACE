@@ -68,11 +68,18 @@ def extract_resume_text(file_bytes: bytes, content_type: str) -> str:
 
 
 def extract_resume_fields(resume_text: str) -> dict:
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "candidate_intelligence",
+        "resume_extraction",
+        resume_text=resume_text,
+    )
     return generate_structured(
         schema_name="extracted_resume",
         schema_description="Structured fields extracted from a candidate resume.",
         parameters=RESUME_EXTRACTION_PARAMETERS,
-        prompt=f"Extract structured fields from this resume:\n\n{resume_text}",
+        prompt=prompt,
         is_fast=True,
         max_tokens=2048,
         agent_name="candidate_intelligence.resume_extraction",

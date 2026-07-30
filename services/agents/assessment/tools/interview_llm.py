@@ -72,16 +72,15 @@ _REPORT_PARAMETERS = {
 
 
 def generate_question(topic: str, candidate_profile_summary: str, transcript: list[dict]) -> str:
+    from services.agents.prompts_loader import load_prompt
+
     history = "\n".join(f"{t['role']}: {t['text']}" for t in transcript) or "(interview just starting)"
-    prompt = (
-        "You are the Question Agent for a technical AI interview. Ask ONE clear, "
-        f"specific interview question about the topic '{topic}'. Personalize it using "
-        "the candidate's own background where it makes the question sharper (e.g. ask "
-        "about a technology they've actually claimed to use), but do not fabricate "
-        "anything about their background beyond what's given below. Keep it to one "
-        "question, conversational tone, no preamble like 'Great, next let's discuss'.\n\n"
-        f"CANDIDATE BACKGROUND:\n{candidate_profile_summary}\n\n"
-        f"CONVERSATION SO FAR:\n{history}"
+    prompt = load_prompt(
+        "assessment",
+        "generate_question",
+        topic=topic,
+        candidate_profile_summary=candidate_profile_summary,
+        conversation_history=history,
     )
     result = generate_structured(
         schema_name="interview_question",
@@ -95,15 +94,14 @@ def generate_question(topic: str, candidate_profile_summary: str, transcript: li
 
 
 def evaluate_turn(topic: str, question: str, answer: str) -> dict:
-    prompt = (
-        "You are the Turn Evaluation Agent for a technical AI interview. Score the "
-        f"candidate's answer to a question about '{topic}' on a 0-100 rubric of "
-        "correctness/depth, decide whether it's 'weak' (deserves a follow-up probe) or "
-        "'sufficient' (move to the next topic), and note hedging language and answer "
-        "specificity — these are TEXT signals only (word choice, structure), never a "
-        "guess at tone, emotion, or vocal delivery, since this is a text transcript.\n\n"
-        f"QUESTION ASKED: {question}\n\n"
-        f"CANDIDATE'S ANSWER: {answer}"
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "assessment",
+        "evaluate_turn",
+        topic=topic,
+        question=question,
+        answer=answer,
     )
     return generate_structured(
         schema_name="turn_evaluation",
@@ -116,14 +114,14 @@ def evaluate_turn(topic: str, question: str, answer: str) -> dict:
 
 
 def generate_followup(topic: str, question: str, answer: str) -> str:
-    prompt = (
-        "You are the Follow-up Agent for a technical AI interview. The candidate's last "
-        f"answer about '{topic}' was judged weak (vague, evasive, or missing the core "
-        "of the question). Ask ONE targeted follow-up that directly probes the specific "
-        "gap in their answer — do not just repeat the original question, and do not "
-        "move to a new topic.\n\n"
-        f"ORIGINAL QUESTION: {question}\n\n"
-        f"CANDIDATE'S WEAK ANSWER: {answer}"
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "assessment",
+        "generate_followup",
+        topic=topic,
+        question=question,
+        answer=answer,
     )
     result = generate_structured(
         schema_name="followup_question",
@@ -137,18 +135,14 @@ def generate_followup(topic: str, question: str, answer: str) -> str:
 
 
 def generate_interview_report(transcript: list[dict], per_topic_scores: dict[str, float]) -> dict:
+    from services.agents.prompts_loader import load_prompt
+
     history = "\n".join(f"{t['role']}: {t['text']}" for t in transcript)
-    prompt = (
-        "You are the Interview Report Agent for a technical AI interview. Synthesize the "
-        "full transcript below into a final report. `communication_rating` and "
-        "`response_confidence_signal` must be derived ONLY from transcript text signals "
-        "(clarity, structure, hedging-language rate, specificity) — this platform "
-        "explicitly never uses voice biometrics or emotion inference, so do not imply "
-        "anything about tone, delivery, or nervousness. `hiring_recommendation` must be "
-        "2-4 sentences of advisory rationale a recruiter can read and disagree with — "
-        "never a bare pass/fail word.\n\n"
-        f"PER-TOPIC SCORES (0-100, from the Turn Evaluation Agent): {json.dumps(per_topic_scores)}\n\n"
-        f"FULL TRANSCRIPT:\n{history}"
+    prompt = load_prompt(
+        "assessment",
+        "interview_report",
+        per_topic_scores_json=json.dumps(per_topic_scores),
+        transcript_history=history,
     )
     return generate_structured(
         schema_name="interview_report",

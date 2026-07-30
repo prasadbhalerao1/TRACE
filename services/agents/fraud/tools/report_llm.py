@@ -51,9 +51,13 @@ def generate_fraud_risk_report(flag_type: str, evidence_items: list[str]) -> dic
     """Returns {summary, cited_evidence}. Falls back to a deterministic template (never
     raises) if the configured provider is unavailable — matches every other module's
     "typed unavailable, degrade gracefully, never fabricate OR block" pattern."""
-    prompt = (
-        f"{_GROUNDING_RULE}\n\nFLAG TYPE: {flag_type}\n\n"
-        f"EVIDENCE:\n{json.dumps(evidence_items, indent=2)}"
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "fraud",
+        "risk_report",
+        flag_type=flag_type,
+        evidence_json=json.dumps(evidence_items, indent=2),
     )
     try:
         return generate_structured(

@@ -71,11 +71,14 @@ def _sample_complexity(
 
 
 def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple[float | None, str | None]:
+    from services.agents.prompts_loader import load_prompt
+
     if not project_summaries:
         return None, None
-    prompt = (
-        "Rate the architecture and README quality of these projects (0-100), "
-        "grounded only in what's described, no speculation:\n\n" + "\n---\n".join(project_summaries)
+    prompt = load_prompt(
+        "candidate_intelligence",
+        "judgment_scores",
+        project_summaries="\n---\n".join(project_summaries),
     )
     try:
         result = generate_structured(

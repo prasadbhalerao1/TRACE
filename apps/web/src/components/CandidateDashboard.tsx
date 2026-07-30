@@ -97,22 +97,11 @@ export function CandidateDashboard() {
     const token = await getToken();
     if (!token) return;
     try {
-      const updated = published ? await publishPortfolio(token, profile.username!) : await unpublishPortfolio(token);
+      const updated = published ? await publishPortfolio(token) : await unpublishPortfolio(token);
       setProfile(updated);
     } catch {
       // Surfaced via the sidebar's own error state on next render would require another
       // resource; a toast would be the natural upgrade here if this proves confusing.
-    }
-  }
-
-  async function handleClaimUsername(username: string) {
-    const token = await getToken();
-    if (!token) return;
-    try {
-      const updated = await publishPortfolio(token, username);
-      setProfile(updated);
-    } catch {
-      // See handleTogglePublic.
     }
   }
 
@@ -163,7 +152,6 @@ export function CandidateDashboard() {
         <ProfileSidebar
           profile={profile}
           onTogglePublic={handleTogglePublic}
-          onClaimUsername={handleClaimUsername}
           onRefresh={handleRefresh}
           refreshBusy={refreshBusy}
           refreshCooldownUntil={refreshCooldownUntil}

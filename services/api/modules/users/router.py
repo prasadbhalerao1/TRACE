@@ -3,13 +3,15 @@ User Controller & Authentication Endpoints.
 Handles user identity resolution (/me) and post-Clerk onboarding.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.db.models import User
+from packages.db.models import CandidateProfile, User
 from packages.shared_schemas.users import MeResponse, OnboardingRequest, UserProfile
 from services.api.core.clerk_client import fetch_clerk_user, full_name, primary_email
 from services.api.core.db import get_db
 from services.api.core.rbac import AuthContext, get_auth_context
+from services.api.modules.candidates.router import _RESERVED_USERNAMES, _USERNAME_PATTERN
 
 router = APIRouter(tags=["User Authentication & Onboarding"])
 
@@ -44,6 +46,22 @@ async def onboard(
         auth_provider_id=ctx.clerk_user_id,
     )
     db.add(user)
+    await db.flush()  # get user.id without committing yet
+
+    # For candidates: eagerly create their CandidateProfile and optionally set the
+    # username slug if they provided one. This means the dashboard's publish toggle
+    # never needs to re-ask for a username — it's already there from signup.
+    if payload.role.value == "candidate" and payload.username:
+        username = payload.username.strip().lower()
+        if not _USERNAME_PATTERN.match(username) or username in _RESERVED_USERNAMES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_username")
+        existing = await db.execute(
+            select(CandidateProfile).where(CandidateProfile.username == username)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
+        db.add(CandidateProfile(user_id=user.id, username=username))
+
     await db.commit()
     await db.refresh(user)
     return UserProfile.model_validate(user)

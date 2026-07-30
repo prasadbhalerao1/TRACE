@@ -47,15 +47,14 @@ def fact_check_claims(
     Never returns 'passed' by assumption when the check itself couldn't run — raises
     instead, so callers can't accidentally treat an unavailable check as a pass.
     """
-    prompt = (
-        "You are a strict fact-checker. Extract every distinct factual claim "
-        "(employer, job title, dates, metrics, degree, skill, project outcome, etc.) "
-        f"from this generated {document_type.replace('_', ' ')}, then mark each claim "
-        "supported=true only if it is directly backed by the CANDIDATE PROFILE JSON. "
-        "Mark supported=false for anything invented, exaggerated, or not present in "
-        "the profile.\n\n"
-        f"CANDIDATE PROFILE JSON:\n{json.dumps(merged_profile, default=str)}\n\n"
-        f"GENERATED DOCUMENT JSON:\n{json.dumps(generated_content, default=str)}"
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "candidate_intelligence",
+        "fact_check",
+        document_type=document_type.replace("_", " "),
+        merged_profile_json=json.dumps(merged_profile, default=str),
+        generated_content_json=json.dumps(generated_content, default=str),
     )
     result = generate_structured(
         schema_name="fact_check_result",
