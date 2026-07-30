@@ -20,12 +20,16 @@ export default function Home() {
           Verifiable talent identities, multi-factor LLM candidate matching, automated pitch deck evaluation, and browser-native AI interview verification.
         </p>
         <div className="flex flex-wrap justify-center gap-4 pt-4">
-          <Button render={<Link href="/sign-in" />} size="lg" className="px-8">
-            Get Started / Sign In
-          </Button>
-          <Button variant="outline" render={<Link href="/dashboard" />} size="lg" className="px-8">
-            Role Dashboard
-          </Button>
+          <Link href="/sign-in">
+            <Button size="lg" className="px-8 cursor-pointer">
+              Get Started / Sign In
+            </Button>
+          </Link>
+          <Link href="/dashboard">
+            <Button variant="outline" size="lg" className="px-8 cursor-pointer">
+              Role Dashboard
+            </Button>
+          </Link>
         </div>
       </section>
 
@@ -50,15 +54,21 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button render={<Link href="/profile/edit" />} variant="outline" size="sm" className="w-full justify-start">
-                Profile & Ingestion
-              </Button>
-              <Button render={<Link href="/career" />} variant="outline" size="sm" className="w-full justify-start">
-                AI Career Guidance
-              </Button>
-              <Button render={<Link href="/jobs" />} variant="outline" size="sm" className="w-full justify-start">
-                Browse & Apply Jobs
-              </Button>
+              <Link href="/profile/edit" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Profile & Ingestion
+                </Button>
+              </Link>
+              <Link href="/career" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  AI Career Guidance
+                </Button>
+              </Link>
+              <Link href="/jobs" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Browse & Apply Jobs
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -75,15 +85,21 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button render={<Link href="/job-postings" />} variant="outline" size="sm" className="w-full justify-start">
-                Job Postings & Match Rerank
-              </Button>
-              <Button render={<Link href="/copilot" />} variant="outline" size="sm" className="w-full justify-start">
-                Recruiter Copilot Assistant
-              </Button>
-              <Button render={<Link href="/top-performers" />} variant="outline" size="sm" className="w-full justify-start">
-                Top Performers Feed
-              </Button>
+              <Link href="/job-postings" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Job Postings & Match Rerank
+                </Button>
+              </Link>
+              <Link href="/copilot" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Recruiter Copilot Assistant
+                </Button>
+              </Link>
+              <Link href="/top-performers" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Top Performers Feed
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -100,12 +116,16 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button render={<Link href="/organizer/hackathons/new" />} variant="outline" size="sm" className="w-full justify-start">
-                Create New Hackathon
-              </Button>
-              <Button render={<Link href="/organizer/hackathons/sample-id/manage" />} variant="outline" size="sm" className="w-full justify-start">
-                Roster Import & Team Manage
-              </Button>
+              <Link href="/organizer/hackathons/new" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Create New Hackathon
+                </Button>
+              </Link>
+              <Link href="/organizer/hackathons/sample-id/manage" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Roster Import & Team Manage
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -122,9 +142,11 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button render={<Link href="/evaluations" />} variant="outline" size="sm" className="w-full justify-start">
-                Evaluation Queue
-              </Button>
+              <Link href="/evaluations" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Evaluation Queue
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -141,15 +163,21 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button render={<Link href="/users" />} variant="outline" size="sm" className="w-full justify-start">
-                User Directory & Role Assignment
-              </Button>
-              <Button render={<Link href="/audit-log" />} variant="outline" size="sm" className="w-full justify-start">
-                Audit Log Viewer
-              </Button>
-              <Button render={<Link href="/fraud-review" />} variant="outline" size="sm" className="w-full justify-start">
-                Trust & Fraud Queue
-              </Button>
+              <Link href="/users" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  User Directory & Role Assignment
+                </Button>
+              </Link>
+              <Link href="/audit-log" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Audit Log Viewer
+                </Button>
+              </Link>
+              <Link href="/fraud-review" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Trust & Fraud Queue
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -166,12 +194,16 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button render={<Link href="/pitch-deck" />} variant="outline" size="sm" className="w-full justify-start">
-                Pitch Deck Analyzer
-              </Button>
-              <Button render={<Link href="/analytics" />} variant="outline" size="sm" className="w-full justify-start">
-                Recruitment Analytics
-              </Button>
+              <Link href="/pitch-deck" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Pitch Deck Analyzer
+                </Button>
+              </Link>
+              <Link href="/analytics" className="block w-full">
+                <Button variant="outline" size="sm" className="w-full justify-start cursor-pointer">
+                  Recruitment Analytics
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>
