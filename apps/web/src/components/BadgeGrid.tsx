@@ -14,7 +14,12 @@ export function BadgeGrid({ badges }: { badges: BadgeResponse[] }) {
   return (
     <div className="flex flex-wrap gap-2">
       {badges.map((badge) => (
-        <Badge key={badge.id} variant="secondary" title={badge.corroboration_sources.join(", ")}>
+        <Badge
+          key={badge.id}
+          variant="secondary"
+          className="border border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-all font-semibold px-2.5 py-1 text-xs select-none capitalize"
+          title={`Corroborated by: ${badge.corroboration_sources.join(", ")}`}
+        >
           {badge.skill_name}
         </Badge>
       ))}

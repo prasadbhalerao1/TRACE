@@ -22,15 +22,15 @@ export function ScoreRadarChart({ subScores }: { subScores: Record<string, SubSc
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={data}>
-          <PolarGrid />
-          <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11 }} />
-          <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+          <PolarGrid stroke="#e4e4e7" />
+          <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: "#3f3f46", fontWeight: 500 }} />
+          <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 9, fill: "#71717a" }} axisLine={false} />
           <Radar
             name="Talent Score"
             dataKey="value"
-            stroke="var(--color-primary)"
-            fill="var(--color-primary)"
-            fillOpacity={0.35}
+            stroke="#6366f1"
+            fill="#6366f1"
+            fillOpacity={0.15}
           />
         </RadarChart>
       </ResponsiveContainer>

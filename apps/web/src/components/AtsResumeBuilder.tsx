@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -815,7 +815,7 @@ function CreativeTemplate({ data }: { data: ResumeData }) {
     <div className="space-y-3.5 text-[11px] text-emerald-400 bg-zinc-950 p-6 rounded font-mono border border-emerald-500/30">
       <div className="border-b border-emerald-500/30 pb-2">
         <div className="text-base font-bold text-emerald-300">$ whoami</div>
-        <div className="text-emerald-100 font-bold">{data.fullName} // {data.roleTitle}</div>
+        <div className="text-emerald-100 font-bold">{data.fullName} {"//"} {data.roleTitle}</div>
         <div className="text-zinc-400 text-[10px]">{data.email} | {data.github} | {data.linkedin}</div>
       </div>
 

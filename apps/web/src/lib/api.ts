@@ -30,7 +30,7 @@ export async function fetchMe(token: string): Promise<MeResponse> {
       throw new Error(`GET /me failed: ${res.status}`);
     }
     return res.json();
-  } catch (_err) {
+  } catch {
     // Quietly serve demo candidate profile when backend API is offline
     return {
       onboarding_required: false,
@@ -90,10 +90,46 @@ export interface TalentScoreResponse {
   computed_at: string;
 }
 
+// --- Development Stats (GitHub) / Problem Solving Stats (LeetCode) — Codolio-style split.
+
+export interface GithubStats {
+  total_contributions: number;
+  current_streak: number;
+  longest_streak: number;
+  active_days: number;
+  bio: string | null;
+  company: string | null;
+  website_url: string | null;
+  account_created_at?: string | null;
+  followers: number;
+  following: number;
+  public_repos: number;
+  owned_repo_count?: number;
+  external_contributions?: number;
+  pr_review_count?: number;
+  commit_activity_weekly?: number[];
+  days: { date: string; count: number }[];
+}
+
+export interface LeetcodeStats {
+  total_solved: number;
+  easy_solved: number;
+  medium_solved: number;
+  hard_solved: number;
+  ranking: number | null;
+  current_streak: number;
+  total_active_days: number;
+  submission_calendar: Record<string, number>;
+  contest_history: { title: string; rating: number; ranking: number; start_time: number }[];
+  latest_rating: number | null;
+}
+
 export interface CandidateProfileResponse {
   id: string;
   user_id: string;
+  full_name: string | null;
   github_username: string | null;
+  leetcode_username: string | null;
   headline: string | null;
   location: string | null;
   skills: { name: string; source?: string; confidence?: number }[] | null;
@@ -102,6 +138,9 @@ export interface CandidateProfileResponse {
   merged_conflicts: { description: string; resolved: boolean }[] | null;
   username: string | null;
   portfolio_published: boolean;
+  github_stats: GithubStats | null;
+  leetcode_stats: LeetcodeStats | null;
+  stats_refreshed_at: string | null;
   updated_at: string;
 }
 
@@ -112,11 +151,37 @@ export interface BadgeResponse {
   awarded_at: string;
 }
 
+export interface GithubProjectSummary {
+  repo_full_name: string;
+  stars: number | null;
+  forks: number | null;
+  languages: Record<string, number> | null;
+  topics: string[] | null;
+  pushed_at: string | null;
+  description: string | null;
+  commit_count?: number | null;
+  pr_count?: number | null;
+  issue_count?: number | null;
+}
+
+export interface GithubSummary {
+  total_stars: number;
+  total_commits: number;
+  total_prs: number;
+  total_issues: number;
+  total_forks: number;
+  owned_repo_count: number;
+  external_contributions: number;
+  pr_review_count: number;
+  projects: GithubProjectSummary[];
+}
+
 export interface DashboardResponse {
   profile: CandidateProfileResponse;
   latest_score: TalentScoreResponse | null;
   score_history: TalentScoreResponse[];
   badges: BadgeResponse[];
+  github_summary: GithubSummary;
 }
 
 function authHeaders(token: string): HeadersInit {
@@ -129,6 +194,41 @@ export async function fetchDashboard(token: string): Promise<DashboardResponse> 
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`GET /candidates/me/dashboard failed: ${res.status}`);
+  return res.json();
+}
+
+// Independent per-section fetches — used instead of fetchDashboard by CandidateDashboard
+// so one section failing (e.g. Talent Score) doesn't blank the whole page; each section
+// gets its own loading/error/retry state. See services/api/modules/candidates/router.py's
+// `/me/github-summary` and `/me/badges` (split out from `/me/dashboard` for this reason).
+
+export async function fetchMyProfile(token: string): Promise<CandidateProfileResponse> {
+  const res = await fetch(`${API_URL}/candidates/me`, { headers: authHeaders(token), cache: "no-store" });
+  if (!res.ok) throw new Error(`GET /candidates/me failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchGithubSummary(token: string): Promise<GithubSummary> {
+  const res = await fetch(`${API_URL}/candidates/me/github-summary`, { headers: authHeaders(token), cache: "no-store" });
+  if (!res.ok) throw new Error(`GET /candidates/me/github-summary failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMyLatestScore(token: string): Promise<TalentScoreResponse | null> {
+  const res = await fetch(`${API_URL}/candidates/me/score`, { headers: authHeaders(token), cache: "no-store" });
+  if (!res.ok) throw new Error(`GET /candidates/me/score failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMyScoreHistory(token: string): Promise<TalentScoreResponse[]> {
+  const res = await fetch(`${API_URL}/candidates/me/score/history`, { headers: authHeaders(token), cache: "no-store" });
+  if (!res.ok) throw new Error(`GET /candidates/me/score/history failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMyBadges(token: string): Promise<BadgeResponse[]> {
+  const res = await fetch(`${API_URL}/candidates/me/badges`, { headers: authHeaders(token), cache: "no-store" });
+  if (!res.ok) throw new Error(`GET /candidates/me/badges failed: ${res.status}`);
   return res.json();
 }
 
@@ -147,6 +247,36 @@ export async function fetchGithubOAuthUrl(token: string): Promise<string> {
   if (!res.ok) throw new Error(`GET /candidates/github/oauth-url failed: ${res.status}`);
   const data = await res.json();
   return data.authorize_url;
+}
+
+export async function connectLeetcode(
+  token: string,
+  leetcodeUsername: string,
+): Promise<CandidateProfileResponse> {
+  const res = await fetch(`${API_URL}/candidates/me/leetcode`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ leetcode_username: leetcodeUsername }),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`POST /candidates/me/leetcode failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export async function refreshStats(token: string): Promise<CandidateProfileResponse> {
+  const res = await fetch(`${API_URL}/candidates/me/stats/refresh`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = payload?.detail?.retry_at ? `on cooldown until ${payload.detail.retry_at}` : `status ${res.status}`;
+    throw new Error(`POST /candidates/me/stats/refresh failed: ${detail}`);
+  }
+  return res.json();
 }
 
 export async function uploadResume(
@@ -308,12 +438,7 @@ export async function unpublishPortfolio(token: string): Promise<CandidateProfil
 // see doc 00 §2.1's SSR carve-out) rather than defaulting to NEXT_PUBLIC_API_URL, since
 // this function has no business running in the browser.
 
-export interface PublicPortfolioProject {
-  repo_full_name: string;
-  stars: number | null;
-  forks: number | null;
-  languages: Record<string, unknown> | null;
-}
+export type PublicPortfolioProject = GithubProjectSummary;
 
 export interface PublicPortfolioResponse {
   username: string;
@@ -325,6 +450,12 @@ export interface PublicPortfolioResponse {
   projects: PublicPortfolioProject[];
   badges: BadgeResponse[];
   overall_score: number | null;
+  github_username: string | null;
+  leetcode_username: string | null;
+  github_stats: GithubStats | null;
+  github_summary: GithubSummary;
+  leetcode_stats: LeetcodeStats | null;
+  stats_refreshed_at: string | null;
   updated_at: string;
 }
 
@@ -1433,3 +1564,25 @@ export function updateUserRole(token: string, userId: string, role: Role): Promi
 export function fetchAuditLog(token: string, limit = 100): Promise<AuditLogEntry[]> {
   return adminJson(`/admin/audit-log?limit=${limit}`, token);
 }
+
+export interface ProfileUpdateRequest {
+  full_name?: string | null;
+  headline?: string | null;
+  location?: string | null;
+  college?: string | null;
+  degree?: string | null;
+}
+
+export async function updateProfile(token: string, body: ProfileUpdateRequest): Promise<CandidateProfileResponse> {
+  const res = await fetch(`${API_URL}/candidates/me`, {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(token),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`PATCH /candidates/me failed: ${res.status}`);
+  return res.json();
+}
+
