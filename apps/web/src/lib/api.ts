@@ -1360,3 +1360,203 @@ export function assignAssessment(
     }),
   });
 }
+
+// --- Admin: user management + audit log ---
+
+export interface AdminUserResponse {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: Role;
+  organization_id: string | null;
+  is_active: boolean;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actor_user_id: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  created_at: string;
+}
+
+async function adminJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export function fetchAdminUsers(token: string): Promise<AdminUserResponse[]> {
+  return adminJson(`/admin/users`, token);
+}
+
+export function updateUserRole(token: string, userId: string, role: Role): Promise<AdminUserResponse> {
+  return adminJson(`/admin/users/${userId}/role`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function fetchAuditLog(token: string, limit = 100): Promise<AuditLogEntry[]> {
+  return adminJson(`/admin/audit-log?limit=${limit}`, token);
+}
+
+
+export type FraudFlagStatus = "raised" | "under_review" | "upheld" | "dismissed";
+
+export interface FraudFlagResponse {
+  id: string;
+  subject_type: string;
+  subject_id: string;
+  candidate_id: string | null;
+  flag_type: string;
+  status: FraudFlagStatus;
+  evidence: Record<string, unknown>;
+  raised_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+}
+
+export interface VerificationSignalResponse {
+  signal_type: string;
+  score: number | null;
+  confidence_label: "low" | "medium" | "high";
+  evidence: string | string[];
+}
+
+export interface VerificationCheckResponse {
+  subject_type: string;
+  subject_id: string;
+  signals: VerificationSignalResponse[];
+  flag: FraudFlagResponse | null;
+}
+
+export interface AuthenticityScoreResponse {
+  candidate_id: string;
+  score: number;
+  components: {
+    starting_score: number;
+    penalties_applied: { flag_id: string; flag_type: string; penalty: number }[];
+    total_penalty: number;
+  } | null;
+  computed_at: string;
+}
+
+export interface DisputeResponse {
+  id: string;
+  fraud_flag_id: string;
+  candidate_id: string;
+  candidate_statement: string | null;
+  supporting_files: string[] | null;
+  submitted_at: string;
+}
+
+export interface DisputeReviewAssist {
+  available: boolean;
+  candidate_context_summary: string | null;
+  points_of_agreement_or_conflict: string[];
+}
+
+export interface FraudFlagDetailResponse {
+  flag: FraudFlagResponse;
+  dispute: DisputeResponse | null;
+  dispute_review_assist: DisputeReviewAssist;
+}
+
+export interface FraudReviewQueueEntry {
+  flag: FraudFlagResponse;
+  candidate_headline: string | null;
+  candidate_github_username: string | null;
+  has_dispute: boolean;
+}
+
+// FR-6 — "corroboration strength," never a guilt score.
+export function fetchAuthenticityScore(token: string, candidateId: string): Promise<AuthenticityScoreResponse> {
+  return fraudJson(`/candidates/${candidateId}/authenticity-score`, token);
+}
+
+// FR-8 — candidate-visible view of flags raised against their own profile.
+export function fetchCandidateFlags(token: string, candidateId: string): Promise<FraudFlagResponse[]> {
+  return fraudJson(`/candidates/${candidateId}/flags`, token);
+}
+
+export function submitFlagDispute(
+  token: string,
+  flagId: string,
+  body: { candidate_statement: string; supporting_files?: string[] },
+): Promise<DisputeResponse> {
+  return fraudJson(`/flags/${flagId}/dispute`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Admin/recruiter review queue + actions.
+export function fetchFraudReviewQueue(token: string): Promise<FraudReviewQueueEntry[]> {
+  return fraudJson(`/admin/fraud-review-queue`, token);
+}
+
+export function fetchFraudFlagDetail(token: string, flagId: string): Promise<FraudFlagDetailResponse> {
+  return fraudJson(`/flags/${flagId}`, token);
+}
+
+export function reviewFraudFlag(
+  token: string,
+  flagId: string,
+  body: { status: "upheld" | "dismissed"; review_notes?: string | null },
+): Promise<FraudFlagResponse> {
+  return fraudJson(`/flags/${flagId}/review`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Verification-check triggers (FR-1/FR-2/FR-3/FR-4/FR-5) — admin/recruiter-initiated,
+// since this codebase has no async job queue (every module invokes its LangGraph
+// synchronously from the router, per `.agents/decisions.md`).
+export function checkCertificate(token: string, certificationId: string): Promise<VerificationCheckResponse> {
+  return fraudJson(`/verification/certificates/${certificationId}/check`, token, { method: "POST" });
+}
+
+export function checkSubmission(token: string, submissionId: string): Promise<VerificationCheckResponse> {
+  return fraudJson(`/verification/submissions/${submissionId}/check`, token, { method: "POST" });
+}
+
+export function checkProfileDuplicate(token: string, candidateId: string): Promise<VerificationCheckResponse> {
+  return fraudJson(`/verification/profiles/${candidateId}/duplicate-check`, token, { method: "POST" });
+}
+
+// --- Recruiter pipeline enhancements (QA fix: Recruiter #1/#3/#4) ---
+// assignAssessment mirrors Track 1's createAssessment contract exactly (POST /assessments
+// accepting job_id/candidate_id/type/spec) -- kept minimal here since this file will be
+// reconciled with Track 1's fuller api.ts additions at merge time; not meant to duplicate
+// long-term, just lets the KanbanBoard "Assign Assessment" button compile and work now.
+export function assignAssessment(
+  token: string,
+  body: { jobId: string; candidateId: string; type: "coding" | "mcq" | "project_analysis"; spec: Record<string, unknown> },
+): Promise<{ id: string }> {
+  return recruitmentJson(`/assessments`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      job_id: body.jobId,
+      candidate_id: body.candidateId,
+      type: body.type,
+      spec: body.spec,
+    }),
+  });
+}
+

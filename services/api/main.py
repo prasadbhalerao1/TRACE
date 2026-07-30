@@ -10,6 +10,7 @@ from services.api.core.config import get_settings
 from services.api.core.event_consumer import run_polling_loop
 from services.api.core.rate_limit import RateLimitMiddleware
 from services.api.routers import (
+    admin,
     assessments,
     candidates,
     fraud,
@@ -61,6 +62,7 @@ app.include_router(assessments.router)
 app.include_router(hackathons.router)
 app.include_router(fraud.router)
 app.include_router(supervisor.router)
+app.include_router(admin.router)
 
 
 @app.exception_handler(Exception)
