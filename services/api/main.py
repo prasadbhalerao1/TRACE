@@ -65,19 +65,29 @@ app.include_router(supervisor.router)
 app.include_router(admin.router)
 
 
+from services.api.core.llm import LLMUnavailable
+
+
+@app.exception_handler(LLMUnavailable)
+async def llm_unavailable_handler(request: Request, exc: LLMUnavailable) -> JSONResponse:
+    logger.warning("LLM Unavailable on %s %s: %s", request.method, request.url.path, str(exc))
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": f"AI Engine Temporarily Unavailable: {str(exc)}",
+            "code": "LLM_UNAVAILABLE",
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    # Registering a handler for the base Exception keeps this inside Starlette's
-    # ExceptionMiddleware (which runs under CORSMiddleware), instead of letting it
-    # propagate to ServerErrorMiddleware (which runs outside CORSMiddleware and so
-    # sends back a response with no CORS headers — the browser then misreports a
-    # real 500 as a CORS failure, as happened with the Module 01 dashboard bug).
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
-    # Sentry pairs with this handler (Platform Hardening track, 2026-07-30): capture_exception
-    # is itself a no-op when sentry_sdk.init() was never called above (SENTRY_DSN empty),
-    # so this is safe to call unconditionally.
     sentry_sdk.capture_exception(exc)
-    return JSONResponse(status_code=500, content={"detail": "internal_server_error"})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error occurred. Please try again or check server logs."},
+    )
 
 
 @app.on_event("startup")
