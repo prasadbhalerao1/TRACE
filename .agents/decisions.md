@@ -850,3 +850,46 @@ throwaway rows after. `python -c "import services.api.main"` clean. `tsc --noEmi
 → `services/api/core/event_consumer.py`, `services/api/routers/hackathons.py`,
 `packages/shared_schemas/hackathon.py`, `services/api/main.py`,
 `apps/web/src/app/(recruiter)/top-performers/page.tsx`, `apps/web/src/lib/api.ts`
+
+---
+
+## 2026-07-30 — QA fix, Track 3: Recruiter navigation + fraud visibility + assign-assessment
+
+**Fraud visibility** (`Recruiter #4`): `fraud_flag_status` added to
+`ApplicationWithCandidateResponse`/`MatchScoreWithCandidateResponse`, populated by a read-only
+query against Module 06's `fraud_flags` table, collapsed to the single most-severe
+non-dismissed status per candidate (`upheld` > `under_review` > `raised`; `dismissed` flags are
+never shown at all). Never writes to `fraud_flags`; never affects application
+ranking/sort/filtering anywhere — purely a display badge on the kanban card, matching doc 06's
+explicit "decision stays mine" framing.
+
+**Report links** (`Recruiter #3`): `latest_submission_id`/`latest_interview_session_id`/
+`latest_contribution_repo_full_name` added to `ApplicationWithCandidateResponse`, each the
+candidate's most recent row of that type (read-only against Module 03's tables). The kanban
+card links to whichever is non-null, in that priority order (submission → interview →
+contribution) — a candidate can have more than one report type; this just picks the most
+recently available reachable one rather than showing three separate links.
+
+**Navigation**: new `apps/web/src/app/(recruiter)/jobs/page.tsx` job list page (uses the
+existing recruiter-scoped `GET /jobs`); `jobs/new`'s success state and `jobs/[id]/matches` both
+gained a "View Pipeline" link; `(recruiter)/layout.tsx`'s hardcoded fake `sample-job`/
+`sample-submission`/`sample-interview`/`sample-repo` sidebar links replaced with the real job
+list link (reports are now reached via kanban cards per the point above, not a generic sidebar
+link to nowhere).
+
+**Assign-assessment button**: `KanbanBoard.tsx`'s `CandidateCard` gained a small modal calling
+`POST /assessments` with `{job_id, candidate_id, type, spec}` — **this exact shape is Track 1's
+confirmed contract**, documented in this same file's Track 1 entry (dated the same day). A
+minimal `assignAssessment` client function was added to this worktree's `api.ts` matching that
+contract; expect this to be reconciled/merged with Track 1's fuller `createAssessment` addition
+at merge time rather than kept as a separate duplicate function long-term.
+
+**Verified**: Python syntax-checked clean (`ast.parse` on `recruitment.py`/
+`shared_schemas/recruitment.py`); all frontend changes read carefully for correctness — no
+live-DB run or `tsc`/`eslint`/`next build` performed in this pass (no `node_modules` installed
+in this worktree; deferred to the consolidated post-merge verification pass covering all
+QA-fix tracks together, run once against `main`'s checkout after merge).
+→ `packages/shared_schemas/recruitment.py`, `services/api/routers/recruitment.py`,
+`apps/web/src/app/(recruiter)/jobs/page.tsx`, `apps/web/src/app/(recruiter)/jobs/new/page.tsx`,
+`apps/web/src/app/(recruiter)/jobs/[id]/matches/page.tsx`, `apps/web/src/app/(recruiter)/layout.tsx`,
+`apps/web/src/components/KanbanBoard.tsx`, `apps/web/src/lib/api.ts`
