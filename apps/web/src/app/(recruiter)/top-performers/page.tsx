@@ -47,7 +47,10 @@ export default function RecruiterTopPerformersPage() {
               <p className="text-sm text-slate">No finalized hackathon rankings yet.</p>
             )}
             {entries.map((p, idx) => (
-              <Card key={`${p.team_id}-${p.candidate_id ?? idx}`} className="hover:border-primary transition-all">
+              <Card
+                key={`${p.team_id}-${p.candidate_id ?? idx}`}
+                className={`hover:border-primary transition-all ${p.matched_watchlist ? "border-primary" : ""}`}
+              >
                 <CardHeader className="flex flex-row justify-between items-start gap-4 pb-2">
                   <div>
                     <CardTitle className="text-base font-semibold">
@@ -55,14 +58,26 @@ export default function RecruiterTopPerformersPage() {
                     </CardTitle>
                     <CardDescription>{p.hackathon_name}</CardDescription>
                   </div>
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                    Score: {p.composite_score.toFixed(1)}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                      Score: {p.composite_score.toFixed(1)}
+                    </Badge>
+                    {p.matched_watchlist && (
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+                        Watchlist match
+                      </Badge>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-slate">
                   <p><span className="font-medium text-ink dark:text-zinc-50">Team:</span> {p.team_name}</p>
                   {p.candidate_headline && (
                     <p><span className="font-medium text-ink dark:text-zinc-50">Headline:</span> {p.candidate_headline}</p>
+                  )}
+                  {p.matched_watchlist && p.match_reasons.length > 0 && (
+                    <p className="text-primary">
+                      <span className="font-medium">Matched on:</span> {p.match_reasons.join(", ")}
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -77,7 +92,7 @@ export default function RecruiterTopPerformersPage() {
             </CardHeader>
             <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
               <p>Top performers feed is compiled automatically after a hackathon organizer finalizes rankings (`hackathon.rankings.finalized` event).</p>
-              <p>Matching against your specific watchlist criteria is a Phase 2 integration — this feed currently shows every recent top-3 finisher.</p>
+              <p>Entries matching your saved watchlist criteria (track, minimum rank, skills) are highlighted and sorted first. Every recent top-3 finisher still shows below, even without a match, so the feed is never empty.</p>
             </CardContent>
           </Card>
         </div>

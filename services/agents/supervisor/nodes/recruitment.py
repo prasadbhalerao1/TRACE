@@ -10,6 +10,7 @@ see `graph.py`'s module docstring for why.
 
 import uuid
 
+from langchain_core.runnables import RunnableConfig
 from sqlalchemy import select
 
 from packages.db.models import Job
@@ -18,7 +19,7 @@ from services.agents.supervisor.state import SupervisorState
 from services.api.routers.recruitment import _run_matching_and_persist
 
 
-async def run(state: SupervisorState, config: dict) -> dict:
+async def run(state: SupervisorState, config: RunnableConfig) -> dict:
     db = config["configurable"]["db"]
     job_id = state.get("job_id")
     if not job_id:

@@ -11,6 +11,7 @@ why.
 
 import uuid
 
+from langchain_core.runnables import RunnableConfig
 from sqlalchemy import select
 
 from packages.db.models import TalentScore
@@ -18,7 +19,7 @@ from services.agents.supervisor.state import SupervisorState
 from services.api.routers.candidates import _to_score_response
 
 
-async def run(state: SupervisorState, config: dict) -> dict:
+async def run(state: SupervisorState, config: RunnableConfig) -> dict:
     db = config["configurable"]["db"]
     candidate_id = state.get("candidate_id")
     if not candidate_id:
