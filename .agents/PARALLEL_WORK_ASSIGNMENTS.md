@@ -7,21 +7,22 @@ file; they should not need to open anyone else's.
 | # | File | Track | Status |
 |---|---|---|---|
 | 1 | (was Module 03 — done, no file needed) | Assessment & Verification | **Done, merged on `main`** |
-| 2 | [`assignments/member-1-module-05-hackathon-pipeline.md`](assignments/member-1-module-05-hackathon-pipeline.md) | Module 05 — Hackathon-to-Hiring Pipeline | Not started |
-| 3 | [`assignments/member-2-module-06-trust-fraud-prevention.md`](assignments/member-2-module-06-trust-fraud-prevention.md) | Module 06 — Trust & Fraud Prevention | Not started |
-| 4 | [`assignments/member-3-platform-hardening.md`](assignments/member-3-platform-hardening.md) | Platform Hardening & Observability | Not started |
-| 5 | [`assignments/member-4-phase2-integration-prep.md`](assignments/member-4-phase2-integration-prep.md) | Phase 2 Integration Prep | Not started |
+| 2 | [`assignments/member-1-module-05-hackathon-pipeline.md`](assignments/member-1-module-05-hackathon-pipeline.md) | Module 05 — Hackathon-to-Hiring Pipeline | **Done, merged on `main`** |
+| 3 | [`assignments/member-2-module-06-trust-fraud-prevention.md`](assignments/member-2-module-06-trust-fraud-prevention.md) | Module 06 — Trust & Fraud Prevention | **Done, merged on `main`** (2026-07-30) |
+| 4 | [`assignments/member-3-platform-hardening.md`](assignments/member-3-platform-hardening.md) | Platform Hardening & Observability | Not started (one item — global exception handler — done inline outside this track) |
+| 5 | [`assignments/member-4-phase2-integration-prep.md`](assignments/member-4-phase2-integration-prep.md) | Phase 2 Integration Prep | **Parts 1-2 done, merged on `main`** (2026-07-30); Part 3 (QA journey walk) not started |
 
-(5 files, 4 *active* people — Module 03's slot is closed out since it finished this session; the
-remaining 4 tracks are what's left, matching "4 members" for the rest of the work.)
+(5 files — all module-build tracks now closed out; Platform Hardening (minus the one item done
+inline) and Phase 2 Part 3 are the only remaining open work.)
 
 ## Status as of this writing
 
-Modules 01 (Candidate Intelligence), 02 (AI Recruitment), 03 (Assessment & Verification), and 04
-(PPT Analyzer) are **all fully merged on `main`** as of 2026-07-29 — DB, agents, router, and
-frontend, live-verified against the real Neon DB. Every table the remaining 4 tracks need to read
-(`submissions`, `contribution_reports`, `presentations`, `candidate_profiles`, etc.) already exists
-on `main`. Modules 05 and 06 are **not started**.
+All 6 product modules (Candidate Intelligence, AI Recruitment, Assessment & Verification, PPT
+Analyzer, Hackathon-to-Hiring Pipeline, Trust & Fraud Prevention) are **fully merged on `main`** as
+of 2026-07-30 — DB, agents, router, and frontend, live-verified against the real Neon DB. Phase 2
+Integration Prep Parts 1-2 (supervisor graph demo, hackathon-rankings event consumer wiring
+recruiter watchlists) are also merged. See `.agents/memory/project_platform_status_20260730.md`
+for the full rollup and `.agents/decisions.md` for the detailed dated entries.
 
 ## Hard file-ownership boundaries
 

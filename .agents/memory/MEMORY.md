@@ -1,6 +1,6 @@
 # Memory Index
 
-- [Platform status 2026-07-29](project_platform_status_20260729.md) — **READ FIRST**: current build status across all modules, supersedes older per-module files.
+- [Platform status 2026-07-30](project_platform_status_20260730.md) — **READ FIRST**: all 6 modules + Phase 2 Parts 1-2 complete and merged; supersedes older per-module files.
 - [Progressive commits](feedback_progressive_commits.md) — commit in small natural units as work happens, not one batch at the end.
 - [Doc sets both current](project_doc_sets_both_current.md) — doc/SRS and doc/multi-agent-architecture are complementary, neither is "legacy."
 - [Route group collisions](project_nextjs_route_group_collisions.md) — same-named pages across (role) route groups fail the build; shared routes must live outside any group.
