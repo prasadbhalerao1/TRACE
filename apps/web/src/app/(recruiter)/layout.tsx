@@ -53,7 +53,7 @@ export default function RecruiterLayout({ children }: { children: React.ReactNod
           <nav className="flex flex-col gap-1">
             <Link href="/dashboard" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Dashboard</Link>
             <Link href="/jobs/new" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Post a Job</Link>
-            <Link href="/jobs" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">My Jobs</Link>
+            <Link href="/job-postings" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">My Jobs</Link>
             <Link href="/copilot" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Recruiter Copilot</Link>
             <Link href="/analytics" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Analytics</Link>
             <Link href="/top-performers" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Top Performers</Link>
