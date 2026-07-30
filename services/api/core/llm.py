@@ -47,13 +47,18 @@ def get_llm_client() -> tuple[str, Any]:
 
         return ("openai", openai.OpenAI(api_key=settings.openai_api_key))
 
-    if provider == "grok":
+    if provider in {"grok", "groq"}:
         api_key = settings.grok_api_key or settings.openai_api_key
         if not api_key:
-            raise LLMUnavailable("GROK_API_KEY is not configured.")
+            raise LLMUnavailable("GROK_API_KEY / GROQ_API_KEY is not configured.")
         import openai
 
-        base_url = settings.llm_base_url or "https://api.x.ai/v1"
+        # Groq keys start with 'gsk_', xAI keys start with 'xai-'
+        if api_key.startswith("gsk_") or provider == "groq":
+            base_url = settings.llm_base_url or "https://api.groq.com/openai/v1"
+        else:
+            base_url = settings.llm_base_url or "https://api.x.ai/v1"
+
         return ("grok", openai.OpenAI(api_key=api_key, base_url=base_url))
 
     if provider == "gemini":
