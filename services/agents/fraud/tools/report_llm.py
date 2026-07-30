@@ -12,28 +12,22 @@ must have non-null evidence" — that requirement doesn't depend on this agent w
 
 import json
 
-import anthropic
+from services.api.core.llm import LLMUnavailable, generate_structured
 
-from services.api.core.config import get_settings
-
-_REPORT_SCHEMA = {
-    "name": "fraud_risk_report",
-    "description": "A structured, evidence-linked fraud risk report for one flagged signal.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "summary": {
-                "type": "string",
-                "description": "One or two sentences summarizing the concern, citing the specific evidence only.",
-            },
-            "cited_evidence": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "The exact evidence strings this summary is grounded in — must be a subset of the input evidence, never invented.",
-            },
+_REPORT_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "summary": {
+            "type": "string",
+            "description": "One or two sentences summarizing the concern, citing the specific evidence only.",
         },
-        "required": ["summary", "cited_evidence"],
+        "cited_evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "The exact evidence strings this summary is grounded in — must be a subset of the input evidence, never invented.",
+        },
     },
+    "required": ["summary", "cited_evidence"],
 }
 
 _GROUNDING_RULE = (
@@ -55,32 +49,20 @@ def _deterministic_fallback(flag_type: str, evidence_items: list[str]) -> dict:
 
 def generate_fraud_risk_report(flag_type: str, evidence_items: list[str]) -> dict:
     """Returns {summary, cited_evidence}. Falls back to a deterministic template (never
-    raises) if Sonnet is unavailable — matches every other module's "typed unavailable,
-    degrade gracefully, never fabricate OR block" pattern."""
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        return _deterministic_fallback(flag_type, evidence_items)
-
+    raises) if the configured provider is unavailable — matches every other module's
+    "typed unavailable, degrade gracefully, never fabricate OR block" pattern."""
+    prompt = (
+        f"{_GROUNDING_RULE}\n\nFLAG TYPE: {flag_type}\n\n"
+        f"EVIDENCE:\n{json.dumps(evidence_items, indent=2)}"
+    )
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=settings.llm_model_judgment,
+        return generate_structured(
+            schema_name="fraud_risk_report",
+            schema_description="A structured, evidence-linked fraud risk report for one flagged signal.",
+            parameters=_REPORT_PARAMETERS,
+            prompt=prompt,
             max_tokens=500,
-            tools=[_REPORT_SCHEMA],
-            tool_choice={"type": "tool", "name": _REPORT_SCHEMA["name"]},
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"{_GROUNDING_RULE}\n\nFLAG TYPE: {flag_type}\n\n"
-                        f"EVIDENCE:\n{json.dumps(evidence_items, indent=2)}"
-                    ),
-                }
-            ],
+            agent_name="fraud.risk_report",
         )
-        for block in response.content:
-            if block.type == "tool_use":
-                return block.input
-    except Exception:
-        pass
-    return _deterministic_fallback(flag_type, evidence_items)
+    except LLMUnavailable:
+        return _deterministic_fallback(flag_type, evidence_items)

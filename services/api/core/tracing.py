@@ -1,46 +1,68 @@
-"""Langfuse tracing helper — Platform Hardening & Observability track (2026-07-30).
+"""Langfuse tracing — Platform Hardening & Observability track (2026-07-30, live-wiring pass).
 
-Gated no-op when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are empty or a placeholder
-value (the current real state of this repo's `.env` — no Langfuse keys configured yet,
-see `.agents/decisions.md`'s dated entry for this track). Same "typed empty default,
-fails closed, never fabricates" pattern already used repo-wide for
-`ANTHROPIC_API_KEY`/`CLOUDINARY_URL` (doc/SRS Module 01 §9).
+Two context managers, both no-ops when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are
+empty or a placeholder (same "typed empty default, fails closed, never fabricates"
+pattern used repo-wide for `ANTHROPIC_API_KEY`/`CLOUDINARY_URL`, doc/SRS Module 01 §9):
 
-`packages/db/models/agent_run.py`'s `AgentRun.langfuse_trace_id` column has existed since
-the first module shipped but every router has always left it `None` — nothing populated
-it. This module gives every `services/api/routers/*.py` call site a one-line way to
-populate it, without requiring a live Langfuse account to do so safely.
+  1. `start_agent_trace(...)` — one per agent-graph run (one `graph.ainvoke()` call =
+     one Langfuse trace). Router call sites open this right before invoking a graph and
+     read `span.trace_id` afterward for `AgentRun.langfuse_trace_id`.
+  2. `start_llm_generation(...)` — one per actual model call, used exclusively by
+     `services.api.core.llm.generate_structured/generate_completion`. Never call this
+     directly from agent tool code — go through `services.api.core.llm` so every model
+     call is captured the same way regardless of provider.
 
-Two entry points:
-  1. `record_agent_trace(...)` — the one actually used by every router in this pass.
-     Every existing `AgentRun(...)` call site in this codebase computes its full
-     input/output *before* constructing the row (the LangGraph `.ainvoke()` call already
-     happened, deep inside `services/agents/*/graph.py`, by the time the router gets a
-     result back). So this logs a single already-completed span as a post-hoc trace,
-     rather than wrapping the live call — wrapping the live call would mean reaching into
-     `services/agents/*/graph.py` internals, which this track's file-ownership rules
-     explicitly reserve to the module owners.
-  2. `traced_call(...)` — an async wrapper for a *future* session that wants a live span
-     around an actual Anthropic call or `graph.ainvoke()` (real latency, real token
-     usage) instead of a post-hoc log. Not called anywhere in this pass; provided because
-     the assignment brief asks for "a helper that wraps ... and returns the trace id",
-     and a live-wrapping helper is the more complete version of that for whoever
-     eventually touches `services/agents/*/graph.py` next.
+Langfuse's OTel-based context propagation means a `start_llm_generation` opened deep
+inside a `services/agents/*/graph.py` node function automatically nests under whichever
+`start_agent_trace` span is active higher up the same `await` chain — no manual
+plumbing of span objects through node functions is needed.
 """
 
 from __future__ import annotations
 
 import logging
+import re
+from contextlib import contextmanager
 from functools import lru_cache
-from typing import Any, Awaitable, TypeVar
+from typing import Any, Iterator
 
 from services.api.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
-
 _PLACEHOLDER_VALUES = {"", "changeme", "placeholder", "your-key-here", "your-public-key", "your-secret-key"}
+
+# Candidate resumes, interview transcripts, and cover letters routinely contain the
+# candidate's own contact details in free text (e.g. "reach me at jane@x.com"). This is
+# separate from the `consents` table (which governs whether we may *process* that data at
+# all) — this is a floor on what leaves the process boundary to a third party (Langfuse
+# Cloud) for observability, regardless of consent status.
+_EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+_PHONE_PATTERN = re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
+
+
+def _redact_pii(value: str) -> str:
+    redacted = _EMAIL_PATTERN.sub("[REDACTED_EMAIL]", value)
+    return _PHONE_PATTERN.sub("[REDACTED_PHONE]", redacted)
+
+
+def _mask_otel_spans(*, params: Any) -> Any:
+    """`mask_otel_spans` hook (the SDK-recommended masking mechanism, not the legacy
+    `mask` hook) — redacts email/phone patterns from every string span attribute in each
+    export batch, right before it leaves the process for Langfuse Cloud."""
+    from langfuse.types import MaskOtelSpansResult, OtelSpanPatch
+
+    patches = {}
+    for identifier, span in params.spans.items():
+        replacements = {}
+        for key, value in span.attributes.items():
+            if isinstance(value, str):
+                masked = _redact_pii(value)
+                if masked != value:
+                    replacements[key] = masked
+        if replacements:
+            patches[identifier] = OtelSpanPatch(set_attributes=replacements)
+    return MaskOtelSpansResult(span_patches=patches)
 
 
 def _is_placeholder(value: str) -> bool:
@@ -64,11 +86,16 @@ def _get_client() -> Any | None:
         logger.warning("langfuse package not installed; Langfuse tracing disabled")
         return None
     try:
-        return Langfuse(
+        client = Langfuse(
             public_key=settings.langfuse_public_key,
             secret_key=settings.langfuse_secret_key,
             host=settings.langfuse_host or "https://cloud.langfuse.com",
+            mask_otel_spans=_mask_otel_spans,
         )
+        if not client.auth_check():
+            logger.warning("Langfuse credentials rejected by server; tracing disabled")
+            return None
+        return client
     except Exception:
         # Tracing setup must never take the API down — degrade to the same "always None"
         # state this column has had since every module shipped.
@@ -76,64 +103,71 @@ def _get_client() -> Any | None:
         return None
 
 
-def record_agent_trace(
-    agent_name: str,
-    input_data: dict[str, Any] | None = None,
-    output_data: dict[str, Any] | None = None,
-    model: str | None = None,
-) -> str | None:
-    """Log a single-span trace for an already-completed agent run; return its trace id.
+def is_tracing_enabled() -> bool:
+    return _get_client() is not None
 
-    Returns `None` (clean no-op) when Langfuse isn't configured — callers pass this
-    return value straight into `AgentRun(langfuse_trace_id=...)`, so an unconfigured
-    environment behaves exactly as it always has (column stays `None`), not a new
-    failure mode.
-    """
-    client = _get_client()
-    if client is None:
-        return None
-    try:
-        span = client.start_observation(
-            name=agent_name,
-            as_type="generation" if model else "span",
-            input=input_data,
-            output=output_data,
-            model=model,
-        )
-        trace_id = span.trace_id
-        span.end()
-        client.flush()
-        return trace_id
-    except Exception:
-        # Observability must never break the actual request — degrade to None exactly
-        # like an unconfigured key would.
-        logger.exception("Langfuse trace recording failed for agent_name=%s", agent_name)
+
+class _NullObservation:
+    """Stand-in yielded by both context managers below when tracing is disabled, so
+    callers never need an `if` around this — `.update(...)` is a no-op and `.trace_id`
+    is `None`, exactly the value every `AgentRun.langfuse_trace_id` has always had."""
+
+    trace_id: str | None = None
+
+    def update(self, **_kwargs: Any) -> None:
         return None
 
 
-async def traced_call(
-    agent_name: str,
-    coro: Awaitable[T],
-    input_data: dict[str, Any] | None = None,
-    model: str | None = None,
-) -> tuple[T, str | None]:
-    """Wrap a live async call (an Anthropic request or a `graph.ainvoke()`) in a real
-    Langfuse span and return `(result, trace_id)`. Falls back to `(await coro, None)`
-    unchanged when Langfuse isn't configured, so callers never need an `if` around this.
+@contextmanager
+def start_agent_trace(
+    name: str,
+    input_data: Any = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    tags: list[str] | None = None,
+) -> Iterator[Any]:
+    """Root span for one agent-graph run. Use once per `graph.ainvoke()` call site:
 
-    Not called anywhere in this codebase yet — see module docstring.
+        with start_agent_trace("candidate-intelligence-ingest", input_data=..., user_id=str(candidate_id)) as trace:
+            result = await graph.ainvoke(initial_state)
+            trace.update(output=output_summary)
+
+        AgentRun(..., langfuse_trace_id=trace.trace_id)
     """
     client = _get_client()
     if client is None:
-        return await coro, None
-    span = client.start_observation(name=agent_name, as_type="span", input=input_data)
-    try:
-        result = await coro
-        try:
-            span.update(output=result if isinstance(result, (dict, list, str, int, float, bool)) else str(result))
-        except Exception:
-            logger.exception("Failed to attach output to Langfuse span for agent_name=%s", agent_name)
-        return result, span.trace_id
-    finally:
-        span.end()
-        client.flush()
+        yield _NullObservation()
+        return
+
+    from langfuse import propagate_attributes
+
+    settings = get_settings()
+    with propagate_attributes(
+        user_id=user_id, session_id=session_id, tags=tags or [], environment=settings.environment
+    ):
+        with client.start_as_current_observation(as_type="span", name=name, input=input_data) as span:
+            try:
+                yield span
+            finally:
+                client.flush()
+
+
+@contextmanager
+def start_llm_generation(
+    name: str,
+    model: str,
+    input_data: Any = None,
+    metadata: dict[str, Any] | None = None,
+) -> Iterator[Any]:
+    """One `generation` observation per model call — only called from
+    `services.api.core.llm`. Nests under the active `start_agent_trace` span
+    automatically via OTel context propagation."""
+    client = _get_client()
+    if client is None:
+        yield _NullObservation()
+        return
+
+    with client.start_as_current_observation(
+        as_type="generation", name=name, model=model, input=input_data, metadata=metadata
+    ) as generation:
+        yield generation

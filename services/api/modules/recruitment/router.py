@@ -54,7 +54,7 @@ from services.agents.recruitment.tools.embeddings import RecruitmentUnavailable
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
-from services.api.core.tracing import record_agent_trace
+from services.api.core.tracing import start_agent_trace
 
 router = APIRouter(tags=["Recruitment & Copilot"])
 
@@ -138,7 +138,14 @@ async def _run_matching_and_persist(db: AsyncSession, job: Job) -> list[MatchSco
         "project_relevance_scores": {},
         "match_results": [],
     }
-    result_state = await get_matching_graph().ainvoke(initial_state)
+    with start_agent_trace(
+        "recruitment.matching",
+        input_data={"job_id": str(job.id), "candidate_pool_size": len(candidate_pool)},
+        user_id=str(job.posted_by_user_id) if job.posted_by_user_id else None,
+        tags=["recruitment", "matching"],
+    ) as trace:
+        result_state = await get_matching_graph().ainvoke(initial_state)
+        trace.update(output={"match_count": len(result_state["match_results"])})
 
     settings = get_settings()
     rows: list[MatchScore] = []
@@ -172,9 +179,7 @@ async def _run_matching_and_persist(db: AsyncSession, job: Job) -> list[MatchSco
             input_ref=score_aggregation_input,
             output=score_aggregation_output,
             model_used=settings.embedding_model,
-            langfuse_trace_id=record_agent_trace(
-                "score_aggregation_agent", score_aggregation_input, score_aggregation_output, settings.embedding_model
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
     await db.commit()
@@ -530,10 +535,18 @@ async def copilot_query(
         "ranked_candidate_ids": [],
         "explanations": {},
     }
-    try:
-        result_state = await get_copilot_graph().ainvoke(initial_state)
-    except RecruitmentUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    with start_agent_trace(
+        "recruitment.copilot_query",
+        input_data={"message": body.message},
+        user_id=str(user.id),
+        session_id=str(conversation.id),
+        tags=["recruitment", "copilot"],
+    ) as trace:
+        try:
+            result_state = await get_copilot_graph().ainvoke(initial_state)
+        except RecruitmentUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output={"ranked_candidate_ids": result_state["ranked_candidate_ids"]})
 
     shortlist_by_id = {c["candidate_id"]: c for c in result_state["shortlist"]}
     results = [
@@ -566,9 +579,7 @@ async def copilot_query(
             input_ref=copilot_input,
             output=copilot_output,
             model_used=settings.llm_model_judgment,
-            langfuse_trace_id=record_agent_trace(
-                "recruiter_copilot", copilot_input, copilot_output, settings.llm_model_judgment
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
     await db.commit()

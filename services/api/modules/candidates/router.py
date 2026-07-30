@@ -8,6 +8,8 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 
+import logging
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import RedirectResponse
@@ -36,7 +38,10 @@ from packages.shared_schemas.candidates import (
     CoverLetterGenerateRequest,
     DashboardResponse,
     GeneratedDocumentResponse,
+    GithubSummary,
+    LeetcodeConnectRequest,
     PortfolioPublishRequest,
+    PublicPortfolioProject,
     ResumeGenerateRequest,
     SubScore,
     TalentScoreResponse,
@@ -49,6 +54,14 @@ from services.agents.candidate_intelligence.state import CandidateProfileState, 
 from services.agents.candidate_intelligence.tools.document_generation import (
     DocumentGenerationUnavailable,
 )
+from services.agents.candidate_intelligence.tools.github_calendar import (
+    GithubCalendarUnavailable,
+    fetch_github_calendar,
+)
+from services.agents.candidate_intelligence.tools.leetcode import (
+    LeetcodeUnavailable,
+    fetch_leetcode_stats,
+)
 from services.agents.candidate_intelligence.tools.resume_pdf import (
     PdfGenerationUnavailable,
     render_resume_pdf,
@@ -60,11 +73,16 @@ from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
 from services.api.core.storage import StorageUnavailable, upload_file
-from services.api.core.tracing import record_agent_trace
+from services.api.core.tracing import start_agent_trace
 
 _CAREER_RECOMMENDATION_TTL = timedelta(hours=24)
 _GITHUB_OAUTH_STATE_TTL_SECONDS = 600
 _oauth_state_cache: dict[str, tuple[str, float]] = {}
+# Third-party stats (GitHub calendar, LeetCode) are cached, not fetched live per view —
+# this bounds how often a candidate can force a re-fetch of LeetCode's unofficial API.
+_STATS_REFRESH_COOLDOWN = timedelta(minutes=15)
+
+logger = logging.getLogger(__name__)
 
 _RESERVED_USERNAMES = {
     "api", "dashboard", "onboarding", "sign-in", "sign-up", "hackathons",
@@ -78,10 +96,51 @@ _USERNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$")
 router = APIRouter(prefix="/candidates", tags=["Candidate Intelligence & Talent Scoring"])
 
 
+from pydantic import BaseModel
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: str | None = None
+    headline: str | None = None
+    location: str | None = None
+    college: str | None = None
+    degree: str | None = None
+
 class FactCheckFailed(Exception):
     def __init__(self, document: GeneratedDocument) -> None:
         self.document = document
         super().__init__("Generated document failed the fact-check guardrail.")
+
+
+@router.patch("/me", response_model=CandidateProfileResponse)
+async def update_profile(
+    body: ProfileUpdateRequest,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateProfile:
+    profile = await _get_or_create_profile(db, user)
+    
+    if body.full_name is not None:
+        user.full_name = body.full_name
+        db.add(user)
+        
+    if body.headline is not None:
+        profile.headline = body.headline
+    if body.location is not None:
+        profile.location = body.location
+        
+    if body.college is not None or body.degree is not None:
+        current_education = profile.education or []
+        edu = dict(current_education[0]) if current_education else {}
+        if body.college is not None:
+            edu["institution"] = body.college
+        if body.degree is not None:
+            edu["degree"] = body.degree
+        profile.education = [edu]
+        
+    await db.commit()
+    await db.refresh(profile)
+    return profile
+
 
 
 async def _get_or_create_profile(db: AsyncSession, user: User) -> CandidateProfile:
@@ -103,7 +162,7 @@ async def _require_consent(db: AsyncSession, user_id, consent_type: str) -> None
             Consent.status == "granted",
         )
     )
-    if result.scalar_one_or_none() is None:
+    if result.scalars().first() is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"consent_required:{consent_type}"
         )
@@ -140,7 +199,14 @@ async def _run_ingestion_and_persist(
         **state_overrides,
     }
 
-    result_state = await get_graph().ainvoke(initial_state)
+    with start_agent_trace(
+        "candidate_intelligence.ingest",
+        input_data={"github_username": profile.github_username, "has_resume": bool(state_overrides.get("raw_resume_bytes"))},
+        user_id=str(profile.user_id),
+        tags=["candidate-intelligence", "ingestion"],
+    ) as trace:
+        result_state = await get_graph().ainvoke(initial_state)
+        trace.update(output={"overall_score": result_state.get("overall_score")})
 
     merged = result_state["merged_profile"] or {}
     profile.github_username = merged.get("github_username") or profile.github_username
@@ -153,6 +219,16 @@ async def _run_ingestion_and_persist(
 
     github_raw = result_state.get("github_raw")
     if github_raw is not None:
+        # Merged into (not replacing) github_stats — the GraphQL calendar fetch in
+        # github_oauth_callback below also writes into this same JSONB column, and
+        # ingestion can run standalone (resume-only) without a fresh calendar fetch.
+        profile.github_stats = {
+            **(profile.github_stats or {}),
+            "owned_repo_count": github_raw.owned_repo_count,
+            "external_contributions": github_raw.external_contributions,
+            "pr_review_count": github_raw.pr_review_count,
+            "commit_activity_weekly": github_raw.commit_activity_weekly,
+        }
         for repo in github_raw.repos:
             db.add(
                 GithubSnapshot(
@@ -165,6 +241,8 @@ async def _run_ingestion_and_persist(
                     issue_count=repo.issue_count,
                     languages=repo.languages,
                     is_fork=repo.is_fork,
+                    topics=repo.topics,
+                    pushed_at=repo.pushed_at,
                 )
             )
 
@@ -209,9 +287,7 @@ async def _run_ingestion_and_persist(
                 input_ref=talent_scoring_input,
                 output=talent_scoring_output,
                 model_used=settings.llm_model_judgment,
-                langfuse_trace_id=record_agent_trace(
-                    "talent_scoring_agent", talent_scoring_input, talent_scoring_output, settings.llm_model_judgment
-                ),
+                langfuse_trace_id=trace.trace_id,
             )
         )
 
@@ -345,7 +421,74 @@ async def github_oauth_callback(
     await _run_ingestion_and_persist(
         db, profile, {"github_username": github_username, "github_access_token": access_token}
     )
+
+    # Development Stats (contribution calendar/streak) — GraphQL, requires this OAuth
+    # token, so it's fetched here rather than in the REST-only ingestion graph above.
+    # Best-effort: a calendar fetch failure must never break the OAuth connect flow.
+    try:
+        calendar = await fetch_github_calendar(github_username, access_token)
+        profile.github_stats = {**(profile.github_stats or {}), **asdict(calendar)}
+        profile.stats_refreshed_at = datetime.now(timezone.utc)
+        await db.commit()
+    except GithubCalendarUnavailable:
+        logger.warning("GitHub calendar fetch failed for %s", github_username, exc_info=True)
+
     return RedirectResponse(f"{settings.frontend_url}/profile/edit?github=connected")
+
+
+@router.post("/me/leetcode", response_model=CandidateProfileResponse)
+async def connect_leetcode(
+    body: LeetcodeConnectRequest,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateProfile:
+    """Problem Solving Stats — connect by username only (LeetCode has no public OAuth)."""
+    profile = await _get_or_create_profile(db, user)
+    try:
+        stats = await fetch_leetcode_stats(body.leetcode_username)
+    except LeetcodeUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="leetcode_username_invalid") from exc
+
+    profile.leetcode_username = body.leetcode_username
+    profile.leetcode_stats = asdict(stats)
+    profile.stats_refreshed_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(profile)
+    return profile
+
+
+@router.post("/me/stats/refresh", response_model=CandidateProfileResponse)
+async def refresh_stats(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> CandidateProfile:
+    """Re-fetches LeetCode's Problem Solving Stats on demand (cooldown-gated — LeetCode's
+    API is unofficial/rate-sensitive). GitHub's Development Stats refresh by reconnecting
+    GitHub (`/github/oauth-url`) since no GitHub access token is persisted server-side."""
+    profile = await _get_or_create_profile(db, user)
+    now = datetime.now(timezone.utc)
+    if profile.stats_refreshed_at is not None:
+        refreshed_at = profile.stats_refreshed_at
+        if refreshed_at.tzinfo is None:
+            refreshed_at = refreshed_at.replace(tzinfo=timezone.utc)
+        retry_at = refreshed_at + _STATS_REFRESH_COOLDOWN
+        if now < retry_at:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={"error": "refresh_on_cooldown", "retry_at": retry_at.isoformat()},
+            )
+
+    if profile.leetcode_username:
+        try:
+            stats = await fetch_leetcode_stats(profile.leetcode_username)
+            profile.leetcode_stats = asdict(stats)
+        except LeetcodeUnavailable:
+            logger.warning("LeetCode stats refresh failed for %s", profile.leetcode_username, exc_info=True)
+
+    profile.stats_refreshed_at = now
+    await db.commit()
+    await db.refresh(profile)
+    return profile
 
 
 def _to_score_response(score: TalentScore) -> TalentScoreResponse:
@@ -394,6 +537,63 @@ async def get_my_score_history(
     return [_to_score_response(s) for s in result.scalars().all()]
 
 
+async def _compute_github_summary(db: AsyncSession, profile: CandidateProfile) -> GithubSummary:
+    """Shared by `/me/dashboard`, `/me/github-summary`, and the public portfolio route
+    (services/api/modules/public/router.py has its own copy scoped to published-only
+    projects) — kept as one function here so the two never drift on aggregation logic."""
+    snapshot_result = await db.execute(select(GithubSnapshot).where(GithubSnapshot.candidate_id == profile.id))
+    snapshots = snapshot_result.scalars().all()
+    github_stats = profile.github_stats or {}
+    return GithubSummary(
+        total_stars=sum(s.stars or 0 for s in snapshots),
+        total_commits=sum(s.commit_count or 0 for s in snapshots),
+        total_prs=sum(s.pr_count or 0 for s in snapshots),
+        total_issues=sum(s.issue_count or 0 for s in snapshots),
+        total_forks=sum(s.forks or 0 for s in snapshots),
+        owned_repo_count=github_stats.get("owned_repo_count", 0),
+        external_contributions=github_stats.get("external_contributions", 0),
+        pr_review_count=github_stats.get("pr_review_count", 0),
+        projects=[
+            PublicPortfolioProject(
+                repo_full_name=s.repo_full_name,
+                stars=s.stars,
+                forks=s.forks,
+                languages=s.languages,
+                topics=s.topics,
+                pushed_at=s.pushed_at,
+                description=s.description,
+                commit_count=s.commit_count,
+                pr_count=s.pr_count,
+                issue_count=s.issue_count,
+            )
+            for s in sorted(snapshots, key=lambda s: s.stars or 0, reverse=True)
+            if not s.is_fork
+        ],
+    )
+
+
+@router.get("/me/badges", response_model=list[BadgeResponse])
+async def get_my_badges(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> list[BadgeResponse]:
+    profile = await _get_or_create_profile(db, user)
+    result = await db.execute(select(Badge).where(Badge.candidate_id == profile.id))
+    return [BadgeResponse.model_validate(b) for b in result.scalars().all()]
+
+
+@router.get("/me/github-summary", response_model=GithubSummary)
+async def get_my_github_summary(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> GithubSummary:
+    """Split out from `/me/dashboard` (services/api decisions log, 2026-07-30 dashboard-
+    resilience pass) so the frontend can fetch Development Stats independently of Talent
+    Score — one section failing to load must not blank the whole candidate dashboard."""
+    profile = await _get_or_create_profile(db, user)
+    return await _compute_github_summary(db, profile)
+
+
 @router.get("/me/dashboard", response_model=DashboardResponse)
 async def get_my_dashboard(
     user: User = Depends(require_role("candidate")),
@@ -409,11 +609,14 @@ async def get_my_dashboard(
     badge_result = await db.execute(select(Badge).where(Badge.candidate_id == profile.id))
     badges = [BadgeResponse.model_validate(b) for b in badge_result.scalars().all()]
 
+    github_summary = await _compute_github_summary(db, profile)
+
     return DashboardResponse(
         profile=CandidateProfileResponse.model_validate(profile),
         latest_score=scores[-1] if scores else None,
         score_history=scores,
         badges=badges,
+        github_summary=github_summary,
     )
 
 
@@ -459,7 +662,14 @@ async def _run_document_generation(
         "attempts": 0,
     }
 
-    result_state = await get_resume_graph().ainvoke(initial_state)
+    with start_agent_trace(
+        "candidate_intelligence.document_generation",
+        input_data={"document_type": document_type, "has_target_job": bool(target_job_description)},
+        user_id=str(profile.user_id),
+        tags=["candidate-intelligence", "document-generation"],
+    ) as trace:
+        result_state = await get_resume_graph().ainvoke(initial_state)
+        trace.update(output={"fact_check_status": result_state.get("fact_check_status")})
     settings = get_settings()
 
     if result_state.get("generation_error"):
@@ -490,9 +700,7 @@ async def _run_document_generation(
             input_ref=fact_check_input,
             output=fact_check_output,
             model_used=settings.llm_model_fast,
-            langfuse_trace_id=record_agent_trace(
-                "fact_check_agent", fact_check_input, fact_check_output, settings.llm_model_fast
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
     await db.commit()
@@ -714,10 +922,17 @@ async def get_my_career_guidance(
         "salary_rationale": None,
     }
 
-    try:
-        result_state = await get_career_guidance_graph().ainvoke(initial_state)
-    except (CareerGuidanceUnavailable, RoadmapGenerationUnavailable) as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    with start_agent_trace(
+        "candidate_intelligence.career_guidance",
+        input_data={"target_role": target_role, "candidate_skills": candidate_skills},
+        user_id=str(profile.user_id),
+        tags=["candidate-intelligence", "career-guidance"],
+    ) as trace:
+        try:
+            result_state = await get_career_guidance_graph().ainvoke(initial_state)
+        except (CareerGuidanceUnavailable, RoadmapGenerationUnavailable) as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output={"resolved_target_role": result_state.get("resolved_target_role")})
 
     row = CareerRecommendation(
         candidate_id=profile.id,
@@ -749,9 +964,7 @@ async def get_my_career_guidance(
             input_ref=career_guidance_input,
             output=career_guidance_output,
             model_used=settings.llm_model_judgment,
-            langfuse_trace_id=record_agent_trace(
-                "career_guidance_agent", career_guidance_input, career_guidance_output, settings.llm_model_judgment
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
 

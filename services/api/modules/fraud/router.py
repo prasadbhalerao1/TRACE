@@ -47,7 +47,7 @@ from services.agents.fraud.tools.report_llm import generate_fraud_risk_report
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
-from services.api.core.tracing import record_agent_trace
+from services.api.core.tracing import start_agent_trace
 from services.api.modules.candidates.router import _require_consent
 
 router = APIRouter(tags=["Trust & Fraud Prevention"])
@@ -117,6 +117,7 @@ async def _persist_check_result(
     signals: list[dict],
     verdict: dict,
     agent_name: str,
+    trace_id: str | None = None,
 ) -> FraudFlag | None:
     for signal in signals:
         db.add(
@@ -141,7 +142,7 @@ async def _persist_check_result(
             input_ref=fraud_input,
             output=fraud_output,
             model_used=settings.llm_model_judgment,
-            langfuse_trace_id=record_agent_trace(agent_name, fraud_input, fraud_output, settings.llm_model_judgment),
+            langfuse_trace_id=trace_id,
         )
     )
 
@@ -205,7 +206,14 @@ async def check_certificate(
         "signals": [],
         "verdict": None,
     }
-    result_state = await get_cert_graph().ainvoke(initial_state)
+    with start_agent_trace(
+        "fraud.cert_verification",
+        input_data={"issuer": cert.issuer, "title": cert.title},
+        user_id=str(user.id),
+        tags=["fraud", "certificate"],
+    ) as trace:
+        result_state = await get_cert_graph().ainvoke(initial_state)
+        trace.update(output=result_state["verdict"])
 
     flag = await _persist_check_result(
         db,
@@ -215,6 +223,7 @@ async def check_certificate(
         signals=result_state["signals"],
         verdict=result_state["verdict"],
         agent_name="cert_verification_agent",
+        trace_id=trace.trace_id,
     )
     await db.commit()
     if flag:
@@ -262,7 +271,14 @@ async def check_submission(
         "signals": [],
         "verdict": None,
     }
-    result_state = await get_plagiarism_graph().ainvoke(initial_state)
+    with start_agent_trace(
+        "fraud.plagiarism_detection",
+        input_data={"submission_id": str(submission_id), "corpus_size": len(corpus)},
+        user_id=str(user.id),
+        tags=["fraud", "submission"],
+    ) as trace:
+        result_state = await get_plagiarism_graph().ainvoke(initial_state)
+        trace.update(output=result_state["verdict"])
 
     flag = await _persist_check_result(
         db,
@@ -272,6 +288,7 @@ async def check_submission(
         signals=result_state["signals"],
         verdict=result_state["verdict"],
         agent_name="plagiarism_detection_agent",
+        trace_id=trace.trace_id,
     )
     await db.commit()
     if flag:
@@ -351,7 +368,14 @@ async def check_profile_duplicate(
         "signals": [],
         "verdict": None,
     }
-    dup_result = await get_duplicate_graph().ainvoke(dup_state)
+    with start_agent_trace(
+        "fraud.duplicate_profile_detection",
+        input_data={"candidate_id": str(candidate_id), "text_corpus_size": len(text_corpus), "photo_corpus_size": len(photo_corpus)},
+        user_id=str(user.id),
+        tags=["fraud", "profile"],
+    ) as dup_trace:
+        dup_result = await get_duplicate_graph().ainvoke(dup_state)
+        dup_trace.update(output=dup_result["verdict"])
 
     content_state = {
         "subject_type": "resume",
@@ -360,7 +384,14 @@ async def check_profile_duplicate(
         "signals": [],
         "verdict": None,
     }
-    content_result = await get_content_graph().ainvoke(content_state)
+    with start_agent_trace(
+        "fraud.ai_content_detection",
+        input_data={"candidate_id": str(candidate_id)},
+        user_id=str(user.id),
+        tags=["fraud", "resume"],
+    ) as content_trace:
+        content_result = await get_content_graph().ainvoke(content_state)
+        content_trace.update(output=content_result["verdict"])
 
     dup_flag = await _persist_check_result(
         db,
@@ -370,6 +401,7 @@ async def check_profile_duplicate(
         signals=dup_result["signals"],
         verdict=dup_result["verdict"],
         agent_name="duplicate_profile_detection_agent",
+        trace_id=dup_trace.trace_id,
     )
     await _persist_check_result(
         db,
@@ -378,6 +410,7 @@ async def check_profile_duplicate(
         candidate_id=candidate_id,
         signals=content_result["signals"],
         verdict=content_result["verdict"],
+        trace_id=content_trace.trace_id,
         agent_name="ai_content_signal_agent",
     )
     await db.commit()

@@ -15,6 +15,7 @@ import pytesseract
 from PIL import Image
 
 from services.api.core.config import get_settings
+from services.api.core.tracing import start_llm_generation
 
 _VISION_DIAGRAM_SCHEMA = {
     "name": "diagram_understanding",
@@ -46,34 +47,42 @@ def vision_diagram_summary(image_bytes: bytes) -> str | None:
         return None
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     try:
-        response = client.messages.create(
+        with start_llm_generation(
+            name="ppt_analyzer.ocr.vision_diagram_summary",
             model=settings.llm_model_fast,
-            max_tokens=256,
-            tools=[_VISION_DIAGRAM_SCHEMA],
-            tool_choice={"type": "tool", "name": "diagram_understanding"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": base64.b64encode(image_bytes).decode("ascii"),
+            input_data={"note": "slide image, diagram/chart/architecture understanding"},
+        ) as generation:
+            response = client.messages.create(
+                model=settings.llm_model_fast,
+                max_tokens=256,
+                tools=[_VISION_DIAGRAM_SCHEMA],
+                tool_choice={"type": "tool", "name": "diagram_understanding"},
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": base64.b64encode(image_bytes).decode("ascii"),
+                                },
                             },
-                        },
-                        {
-                            "type": "text",
-                            "text": "If this is a diagram, chart, or architecture image, summarize what it communicates.",
-                        },
-                    ],
-                }
-            ],
-        )
+                            {
+                                "type": "text",
+                                "text": "If this is a diagram, chart, or architecture image, summarize what it communicates.",
+                            },
+                        ],
+                    }
+                ],
+            )
+            for block in response.content:
+                if block.type == "tool_use":
+                    summary = block.input.get("summary")
+                    generation.update(output=summary)
+                    return summary
+            generation.update(output=None)
     except anthropic.APIError:
         return None
-    for block in response.content:
-        if block.type == "tool_use":
-            return block.input.get("summary")
     return None

@@ -7,55 +7,36 @@ callers (the node functions) catch this and degrade to a `None`-valued RubricSco
 never a fabricated number.
 """
 
-import anthropic
+from services.api.core.llm import LLMUnavailable, generate_structured
 
-from services.api.core.config import get_settings
-
-
-class PitchScoringUnavailable(RuntimeError):
-    """Raised when a rubric-scoring LLM call can't run (e.g. no API key)."""
+# Raised when a rubric-scoring LLM call can't run (e.g. no/misconfigured provider key).
+PitchScoringUnavailable = LLMUnavailable
 
 
-def _call(schema: dict, prompt: str, max_tokens: int = 1024) -> dict:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        raise PitchScoringUnavailable("ANTHROPIC_API_KEY is not configured — rubric scoring requires it.")
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    try:
-        response = client.messages.create(
-            model=settings.llm_model_judgment,
-            max_tokens=max_tokens,
-            temperature=0,
-            tools=[schema],
-            tool_choice={"type": "tool", "name": schema["name"]},
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APIError as exc:
-        raise PitchScoringUnavailable(f"Anthropic API call failed: {exc}") from exc
-
-    for block in response.content:
-        if block.type == "tool_use":
-            return block.input
-    raise PitchScoringUnavailable("Model did not return structured tool output.")
+def _call(schema_name: str, schema_description: str, parameters: dict, prompt: str, max_tokens: int = 1024) -> dict:
+    return generate_structured(
+        schema_name=schema_name,
+        schema_description=schema_description,
+        parameters=parameters,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temperature=0,
+        agent_name=f"ppt_analyzer.rubric.{schema_name}",
+    )
 
 
-_PROBLEM_SOLUTION_SCHEMA = {
-    "name": "problem_solution_clarity",
-    "description": "Rubric-score how clearly a pitch deck states the problem and its proposed solution.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "score": {"type": "number", "description": "0-100 presentation/clarity quality score"},
-            "rationale": {"type": "string"},
-            "gaps": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Specific, concrete rubric gaps found (e.g. 'no quantified problem impact stated')",
-            },
+_PROBLEM_SOLUTION_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "number", "description": "0-100 presentation/clarity quality score"},
+        "rationale": {"type": "string"},
+        "gaps": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific, concrete rubric gaps found (e.g. 'no quantified problem impact stated')",
         },
-        "required": ["score", "rationale", "gaps"],
     },
+    "required": ["score", "rationale", "gaps"],
 }
 
 
@@ -67,29 +48,30 @@ def score_problem_solution(slides_text: str) -> dict:
         "audience, vague solution mechanics, etc.), not generic advice.\n\n"
         f"Deck content (per slide):\n{slides_text}"
     )
-    return _call(_PROBLEM_SOLUTION_SCHEMA, prompt)
+    return _call(
+        "problem_solution_clarity",
+        "Rubric-score how clearly a pitch deck states the problem and its proposed solution.",
+        _PROBLEM_SOLUTION_PARAMETERS,
+        prompt,
+    )
 
 
-_INNOVATION_BUSINESS_SCHEMA = {
-    "name": "innovation_business_impact",
-    "description": "Rubric-score a pitch deck's innovation and business potential.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "innovation_score": {"type": "number", "description": "0-100"},
-            "innovation_rationale": {"type": "string"},
-            "business_potential_score": {"type": "number", "description": "0-100"},
-            "business_potential_rationale": {"type": "string"},
-            "gaps": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": [
-            "innovation_score",
-            "innovation_rationale",
-            "business_potential_score",
-            "business_potential_rationale",
-            "gaps",
-        ],
+_INNOVATION_BUSINESS_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "innovation_score": {"type": "number", "description": "0-100"},
+        "innovation_rationale": {"type": "string"},
+        "business_potential_score": {"type": "number", "description": "0-100"},
+        "business_potential_rationale": {"type": "string"},
+        "gaps": {"type": "array", "items": {"type": "string"}},
     },
+    "required": [
+        "innovation_score",
+        "innovation_rationale",
+        "business_potential_score",
+        "business_potential_rationale",
+        "gaps",
+    ],
 }
 
 
@@ -101,21 +83,22 @@ def score_innovation_business(slides_text: str, novelty_context: str | None = No
         "both scores and gaps only in what's actually written below.\n\n"
         f"Deck content (per slide):\n{slides_text}{context}"
     )
-    return _call(_INNOVATION_BUSINESS_SCHEMA, prompt)
+    return _call(
+        "innovation_business_impact",
+        "Rubric-score a pitch deck's innovation and business potential.",
+        _INNOVATION_BUSINESS_PARAMETERS,
+        prompt,
+    )
 
 
-_TECHNICAL_FEASIBILITY_SCHEMA = {
-    "name": "technical_feasibility",
-    "description": "Rubric-score a pitch deck's technical depth and feasibility.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "score": {"type": "number", "description": "0-100"},
-            "rationale": {"type": "string"},
-            "gaps": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["score", "rationale", "gaps"],
+_TECHNICAL_FEASIBILITY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "number", "description": "0-100"},
+        "rationale": {"type": "string"},
+        "gaps": {"type": "array", "items": {"type": "string"}},
     },
+    "required": ["score", "rationale", "gaps"],
 }
 
 
@@ -136,22 +119,23 @@ def score_technical_feasibility(slides_text: str, ocr_context: str | None, repo_
         "deck claims a technology/architecture that the repo evidence doesn't support, call that out "
         "as a gap rather than trusting the deck's claim at face value.\n\n" + "\n\n".join(parts)
     )
-    return _call(_TECHNICAL_FEASIBILITY_SCHEMA, prompt)
+    return _call(
+        "technical_feasibility",
+        "Rubric-score a pitch deck's technical depth and feasibility.",
+        _TECHNICAL_FEASIBILITY_PARAMETERS,
+        prompt,
+    )
 
 
-_SUMMARY_SCHEMA = {
-    "name": "pitch_summary",
-    "description": "Write a grounded per-section summary of a pitch deck.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "summary": {
-                "type": "string",
-                "description": "2-3 sentences PER SECTION (problem, solution, market, tech, team if present) — not a slide-by-slide copy",
-            },
+_SUMMARY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "summary": {
+            "type": "string",
+            "description": "2-3 sentences PER SECTION (problem, solution, market, tech, team if present) — not a slide-by-slide copy",
         },
-        "required": ["summary"],
     },
+    "required": ["summary"],
 }
 
 
@@ -162,4 +146,9 @@ def generate_summary(slides_text: str) -> str:
         "invent details.\n\n"
         f"Deck content (per slide):\n{slides_text}"
     )
-    return _call(_SUMMARY_SCHEMA, prompt)["summary"]
+    return _call(
+        "pitch_summary",
+        "Write a grounded per-section summary of a pitch deck.",
+        _SUMMARY_PARAMETERS,
+        prompt,
+    )["summary"]

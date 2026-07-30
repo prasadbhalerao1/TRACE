@@ -53,7 +53,7 @@ from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.event_consumer import get_matching_top_performers_for_recruiter
 from services.api.core.rbac import require_role
-from services.api.core.tracing import record_agent_trace
+from services.api.core.tracing import start_agent_trace
 
 router = APIRouter(tags=["Hackathons & Top Performers"])
 
@@ -418,7 +418,14 @@ async def finalize_rankings(
         "final_rankings": [],
         "notification_event_payload": None,
     }
-    result_state = await get_hackathon_ranking_graph().ainvoke(initial_state)
+    with start_agent_trace(
+        "hackathon.ranking_finalize",
+        input_data={"hackathon_id": str(hackathon_id), "team_count": len(teams)},
+        user_id=str(user.id),
+        tags=["hackathon", "ranking"],
+    ) as trace:
+        result_state = await get_hackathon_ranking_graph().ainvoke(initial_state)
+        trace.update(output={"final_rankings": result_state["final_rankings"]})
 
     teams_by_id = {str(t.id): t for t in teams}
     for team_id_str, verification in result_state["repo_verification_results"].items():
@@ -478,9 +485,7 @@ async def finalize_rankings(
             input_ref=hackathon_ranking_input,
             output=hackathon_ranking_output,
             model_used=settings.llm_model_judgment,
-            langfuse_trace_id=record_agent_trace(
-                "hackathon_ranking_agent", hackathon_ranking_input, hackathon_ranking_output, settings.llm_model_judgment
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
     db.add(Event(event_type="hackathon.rankings.finalized", payload=result_state["notification_event_payload"]))

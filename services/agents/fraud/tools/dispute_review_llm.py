@@ -10,28 +10,22 @@ decision.
 
 import json
 
-import anthropic
+from services.api.core.llm import LLMUnavailable, generate_structured
 
-from services.api.core.config import get_settings
-
-_SUMMARY_SCHEMA = {
-    "name": "dispute_review_summary",
-    "description": "An assistive summary for a human reviewer — NOT a decision. Never includes a recommended verdict.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "candidate_context_summary": {
-                "type": "string",
-                "description": "Neutral summary of what the candidate is claiming in their dispute statement.",
-            },
-            "points_of_agreement_or_conflict": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Where the candidate's statement lines up with, or contradicts, the original evidence — factual observations only, no verdict.",
-            },
+_SUMMARY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "candidate_context_summary": {
+            "type": "string",
+            "description": "Neutral summary of what the candidate is claiming in their dispute statement.",
         },
-        "required": ["candidate_context_summary", "points_of_agreement_or_conflict"],
+        "points_of_agreement_or_conflict": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Where the candidate's statement lines up with, or contradicts, the original evidence — factual observations only, no verdict.",
+        },
     },
+    "required": ["candidate_context_summary", "points_of_agreement_or_conflict"],
 }
 
 _GROUNDING_RULE = (
@@ -44,39 +38,24 @@ _GROUNDING_RULE = (
 )
 
 
-class DisputeReviewUnavailable(RuntimeError):
-    pass
+# Raised if the configured provider can't run — the admin review endpoint still works
+# without this (the raw evidence + candidate statement are always shown directly), this
+# is a nice-to-have assist layer, not a gate.
+DisputeReviewUnavailable = LLMUnavailable
 
 
 def summarize_dispute_for_reviewer(original_evidence: dict, candidate_statement: str) -> dict:
     """Returns {candidate_context_summary, points_of_agreement_or_conflict}. Raises
-    `DisputeReviewUnavailable` if Sonnet can't run — the admin review endpoint still
-    works without this (the raw evidence + candidate statement are always shown
-    directly), this is a nice-to-have assist layer, not a gate."""
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        raise DisputeReviewUnavailable("ANTHROPIC_API_KEY is not configured — dispute review assist requires it.")
-
-    try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=settings.llm_model_judgment,
-            max_tokens=500,
-            tools=[_SUMMARY_SCHEMA],
-            tool_choice={"type": "tool", "name": _SUMMARY_SCHEMA["name"]},
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"{_GROUNDING_RULE}\n\nORIGINAL EVIDENCE:\n{json.dumps(original_evidence, indent=2, default=str)}"
-                        f"\n\nCANDIDATE'S DISPUTE STATEMENT:\n{candidate_statement}"
-                    ),
-                }
-            ],
-        )
-        for block in response.content:
-            if block.type == "tool_use":
-                return block.input
-    except anthropic.APIError as exc:
-        raise DisputeReviewUnavailable(f"Anthropic API call failed: {exc}") from exc
-    raise DisputeReviewUnavailable("Model did not return structured tool output.")
+    `DisputeReviewUnavailable` if the configured provider can't run."""
+    prompt = (
+        f"{_GROUNDING_RULE}\n\nORIGINAL EVIDENCE:\n{json.dumps(original_evidence, indent=2, default=str)}"
+        f"\n\nCANDIDATE'S DISPUTE STATEMENT:\n{candidate_statement}"
+    )
+    return generate_structured(
+        schema_name="dispute_review_summary",
+        schema_description="An assistive summary for a human reviewer — NOT a decision. Never includes a recommended verdict.",
+        parameters=_SUMMARY_PARAMETERS,
+        prompt=prompt,
+        max_tokens=500,
+        agent_name="fraud.dispute_review",
+    )

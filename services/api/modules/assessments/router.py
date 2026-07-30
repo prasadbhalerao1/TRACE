@@ -46,7 +46,7 @@ from services.agents.assessment.verification_graph import get_verification_graph
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
-from services.api.core.tracing import record_agent_trace
+from services.api.core.tracing import start_agent_trace
 from services.api.modules.candidates.router import _get_or_create_profile, _require_consent
 
 router = APIRouter(tags=["Assessments & Verification"])
@@ -152,10 +152,17 @@ async def submit_assessment(
         "score": None,
     }
 
-    try:
-        result_state = await get_verification_graph().ainvoke(initial_state)
-    except AssessmentUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    with start_agent_trace(
+        "assessment.verification",
+        input_data={"assessment_type": assessment.type},
+        user_id=str(user.id),
+        tags=["assessment", "verification"],
+    ) as trace:
+        try:
+            result_state = await get_verification_graph().ainvoke(initial_state)
+        except AssessmentUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output={"score": result_state["score"], "tests_passed": result_state["tests_passed"]})
 
     submission = Submission(
         assessment_id=assessment.id,
@@ -180,9 +187,7 @@ async def submit_assessment(
             input_ref=verification_input,
             output=verification_output,
             model_used=settings.llm_model_judgment,
-            langfuse_trace_id=record_agent_trace(
-                "verification_report_agent", verification_input, verification_output, settings.llm_model_judgment
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
     await db.commit()
@@ -256,10 +261,18 @@ async def start_interview(
         "interview_status": "in_progress",
         "last_answer_verdict": None,
     }
-    try:
-        result_state = await get_interview_graph().ainvoke(initial_state)
-    except AssessmentUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    with start_agent_trace(
+        "assessment.interview.start",
+        input_data={"topic_plan": topic_plan},
+        user_id=str(user.id),
+        session_id=str(session.id),
+        tags=["assessment", "interview"],
+    ) as trace:
+        try:
+            result_state = await get_interview_graph().ainvoke(initial_state)
+        except AssessmentUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output={"question": result_state["next_question"]})
 
     session.state = {
         "topic_plan": result_state["topic_plan"],
@@ -316,10 +329,18 @@ async def interview_turn(
         "interview_status": "in_progress",
         "last_answer_verdict": None,
     }
-    try:
-        result_state = await get_interview_graph().ainvoke(initial_state)
-    except AssessmentUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    with start_agent_trace(
+        "assessment.interview.turn",
+        input_data={"answer_text": body.answer_text},
+        user_id=str(user.id),
+        session_id=str(session.id),
+        tags=["assessment", "interview"],
+    ) as trace:
+        try:
+            result_state = await get_interview_graph().ainvoke(initial_state)
+        except AssessmentUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output={"question": result_state["next_question"], "status": result_state["interview_status"]})
 
     session.state = {
         "topic_plan": result_state["topic_plan"],
@@ -376,10 +397,18 @@ async def end_interview(
         "communication_rating": None,
         "hiring_recommendation": None,
     }
-    try:
-        result_state = await get_interview_report_graph().ainvoke(report_state)
-    except AssessmentUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    with start_agent_trace(
+        "assessment.interview.report",
+        input_data={"topic_count": len(saved.get("topic_plan", []))},
+        user_id=str(user.id),
+        session_id=str(session.id),
+        tags=["assessment", "interview"],
+    ) as trace:
+        try:
+            result_state = await get_interview_report_graph().ainvoke(report_state)
+        except AssessmentUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output=dict(result_state))
 
     if session.status != "completed":
         session.status = "completed"
@@ -405,9 +434,7 @@ async def end_interview(
             input_ref=interview_input,
             output=interview_output,
             model_used=settings.llm_model_judgment,
-            langfuse_trace_id=record_agent_trace(
-                "interview_report_agent", interview_input, interview_output, settings.llm_model_judgment
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
     await db.commit()
@@ -477,10 +504,17 @@ async def generate_contribution_report(
         "narratives": {},
         "results": [],
     }
-    try:
-        result_state = await get_contribution_graph().ainvoke(initial_state)
-    except AssessmentUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    with start_agent_trace(
+        "assessment.contribution_report",
+        input_data={"repo_full_name": body.repo_full_name, "member_count": len(body.github_usernames)},
+        user_id=str(user.id),
+        tags=["assessment", "contribution"],
+    ) as trace:
+        try:
+            result_state = await get_contribution_graph().ainvoke(initial_state)
+        except AssessmentUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output={"results": result_state["results"]})
 
     profiles_result = await db.execute(
         select(CandidateProfile).where(CandidateProfile.github_username.in_(body.github_usernames))
@@ -515,9 +549,7 @@ async def generate_contribution_report(
             input_ref=contribution_input,
             output=contribution_output,
             model_used=settings.embedding_model,
-            langfuse_trace_id=record_agent_trace(
-                "contribution_weighting_agent", contribution_input, contribution_output, settings.embedding_model
-            ),
+            langfuse_trace_id=trace.trace_id,
         )
     )
     await db.commit()

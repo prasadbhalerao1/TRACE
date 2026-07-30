@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from packages.db.models import Badge, CandidateProfile, GithubSnapshot, TalentScore
 from packages.shared_schemas.candidates import (
     BadgeResponse,
+    GithubSummary,
     PublicPortfolioProject,
     PublicPortfolioResponse,
 )
@@ -32,18 +33,36 @@ async def get_public_portfolio(
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="portfolio_not_found")
 
-    projects_result = await db.execute(
-        select(GithubSnapshot)
-        .where(GithubSnapshot.candidate_id == profile.id, GithubSnapshot.is_fork.is_not(True))
-        .order_by(GithubSnapshot.stars.desc().nulls_last())
-        .limit(12)
-    )
-    projects = [
+    snapshot_result = await db.execute(select(GithubSnapshot).where(GithubSnapshot.candidate_id == profile.id))
+    snapshots = snapshot_result.scalars().all()
+    github_stats = profile.github_stats or {}
+    non_fork_projects = [
         PublicPortfolioProject(
-            repo_full_name=p.repo_full_name, stars=p.stars, forks=p.forks, languages=p.languages
+            repo_full_name=p.repo_full_name,
+            stars=p.stars,
+            forks=p.forks,
+            languages=p.languages,
+            topics=p.topics,
+            pushed_at=p.pushed_at,
+            description=p.description,
+            commit_count=p.commit_count,
+            pr_count=p.pr_count,
+            issue_count=p.issue_count,
         )
-        for p in projects_result.scalars().all()
+        for p in sorted(snapshots, key=lambda s: s.stars or 0, reverse=True)
+        if not p.is_fork
     ]
+    github_summary = GithubSummary(
+        total_stars=sum(s.stars or 0 for s in snapshots),
+        total_commits=sum(s.commit_count or 0 for s in snapshots),
+        total_prs=sum(s.pr_count or 0 for s in snapshots),
+        total_issues=sum(s.issue_count or 0 for s in snapshots),
+        total_forks=sum(s.forks or 0 for s in snapshots),
+        owned_repo_count=github_stats.get("owned_repo_count", 0),
+        external_contributions=github_stats.get("external_contributions", 0),
+        pr_review_count=github_stats.get("pr_review_count", 0),
+        projects=non_fork_projects[:12],
+    )
 
     badges_result = await db.execute(select(Badge).where(Badge.candidate_id == profile.id))
     badges = [BadgeResponse.model_validate(b) for b in badges_result.scalars().all()]
@@ -63,8 +82,14 @@ async def get_public_portfolio(
         skills=profile.skills,
         experience=profile.experience,
         education=profile.education,
-        projects=projects,
+        projects=non_fork_projects[:12],
         badges=badges,
         overall_score=latest_score.overall if latest_score else None,
+        github_username=profile.github_username,
+        leetcode_username=profile.leetcode_username,
+        github_stats=profile.github_stats,
+        github_summary=github_summary,
+        leetcode_stats=profile.leetcode_stats,
+        stats_refreshed_at=profile.stats_refreshed_at,
         updated_at=profile.updated_at,
     )

@@ -26,7 +26,7 @@ from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import get_current_user, require_role
 from services.api.core.storage import StorageUnavailable, upload_file
-from services.api.core.tracing import record_agent_trace
+from services.api.core.tracing import start_agent_trace
 
 router = APIRouter(prefix="/presentations", tags=["Pitch Decks & Presentations"])
 
@@ -40,9 +40,14 @@ async def _get_presentation_or_404(db: AsyncSession, presentation_id: uuid.UUID)
 
 
 def _log_agent_run(
-    db: AsyncSession, agent_name: str, presentation_id: uuid.UUID, input_ref: dict, output: dict, model_used: str | None
+    db: AsyncSession,
+    agent_name: str,
+    presentation_id: uuid.UUID,
+    input_ref: dict,
+    output: dict,
+    model_used: str | None,
+    trace_id: str | None = None,
 ) -> None:
-    trace_id = record_agent_trace(agent_name, input_ref, output, model_used)
     db.add(
         AgentRun(
             agent_name=agent_name,
@@ -127,7 +132,14 @@ async def upload_presentation(
         "suggestions": [],
     }
 
-    result_state = await get_graph().ainvoke(initial_state)
+    with start_agent_trace(
+        "ppt_analyzer.analyze",
+        input_data={"file_name": file.filename, "linked_repo": linked_repo},
+        user_id=str(user.id),
+        tags=["ppt-analyzer"],
+    ) as trace:
+        result_state = await get_graph().ainvoke(initial_state)
+        trace.update(output={"overall_score": result_state.get("overall_score")})
 
     for slide in result_state.get("slides", []):
         ocr_note = next(
@@ -188,24 +200,29 @@ async def upload_presentation(
     _log_agent_run(
         db, "ppt_problem_solution_clarity_agent", presentation.id,
         {"slide_count": len(result_state.get("slides", []))}, presentation_quality, settings.llm_model_judgment,
+        trace_id=trace.trace_id,
     )
     _log_agent_run(
         db, "ppt_innovation_business_impact_agent", presentation.id,
         {"slide_count": len(result_state.get("slides", []))},
         {"innovation": innovation, "business_potential": business_potential},
         settings.llm_model_judgment,
+        trace_id=trace.trace_id,
     )
     _log_agent_run(
         db, "ppt_technical_feasibility_agent", presentation.id,
         {"linked_repo": linked_repo}, technical_feasibility, settings.llm_model_judgment,
+        trace_id=trace.trace_id,
     )
     _log_agent_run(
         db, "ppt_ai_content_heuristic_agent", presentation.id,
         {"slide_count": len(result_state.get("slides", []))}, ai_content_signal, None,
+        trace_id=trace.trace_id,
     )
     _log_agent_run(
         db, "ppt_aggregation_agent", presentation.id,
         scores, {"overall_score": result_state.get("overall_score"), "renormalized": result_state.get("renormalized_scores", [])}, None,
+        trace_id=trace.trace_id,
     )
 
     extraction_error = result_state.get("extraction_error")

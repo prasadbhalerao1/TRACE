@@ -14,6 +14,7 @@ one of low/medium/high suspicion, per the hard constraint in doc 06 §4/§8.
 import anthropic
 
 from services.api.core.config import get_settings
+from services.api.core.tracing import start_llm_generation
 
 # Below this OCR confidence, the extracted cert fields themselves are unreliable — that's
 # a data-quality signal worth surfacing, not proof of forgery, so it only pushes suspicion
@@ -59,46 +60,53 @@ def _vision_pass(public_url: str, issuer: str | None, title: str | None) -> dict
         return None
     try:
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
+        with start_llm_generation(
+            name="fraud.visual_forensics",
             model=settings.llm_model_fast,
-            max_tokens=400,
-            tools=[
-                {
-                    "name": "visual_forensics_verdict",
-                    "description": "Layout/font/seal plausibility assessment of a certificate image. Never claim certainty.",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "suspicion_label": {"type": "string", "enum": ["low", "medium", "high"]},
-                            "rationale": {"type": "string"},
+            input_data={"issuer": issuer, "title": title, "image_url": public_url},
+        ) as generation:
+            response = client.messages.create(
+                model=settings.llm_model_fast,
+                max_tokens=400,
+                tools=[
+                    {
+                        "name": "visual_forensics_verdict",
+                        "description": "Layout/font/seal plausibility assessment of a certificate image. Never claim certainty.",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "suspicion_label": {"type": "string", "enum": ["low", "medium", "high"]},
+                                "rationale": {"type": "string"},
+                            },
+                            "required": ["suspicion_label", "rationale"],
                         },
-                        "required": ["suspicion_label", "rationale"],
-                    },
-                }
-            ],
-            tool_choice={"type": "tool", "name": "visual_forensics_verdict"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                f"This is a certificate image claiming to be issued by '{issuer}' for "
-                                f"'{title}'. Assess layout consistency, font consistency, and whether a "
-                                "seal/signature area looks template-plausible for this issuer. You have "
-                                "no ground-truth genuine template to compare against, so NEVER claim "
-                                "certainty — output only low/medium/high suspicion with a short rationale."
-                            ),
-                        },
-                        {"type": "image", "source": {"type": "url", "url": public_url}},
-                    ],
-                }
-            ],
-        )
-        for block in response.content:
-            if block.type == "tool_use":
-                return block.input
+                    }
+                ],
+                tool_choice={"type": "tool", "name": "visual_forensics_verdict"},
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    f"This is a certificate image claiming to be issued by '{issuer}' for "
+                                    f"'{title}'. Assess layout consistency, font consistency, and whether a "
+                                    "seal/signature area looks template-plausible for this issuer. You have "
+                                    "no ground-truth genuine template to compare against, so NEVER claim "
+                                    "certainty — output only low/medium/high suspicion with a short rationale."
+                                ),
+                            },
+                            {"type": "image", "source": {"type": "url", "url": public_url}},
+                        ],
+                    }
+                ],
+            )
+            for block in response.content:
+                if block.type == "tool_use":
+                    generation.update(output=block.input)
+                    return block.input
+            generation.update(output=None)
     except Exception:
         return None
     return None

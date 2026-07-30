@@ -15,10 +15,8 @@ model-routing policy, never Sonnet.
 import json
 from typing import Any
 
-import anthropic
-
 from packages.shared_schemas.hackathon import TeamMemberInput, TeamSubmissionInput
-from services.api.core.config import get_settings
+from services.api.core.llm import LLMUnavailable, generate_structured
 
 _TEAM_NAME_KEYS = {"team_name", "team", "teamname", "project_team", "squad"}
 _TRACK_KEYS = {"track", "category", "tracks"}
@@ -28,38 +26,30 @@ _MEMBER_GITHUB_KEYS = {"github_username", "github", "github_handle", "username"}
 _MEMBER_NAME_KEYS = {"display_name", "name", "full_name", "participant_name"}
 _MEMBER_ROLE_KEYS = {"role", "team_role"}
 
-_SCHEMA_MAPPING_TOOL = {
-    "name": "normalized_submission",
-    "description": (
-        "Map an arbitrary hackathon-platform submission payload onto this platform's "
-        "fixed team-submission schema. Only extract values that are actually present in "
-        "the payload — never invent a team name, repo URL, or member that isn't there."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "team_name": {"type": "string"},
-            "track": {"type": ["string", "null"]},
-            "repo_url": {"type": ["string", "null"]},
-            "members": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "github_username": {"type": ["string", "null"]},
-                        "display_name": {"type": ["string", "null"]},
-                    },
+_SCHEMA_MAPPING_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "team_name": {"type": "string"},
+        "track": {"type": ["string", "null"]},
+        "repo_url": {"type": ["string", "null"]},
+        "members": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "github_username": {"type": ["string", "null"]},
+                    "display_name": {"type": ["string", "null"]},
                 },
             },
         },
-        "required": ["team_name"],
     },
+    "required": ["team_name"],
 }
 
-
-class NormalizationUnavailable(RuntimeError):
-    """Raised when rules can't confidently map the payload and the Haiku fallback also
-    can't run (missing API key) or fails — never guess a team name out of thin air."""
+# Raised when rules can't confidently map the payload and the LLM fallback also can't
+# run (missing/misconfigured provider key) or fails — never guess a team name out of
+# thin air.
+NormalizationUnavailable = LLMUnavailable
 
 
 def _find(raw: dict[str, Any], keys: set[str]) -> Any:
@@ -95,13 +85,6 @@ def _rule_based_normalize(raw: dict[str, Any]) -> TeamSubmissionInput | None:
 
 
 def _haiku_fallback_normalize(raw: dict[str, Any]) -> TeamSubmissionInput:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        raise NormalizationUnavailable(
-            "Payload didn't match known field names and ANTHROPIC_API_KEY is not configured "
-            "for the Normalization Agent's schema-mapping fallback."
-        )
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     prompt = (
         "You are the Normalization Agent for a hackathon-hosting platform ingesting a "
         "webhook push from an external hackathon platform (e.g. Devpost, Devfolio). Map "
@@ -109,32 +92,27 @@ def _haiku_fallback_normalize(raw: dict[str, Any]) -> TeamSubmissionInput:
         "present — never invent a team name or member that isn't in the payload.\n\n"
         f"RAW PAYLOAD:\n{json.dumps(raw, default=str)}"
     )
-    try:
-        response = client.messages.create(
-            model=settings.llm_model_fast,
-            max_tokens=1024,
-            tools=[_SCHEMA_MAPPING_TOOL],
-            tool_choice={"type": "tool", "name": "normalized_submission"},
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APIError as exc:
-        raise NormalizationUnavailable(f"Anthropic API call failed: {exc}") from exc
-
-    for block in response.content:
-        if block.type == "tool_use" and block.name == "normalized_submission":
-            data = block.input
-            return TeamSubmissionInput(
-                team_name=data["team_name"],
-                track=data.get("track"),
-                members=[
-                    TeamMemberInput(
-                        github_username=m.get("github_username"), display_name=m.get("display_name")
-                    )
-                    for m in data.get("members", [])
-                ],
-                repo_url=data.get("repo_url"),
-            )
-    raise NormalizationUnavailable("Model did not return structured normalized_submission output.")
+    data = generate_structured(
+        schema_name="normalized_submission",
+        schema_description=(
+            "Map an arbitrary hackathon-platform submission payload onto this platform's "
+            "fixed team-submission schema. Only extract values that are actually present in "
+            "the payload — never invent a team name, repo URL, or member that isn't there."
+        ),
+        parameters=_SCHEMA_MAPPING_PARAMETERS,
+        prompt=prompt,
+        is_fast=True,
+        agent_name="hackathon.normalization",
+    )
+    return TeamSubmissionInput(
+        team_name=data["team_name"],
+        track=data.get("track"),
+        members=[
+            TeamMemberInput(github_username=m.get("github_username"), display_name=m.get("display_name"))
+            for m in data.get("members", [])
+        ],
+        repo_url=data.get("repo_url"),
+    )
 
 
 def normalize_webhook_payload(raw: dict[str, Any]) -> TeamSubmissionInput:

@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     # server-side prepared-statement caching, which breaks against PgBouncer-style
     # transaction poolers. False (default) for local docker-compose Postgres.
     database_ssl_required: bool = False
+    # Langfuse `environment` attribute (services/api/core/tracing.py) — keeps test/dev
+    # traces separate from production in dashboards and evaluations.
+    environment: str = "development"
     cors_allowed_origins: str = "http://localhost:3000"
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
