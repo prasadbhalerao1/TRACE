@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { fetchJobMatches, type MatchScoreWithCandidateResponse } from "@/lib/api";
 
 function ScoreRow({ label, value }: { label: string; value: number | null }) {
@@ -41,9 +43,14 @@ export default function RecruiterMatchesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Ranked Candidate Matches</h1>
-        <p className="text-sm text-slate">Review AI-matched and ranked candidates with the full 4-term score breakdown.</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Ranked Candidate Matches</h1>
+          <p className="text-sm text-slate">Review AI-matched and ranked candidates with the full 4-term score breakdown.</p>
+        </div>
+        <Button render={<Link href={`/pipeline/${params.id}`} />} variant="outline">
+          View Pipeline
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

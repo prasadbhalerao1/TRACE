@@ -53,14 +53,10 @@ export default function RecruiterLayout({ children }: { children: React.ReactNod
           <nav className="flex flex-col gap-1">
             <Link href="/dashboard" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Dashboard</Link>
             <Link href="/jobs/new" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Post a Job</Link>
-            <Link href="/jobs/sample-job/matches" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Ranked Matches</Link>
+            <Link href="/jobs" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">My Jobs</Link>
             <Link href="/copilot" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Recruiter Copilot</Link>
-            <Link href="/pipeline/sample-job" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Kanban Pipeline</Link>
             <Link href="/analytics" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Analytics</Link>
             <Link href="/top-performers" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Top Performers</Link>
-            <Link href="/reports/submission/sample-submission" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Submission Report</Link>
-            <Link href="/reports/interview/sample-interview" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Interview Report</Link>
-            <Link href="/reports/contribution/sample-repo" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Contribution Report</Link>
           </nav>
         </div>
       </aside>
