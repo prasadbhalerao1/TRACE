@@ -48,11 +48,11 @@ export default function DashboardPage() {
   }, [isLoaded, isSignedIn, getToken, router]);
 
   if (error) {
-    return <div className="p-8 text-rose-flagged">{error}</div>;
+    return <div className="p-8 text-rose-500 font-medium">{error}</div>;
   }
 
   if (!profile) {
-    return <div className="p-8 text-slate">Loading your dashboard…</div>;
+    return <div className="p-8 text-slate animate-pulse">Loading your dashboard…</div>;
   }
 
   if (profile.role === "candidate") {
@@ -82,7 +82,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground mb-4">Create, publish, and manage structured job vacancies.</p>
-                  <Button render={<Link href="/jobs/new" />} variant="outline" className="w-full">Create Job</Button>
+                  <Link href="/jobs/new" className="block w-full">
+                    <Button variant="outline" className="w-full cursor-pointer">Create Job</Button>
+                  </Link>
                 </CardContent>
               </Card>
               <Card className="hover:border-primary transition-colors">
@@ -91,7 +93,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground mb-4">Search and match candidates using natural language commands.</p>
-                  <Button render={<Link href="/copilot" />} variant="outline" className="w-full">Launch Copilot</Button>
+                  <Link href="/copilot" className="block w-full">
+                    <Button variant="outline" className="w-full cursor-pointer">Launch Copilot</Button>
+                  </Link>
                 </CardContent>
               </Card>
             </div>
@@ -120,7 +124,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground mb-4">Register new hackathons and define tracks/criteria.</p>
-                  <Button render={<Link href="/hackathons/new" />} variant="outline" className="w-full">Create Event</Button>
+                  <Link href="/organizer/hackathons/new" className="block w-full">
+                    <Button variant="outline" className="w-full cursor-pointer">Create Event</Button>
+                  </Link>
                 </CardContent>
               </Card>
               <Card className="hover:border-primary transition-colors">
@@ -129,7 +135,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground mb-4 font-normal">Manage tracks, judge allocations, and team members.</p>
-                  <Button render={<Link href="/hackathons/sample-hackathon/manage" />} variant="outline" className="w-full">Manage Roster</Button>
+                  <Link href="/organizer/hackathons/sample-hackathon/manage" className="block w-full">
+                    <Button variant="outline" className="w-full cursor-pointer">Manage Roster</Button>
+                  </Link>
                 </CardContent>
               </Card>
             </div>
@@ -158,7 +166,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground mb-4">View pending project submissions awaiting your grading.</p>
-                  <Button render={<Link href="/evaluations" />} variant="outline" className="w-full">View Queue</Button>
+                  <Link href="/evaluations" className="block w-full">
+                    <Button variant="outline" className="w-full cursor-pointer">View Queue</Button>
+                  </Link>
                 </CardContent>
               </Card>
             </div>
@@ -187,7 +197,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground mb-4">Review trust flags, plagiarism flags, and candidate disputes.</p>
-                  <Button render={<Link href="/fraud-review" />} variant="outline" className="w-full">Fraud Queue</Button>
+                  <Link href="/fraud-review" className="block w-full">
+                    <Button variant="outline" className="w-full cursor-pointer">Fraud Queue</Button>
+                  </Link>
                 </CardContent>
               </Card>
               <Card className="hover:border-primary transition-colors">
@@ -196,7 +208,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground mb-4">Examine audit trails, system access, and role configurations.</p>
-                  <Button render={<Link href="/audit-log" />} variant="outline" className="w-full">Security Audit Logs</Button>
+                  <Link href="/audit-log" className="block w-full">
+                    <Button variant="outline" className="w-full cursor-pointer">Security Audit Logs</Button>
+                  </Link>
                 </CardContent>
               </Card>
             </div>
