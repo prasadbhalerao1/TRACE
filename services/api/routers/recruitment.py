@@ -20,12 +20,17 @@ from packages.db.models import (
     Application,
     Badge,
     CandidateProfile,
+    ContributionReport,
     CopilotConversation,
+    FraudFlag,
     GithubSnapshot,
+    InterviewReport,
+    InterviewSession,
     Job,
     LocationAlias,
     MatchScore,
     SkillTaxonomyEntry,
+    Submission,
     TalentScore,
     User,
 )
@@ -197,6 +202,72 @@ async def _run_matching_and_persist(db: AsyncSession, job: Job) -> list[MatchSco
 
 router_stage_values = set(APPLICATION_STAGES)
 
+# Severity order for collapsing a candidate's fraud flags down to one display status —
+# "upheld" (a human confirmed it) always wins over "under_review" over a bare "raised".
+# Never includes "dismissed" — a dismissed flag is not shown to recruiters at all.
+_FRAUD_STATUS_SEVERITY = {"upheld": 3, "under_review": 2, "raised": 1}
+
+
+async def _fraud_flag_status_by_candidate(
+    db: AsyncSession, candidate_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """Read-only lookup against Module 06's `fraud_flags` table — never written to here,
+    never affects ranking/sort/filtering order anywhere in this router. Display-only, per
+    doc 06 §1/§7's "decision stays mine" framing (QA finding "Recruiter #4")."""
+    if not candidate_ids:
+        return {}
+    result = await db.execute(
+        select(FraudFlag.candidate_id, FraudFlag.status).where(
+            FraudFlag.candidate_id.in_(candidate_ids),
+            FraudFlag.status.in_(("raised", "under_review", "upheld")),
+        )
+    )
+    status_by_candidate: dict[uuid.UUID, str] = {}
+    for cid, flag_status in result.all():
+        current = status_by_candidate.get(cid)
+        if current is None or _FRAUD_STATUS_SEVERITY[flag_status] > _FRAUD_STATUS_SEVERITY[current]:
+            status_by_candidate[cid] = flag_status
+    return status_by_candidate
+
+
+async def _latest_report_refs_by_candidate(
+    db: AsyncSession, candidate_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, dict]:
+    """Read-only lookup against Module 03's tables — the most recent submission/
+    interview-report/contribution-report per candidate, so a kanban card can link
+    straight to whichever report actually exists (QA finding "Recruiter #3"). Never
+    writes to any Module 03 table."""
+    if not candidate_ids:
+        return {}
+    refs: dict[uuid.UUID, dict] = {cid: {} for cid in candidate_ids}
+
+    submissions_result = await db.execute(
+        select(Submission.candidate_id, Submission.id, Submission.submitted_at)
+        .where(Submission.candidate_id.in_(candidate_ids))
+        .order_by(Submission.candidate_id, Submission.submitted_at.desc())
+    )
+    for cid, submission_id, _ in submissions_result.all():
+        refs.setdefault(cid, {}).setdefault("latest_submission_id", submission_id)
+
+    interview_result = await db.execute(
+        select(InterviewSession.candidate_id, InterviewReport.session_id, InterviewReport.generated_at)
+        .join(InterviewReport, InterviewReport.session_id == InterviewSession.id)
+        .where(InterviewSession.candidate_id.in_(candidate_ids))
+        .order_by(InterviewSession.candidate_id, InterviewReport.generated_at.desc())
+    )
+    for cid, session_id, _ in interview_result.all():
+        refs.setdefault(cid, {}).setdefault("latest_interview_session_id", session_id)
+
+    contribution_result = await db.execute(
+        select(ContributionReport.candidate_id, ContributionReport.repo_full_name, ContributionReport.generated_at)
+        .where(ContributionReport.candidate_id.in_(candidate_ids))
+        .order_by(ContributionReport.candidate_id, ContributionReport.generated_at.desc())
+    )
+    for cid, repo_full_name, _ in contribution_result.all():
+        refs.setdefault(cid, {}).setdefault("latest_contribution_repo_full_name", repo_full_name)
+
+    return refs
+
 
 # --- FR-1/2: Jobs & Matching ---
 
@@ -286,6 +357,8 @@ async def get_job_matches(
     for row in talent_scores_result.scalars().all():
         latest_talent_score.setdefault(row.candidate_id, row.overall)
 
+    fraud_status_by_candidate = await _fraud_flag_status_by_candidate(db, [s.candidate_id for s in scores])
+
     return [
         {
             "id": s.id,
@@ -305,6 +378,7 @@ async def get_job_matches(
             if s.candidate_id in profiles_by_id
             else None,
             "candidate_overall_talent_score": latest_talent_score.get(s.candidate_id),
+            "fraud_flag_status": fraud_status_by_candidate.get(s.candidate_id),
         }
         for s in scores
     ]
@@ -397,10 +471,15 @@ async def list_applications(
         query = query.where(Application.stage == stage)
 
     result = await db.execute(query.order_by(Application.stage_updated_at.desc()))
+    rows = result.all()
     scores_result = await db.execute(select(TalentScore).order_by(TalentScore.candidate_id, TalentScore.computed_at.desc()))
     latest_score_by_candidate: dict[uuid.UUID, float | None] = {}
     for s in scores_result.scalars().all():
         latest_score_by_candidate.setdefault(s.candidate_id, s.overall)
+
+    candidate_ids = [profile.id for _, profile in rows]
+    fraud_status_by_candidate = await _fraud_flag_status_by_candidate(db, candidate_ids)
+    report_refs_by_candidate = await _latest_report_refs_by_candidate(db, candidate_ids)
 
     return [
         {
@@ -414,8 +493,10 @@ async def list_applications(
             "candidate_headline": profile.headline,
             "candidate_github_username": profile.github_username,
             "candidate_overall_talent_score": latest_score_by_candidate.get(profile.id),
+            "fraud_flag_status": fraud_status_by_candidate.get(profile.id),
+            **report_refs_by_candidate.get(profile.id, {}),
         }
-        for app, profile in result.all()
+        for app, profile in rows
     ]
 
 

@@ -555,6 +555,12 @@ export interface ApplicationWithCandidateResponse extends ApplicationResponse {
   candidate_headline: string | null;
   candidate_github_username: string | null;
   candidate_overall_talent_score: number | null;
+  // Display-only — never affects card order/filtering. See QA finding "Recruiter #4".
+  fraud_flag_status: "raised" | "under_review" | "upheld" | null;
+  // Whichever of these is non-null, if any, is the candidate's most recent report.
+  latest_submission_id: string | null;
+  latest_interview_session_id: string | null;
+  latest_contribution_repo_full_name: string | null;
 }
 
 export interface MatchScoreWithCandidateResponse {
@@ -573,6 +579,8 @@ export interface MatchScoreWithCandidateResponse {
   candidate_location: string | null;
   candidate_github_username: string | null;
   candidate_overall_talent_score: number | null;
+  // Display-only — never affects ranking/sort order. See QA finding "Recruiter #4".
+  fraud_flag_status: "raised" | "under_review" | "upheld" | null;
 }
 
 export interface CopilotResult {
