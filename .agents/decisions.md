@@ -725,3 +725,128 @@ live-tested end-to-end including the human-gated review with enforced `review_no
 `services/agents/fraud/`, `services/api/routers/fraud.py`,
 `apps/web/src/app/(admin)/fraud-review/`, `apps/web/src/app/(candidate)/my-flags/`,
 `apps/web/src/lib/api.ts`
+
+---
+
+## 2026-07-30 — Phase 2 Integration Prep, Part 1: minimal supervisor graph demo
+
+**Two things doc 07 §2's example code assumes that this codebase does NOT actually
+have — built around them, not silently "fixed" (per the assignment brief's explicit
+instruction to log this rather than change either doc's intent):**
+
+1. `builder.compile(checkpointer=postgres_checkpointer)` — no module in this codebase
+   uses a LangGraph checkpointer (Module 02's Recruiter Copilot, Module 03's Interview
+   Agent both persist state to DB columns manually instead, per their own entries above).
+   `services/agents/supervisor/graph.py` compiles without one, as a module-level
+   `get_graph()` singleton — same pattern as `services/agents/candidate_intelligence/graph.py`.
+2. Each module's real entry point is a REST router step (fetch DB context → build state →
+   invoke its own subgraph → persist → respond), not a bare importable subgraph the
+   supervisor can `ainvoke()` and expect DB I/O to already be done. The supervisor's
+   per-module nodes instead call the exact service functions the routers themselves call
+   (`services.api.routers.candidates._to_score_response`,
+   `services.api.routers.recruitment._run_matching_and_persist`) — real DB reads/writes,
+   not a mock. The live `AsyncSession` is threaded through `RunnableConfig.configurable["db"]`
+   (LangGraph's supported per-invocation context mechanism), not through `SupervisorState`
+   itself, since a plain state dict shared by a module-level singleton graph across
+   concurrent requests is the wrong place to carry a live DB session object.
+
+**Demo scope: 2 of 4 existing modules (Candidate Intelligence, Recruitment), not all 6.**
+Per the assignment's "keep this genuinely minimal" instruction — Module 01's Talent Score
+lookup and Module 02's real Flow B matching graph were the simplest pairing to demo
+meaningfully ("given a candidate + job, fetch talent score and compute match"). Modules
+03/04 dispatch targets are straightforward follow-up work once this pattern is proven;
+Modules 05/06 are out of scope entirely (05 is only a cross-module *event source*, handled
+by Part 2's consumer below, not by this graph; 06 belongs to a different concurrent
+session).
+
+**`POST /supervisor/route` requires only `get_current_user` (any authenticated role), not
+a specific role** — routing itself isn't role-gated in doc 07; the underlying dispatched
+functions (`_run_matching_and_persist`, the TalentScore query) don't re-check role either
+at this call site, since this is a demo of the pattern, not a production authorization
+surface. Revisit if this graph grows into a real user-facing endpoint.
+
+**Could not live-test intent classification itself** — `ANTHROPIC_API_KEY` is still
+unconfigured repo-wide (same gap Module 01's first entry logged 2026-07-29, confirmed
+still empty in `.env` today). `classify_intent` correctly raises `SupervisorUnavailable`
+(mapped to a 503) rather than guessing, verified live. The two dispatch nodes were
+verified live against the real Neon DB by calling them directly (bypassing only the
+classifier step, which the full graph can't skip since `classify_intent` is the fixed
+entry point): `recruitment.run` against a real `Job` row ran the actual Flow B matching
+graph in-process and returned real persisted `match_percentage`/`explanation` values (2
+real candidates matched); `candidate_intelligence.run` correctly returned `talent_score:
+None` (not a crash) for a candidate with no `TalentScore` row yet; `recruitment.run`
+correctly returned a typed `error` string (not a crash) when `job_id` was missing.
+`python -c "import services.api.main"` clean.
+→ `services/agents/supervisor/`, `services/api/routers/supervisor.py`,
+`packages/shared_schemas/supervisor.py`, `services/api/main.py`
+
+---
+
+## 2026-07-30 — Phase 2 Integration Prep, Part 2: event consumer + recruiter watchlist matching
+
+**Consumer trigger: fixed-interval `asyncio` polling loop (`services/api/core/event_consumer.
+run_polling_loop`, default 30s), started as a background task from `main.py`'s
+`@app.on_event("startup")` hook — not Celery/Arq.** No module in this codebase uses a task
+queue for anything yet, and a hackathon-scoped demo doesn't need one for a single
+lightweight polling job. Each cycle opens its own short-lived `AsyncSession` (never holds
+one across `sleep`) and swallows/logs any cycle failure rather than killing the loop. The
+core logic (`process_pending_events`) is also directly callable on-demand (e.g. from a
+script or a future manual-trigger endpoint) — the polling loop is just one caller of it,
+not baked into its signature.
+
+**Event processing (`processed_at`) and watchlist matching are deliberately decoupled —
+matching is computed LIVE, not persisted, and does not depend on whether an event has been
+"processed" yet.** `process_pending_events` only marks `hackathon.rankings.finalized` rows
+handled (a durability/observability record). `get_matching_top_performers_for_recruiter`
+recomputes matches at read time straight from `hackathon_rankings` + `hackathon_teams` +
+`hackathon_team_members` + `candidate_profiles` + this recruiter's `recruiter_watchlists`
+rows. Chosen over persisting a match table (the assignment's own explicit preference)
+because a recruiter's watchlist can be created or edited *after* an event was published —
+a match computed only at event-processing time would go stale or simply miss it. This also
+means `GET /recruiters/me/top-performers-feed` doesn't need to wait on the poller at all;
+it's correct immediately after `rankings/finalize` commits, same as before this pass.
+
+**Watchlist match semantics** (`recruiter_watchlists.criteria = {track, min_rank, skills}`,
+per Module 05's schema): a criterion that's `None`/empty is "no constraint," not "must be
+empty" — `track` case-insensitively equals the team's track; `min_rank` means the team's
+finalized `rank <= min_rank`; `skills` means at least one requested skill (case-
+insensitive) appears in the candidate's `candidate_profiles.skills` names. A watchlist with
+all three empty matches everything (an intentionally permissive "notify me about all top
+performers" watchlist). A recruiter with zero watchlist rows still sees the full unfiltered
+top-3 feed (`matched_watchlist=False` on every entry) — same "never empty" behavior Module
+05's placeholder endpoint already had.
+
+**Wired `GET /recruiters/me/top-performers-feed` (`services/api/routers/hackathons.py`) to
+call the new live-matching function instead of its old unfiltered query**, and added
+`matched_watchlist: bool` / `match_reasons: list[str]` to `TopPerformerEntry`
+(`packages/shared_schemas/hackathon.py`) — additive fields, existing consumers unaffected.
+This is a small edit to a file outside this track's original file-ownership list, but the
+assignment's own stated goal is explicitly "powering `GET /recruiters/me/top-performers-
+feed`," which lives there; the change is a one-function-call swap plus 2 additive schema
+fields, not a rewrite, and doesn't touch anything Module 06 owns.
+
+**Frontend**: `(recruiter)/top-performers/page.tsx` already existed (Module 02) showing the
+unfiltered feed with a "Phase 2 integration" placeholder note — updated it to highlight
+matched entries (primary-colored border/badge, sorted first when the recruiter has any
+watchlist), show `match_reasons`, and replaced the placeholder note with real copy.
+Added `matched_watchlist`/`match_reasons` to the `TopPerformerEntry` TS interface in
+`apps/web/src/lib/api.ts` (additive).
+
+**Verified live against the real Neon DB**: a scratch script created a throwaway
+recruiter/candidate/hackathon/team/ranking/watchlist/event row set matching the exact
+payload shape `recruiter_notification.py` actually publishes
+(`{hackathon_id, top_teams, candidate_ids}`), confirmed the match is computed correctly
+and live (`matched_watchlist=True`, `match_reasons=["track '...'", "rank <= 3", "skills
+[...]"]`) even *before* `process_pending_events` ran; confirmed `process_pending_events`
+correctly picked up both the synthetic row and 2 pre-existing real
+`hackathon.rankings.finalized` events already sitting unprocessed in this DB from Module
+05's own earlier live-testing, setting `processed_at` on all 3 without error (proving
+compatibility with the real publisher's actual payload shape, not just a hand-shaped
+synthetic one); confirmed idempotency (already-processed events skipped on a second run);
+confirmed a recruiter with no watchlist still gets the unfiltered fallback; cleaned up all
+throwaway rows after. `python -c "import services.api.main"` clean. `tsc --noEmit`,
+`eslint`, and `npm run build` (Turbopack) all clean in `apps/web`, no route collisions,
+`/top-performers` renders as a normal dynamic route.
+→ `services/api/core/event_consumer.py`, `services/api/routers/hackathons.py`,
+`packages/shared_schemas/hackathon.py`, `services/api/main.py`,
+`apps/web/src/app/(recruiter)/top-performers/page.tsx`, `apps/web/src/lib/api.ts`

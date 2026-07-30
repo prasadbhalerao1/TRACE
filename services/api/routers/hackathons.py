@@ -58,6 +58,7 @@ from services.agents.hackathon.state import HackathonRankingState
 from services.agents.hackathon.tools.normalization import NormalizationUnavailable, normalize_webhook_payload
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
+from services.api.core.event_consumer import get_matching_top_performers_for_recruiter
 from services.api.core.rbac import require_role
 
 router = APIRouter(tags=["hackathons"])
@@ -598,50 +599,12 @@ async def top_performers_feed(
     user: User = Depends(require_role("recruiter")),
     db: AsyncSession = Depends(get_db),
 ) -> TopPerformersFeedResponse:
-    """Reads finalized rankings + team rosters directly (this module's own tables) —
-    matching finalized top performers against this recruiter's specific
-    `recruiter_watchlists` criteria is the Module 02 consumer side, explicitly deferred
-    to Phase 2 per the assignment file's §6. This feed shows all recent top-3 finishers
-    across all hackathons, unfiltered by watchlist criteria, so the page isn't empty
-    before that integration exists."""
-    result = await db.execute(
-        select(HackathonRanking, HackathonTeam, Hackathon)
-        .join(HackathonTeam, HackathonRanking.team_id == HackathonTeam.id)
-        .join(Hackathon, HackathonRanking.hackathon_id == Hackathon.id)
-        .where(HackathonRanking.rank <= 3)
-        .order_by(HackathonRanking.finalized_at.desc())
-    )
-    rows = result.all()
-
-    team_ids = [team.id for _, team, _ in rows]
-    members_result = await db.execute(
-        select(HackathonTeamMember).where(HackathonTeamMember.team_id.in_(team_ids))
-    )
-    members_by_team: dict[uuid.UUID, list[HackathonTeamMember]] = {}
-    for m in members_result.scalars().all():
-        members_by_team.setdefault(m.team_id, []).append(m)
-
-    candidate_ids = [m.candidate_id for members in members_by_team.values() for m in members if m.candidate_id]
-    profiles_result = await db.execute(select(CandidateProfile).where(CandidateProfile.id.in_(candidate_ids)))
-    profiles_by_id = {p.id: p for p in profiles_result.scalars().all()}
-
-    entries: list[TopPerformerEntry] = []
-    for ranking, team, hackathon in rows:
-        team_members = members_by_team.get(team.id, [])
-        registered = [m for m in team_members if m.candidate_id is not None] or [None]
-        for member in registered:
-            profile = profiles_by_id.get(member.candidate_id) if member else None
-            entries.append(
-                TopPerformerEntry(
-                    hackathon_id=hackathon.id,
-                    hackathon_name=hackathon.name,
-                    team_id=team.id,
-                    team_name=team.team_name,
-                    rank=ranking.rank,
-                    composite_score=ranking.composite_score,
-                    candidate_id=profile.id if profile else None,
-                    candidate_headline=profile.headline if profile else None,
-                    candidate_github_username=profile.github_username if profile else None,
-                )
-            )
-    return TopPerformersFeedResponse(entries=entries)
+    """Phase 2 integration (2026-07-30, see .agents/decisions.md): now actually matches
+    finalized top performers against this recruiter's `recruiter_watchlists` criteria,
+    computed live by `services.api.core.event_consumer.get_matching_top_performers_for_recruiter`
+    (not from the `hackathon.rankings.finalized` event payload directly — that event's
+    consumer-side job is bookkeeping/`processed_at`, see that module's docstring for why
+    matching is computed live off tables instead). Recruiters with no watchlists yet still
+    see every recent top-3 finisher unfiltered, same "never empty" behavior as before."""
+    entries = await get_matching_top_performers_for_recruiter(db, user.id)
+    return TopPerformersFeedResponse(entries=[TopPerformerEntry(**e) for e in entries])

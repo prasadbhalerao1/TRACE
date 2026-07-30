@@ -205,6 +205,11 @@ class TopPerformerEntry(BaseModel):
     candidate_id: UUID | None
     candidate_headline: str | None
     candidate_github_username: str | None
+    # Phase 2 integration (services/api/core/event_consumer.py) — live-computed against
+    # this recruiter's recruiter_watchlists, not persisted. False/[] for every entry when
+    # the recruiter has no watchlists yet (same "never empty" fallback the feed always had).
+    matched_watchlist: bool = False
+    match_reasons: list[str] = []
 
 
 class TopPerformersFeedResponse(BaseModel):

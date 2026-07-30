@@ -1110,6 +1110,10 @@ export interface TopPerformerEntry {
   candidate_id: string | null;
   candidate_headline: string | null;
   candidate_github_username: string | null;
+  // Phase 2 integration (services/api/core/event_consumer.py) — live-computed against the
+  // recruiter's own watchlists; false/[] when they have none yet.
+  matched_watchlist: boolean;
+  match_reasons: string[];
 }
 
 export function fetchTopPerformersFeed(token: string): Promise<{ entries: TopPerformerEntry[] }> {
