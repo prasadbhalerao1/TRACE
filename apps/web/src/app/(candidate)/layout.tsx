@@ -56,6 +56,8 @@ export default function CandidateLayout({ children }: { children: React.ReactNod
             <Link href="/resume-builder" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Resume & Portfolio</Link>
             <Link href="/career" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">AI Career Guidance</Link>
             <Link href="/pitch-deck" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Pitch Deck Analyzer</Link>
+            <Link href="/jobs" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Browse Jobs</Link>
+            <Link href="/hackathons" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Hackathons</Link>
             <Link href="/assessments/sample-assessment" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Assessments</Link>
             <Link href="/interview/sample-session" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">AI Interview</Link>
             <Link href="/my-flags" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Disputes & Flags</Link>
