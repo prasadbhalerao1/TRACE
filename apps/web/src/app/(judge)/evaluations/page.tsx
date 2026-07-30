@@ -73,7 +73,7 @@ export default function JudgeEvaluationsQueuePage() {
             </CardHeader>
             <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
               <p>Every authenticated judge sees every submission — no per-judge/per-track assignment table exists yet.</p>
-              <p>Judge ratings are combined with Module 03/04's automated scoring in the composite ranking formula.</p>
+              <p>Judge ratings are combined with {"Module 03/04's"} automated scoring in the composite ranking formula.</p>
             </CardContent>
           </Card>
         </div>

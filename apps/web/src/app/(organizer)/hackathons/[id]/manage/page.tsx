@@ -31,23 +31,47 @@ export default function OrganizerManageHackathonPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
-    const [h, t] = await Promise.all([
-      fetchHackathon(token, params.id),
-      fetchHackathonTeams(token, params.id),
-    ]);
-    setHackathon(h);
-    setTeams(t);
-    setLoading(false);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const [h, t] = await Promise.all([
+        fetchHackathon(token, params.id),
+        fetchHackathonTeams(token, params.id),
+      ]);
+      setHackathon(h);
+      setTeams(t);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load hackathon");
+    }
   }, [getToken, params.id]);
 
   useEffect(() => {
-    load().catch((err) => {
-      setError(err instanceof Error ? err.message : "Failed to load hackathon");
-      setLoading(false);
-    });
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const [h, t] = await Promise.all([
+          fetchHackathon(token, params.id),
+          fetchHackathonTeams(token, params.id),
+        ]);
+        if (cancelled) return;
+        setHackathon(h);
+        setTeams(t);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load hackathon");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, params.id]);
 
   async function handleAddTeam(e: React.FormEvent) {
     e.preventDefault();

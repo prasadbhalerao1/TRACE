@@ -10,10 +10,26 @@
 // the server-only BACKEND_URL env var, never NEXT_PUBLIC_API_URL — this fetch must
 // never ship to or run in the browser bundle. Per doc 00 §2.1's hard boundary, Next.js
 // still never touches the database directly; it only talks to FastAPI over HTTP.
+//
+// Sub-sections below (RepositoryGrid, SkillsSection, AchievementsGrid, charts) are
+// Client Components for their Framer Motion/recharts interactivity — Next's App Router
+// allows a Server Component page to render Client Component children directly.
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { AchievementsGrid } from "@/components/achievements/AchievementsGrid";
+import { CommitActivityChart } from "@/components/charts/CommitActivityChart";
+import { ContributionHeatmap } from "@/components/charts/ContributionHeatmap";
+import { LanguageChart } from "@/components/charts/LanguageChart";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Section } from "@/components/common/Section";
+import { ProblemSolvingStats } from "@/components/ProblemSolvingStats";
+import { ProfileHeader } from "@/components/profile/ProfileHeader";
+import { RepositoryGrid } from "@/components/repositories/RepositoryGrid";
+import { SkillsSection } from "@/components/skills/SkillsSection";
+import { GithubStatsCards } from "@/components/stats/GithubStatsCards";
+import { StatsGrid } from "@/components/stats/StatsGrid";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchPublicPortfolio } from "@/lib/api";
@@ -47,25 +63,83 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
     notFound();
   }
 
-  const { headline, location, skills, experience, education, projects, badges, overall_score } =
-    portfolio;
+  const {
+    headline,
+    location,
+    skills,
+    experience,
+    education,
+    badges,
+    overall_score,
+    github_username,
+    leetcode_username,
+    github_stats,
+    github_summary,
+    leetcode_stats,
+  } = portfolio;
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-8">
-      <header className="space-y-1">
-        <h1 className="font-heading text-3xl font-semibold text-ink">{portfolio.username}</h1>
-        {headline && <p className="text-lg text-slate">{headline}</p>}
-        <p className="text-sm text-muted-foreground">
-          {[location, overall_score !== null ? `Talent Score ${overall_score.toFixed(1)}` : null]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      </header>
+    <div className="dark mx-auto w-full max-w-5xl space-y-6 bg-background p-8 text-foreground">
+      <ProfileHeader username={portfolio.username} headline={headline} location={location} overallScore={overall_score} />
+
+      {!github_username || !github_stats ? (
+        <Card className="bg-card text-card-foreground">
+          <CardContent className="p-5">
+            <EmptyState message="This candidate hasn't connected GitHub yet." />
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <StatsGrid stats={github_stats} />
+
+          <Section title="Contribution Activity" index={0}>
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <span className="text-muted-foreground">
+                Contributions <span className="font-semibold text-foreground">{github_stats.total_contributions}</span>
+              </span>
+              <span className="text-muted-foreground">
+                Max Streak <span className="font-semibold text-foreground">{github_stats.longest_streak}</span>
+              </span>
+              <span className="text-muted-foreground">
+                Current Streak <span className="font-semibold text-foreground">{github_stats.current_streak}</span>
+              </span>
+            </div>
+            <ContributionHeatmap days={github_stats.days} />
+          </Section>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Section title="Languages" index={1}>
+              <LanguageChart projects={github_summary.projects} />
+            </Section>
+            <Section title="Commit Activity (weekly)" index={2}>
+              <CommitActivityChart weeklyCounts={github_stats.commit_activity_weekly} />
+            </Section>
+          </div>
+
+          <Section title="GitHub Stats" index={3}>
+            <GithubStatsCards summary={github_summary} />
+          </Section>
+
+          <Section title="Repository Analytics" index={4}>
+            <RepositoryGrid projects={github_summary.projects} />
+          </Section>
+
+          <Section title="Skills" index={5}>
+            <SkillsSection projects={github_summary.projects} />
+          </Section>
+
+          <Section title="Achievements" index={6}>
+            <AchievementsGrid githubStats={github_stats} githubSummary={github_summary} projects={github_summary.projects} />
+          </Section>
+        </>
+      )}
+
+      <ProblemSolvingStats leetcodeUsername={leetcode_username} leetcodeStats={leetcode_stats} />
 
       {skills && skills.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="font-heading">Skills</CardTitle>
+            <CardTitle className="font-heading">Skills (from resume)</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {skills.map((skill, i) => (
@@ -92,29 +166,6 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
               >
                 {badge.skill_name}
               </Badge>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {projects.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-heading">Projects</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {projects.map((project) => (
-              <div key={project.repo_full_name} className="rounded-lg border border-border p-3">
-                <p className="text-sm font-medium">{project.repo_full_name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {[
-                    project.stars !== null ? `${project.stars} stars` : null,
-                    project.languages ? Object.keys(project.languages).join(", ") : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              </div>
             ))}
           </CardContent>
         </Card>

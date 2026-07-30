@@ -57,7 +57,7 @@ export default function DashboardPage() {
 
   if (profile.role === "candidate") {
     return (
-      <div className="mx-auto w-full max-w-4xl p-8">
+      <div className="mx-auto w-full max-w-6xl p-8">
         <CandidateDashboard />
       </div>
     );

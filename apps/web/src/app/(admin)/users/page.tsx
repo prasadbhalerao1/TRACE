@@ -49,7 +49,6 @@ export default function AdminUsersPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getToken]);
 
   async function handleRoleChange(userId: string, role: Role) {

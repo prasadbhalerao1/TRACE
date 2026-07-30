@@ -2,10 +2,9 @@
 
 import { useParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { finalizeHackathonRankings, fetchHackathonRankings, type RankingResponse } from "@/lib/api";
 
 export default function OrganizerRankingsPage() {
@@ -16,24 +15,34 @@ export default function OrganizerRankingsPage() {
   const [finalizing, setFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [judgeWeight, setJudgeWeight] = useState(0.25);
-  const [pitchWeight, setPitchWeight] = useState(0.25);
-  const [repoWeight, setRepoWeight] = useState(0.25);
-  const [noveltyWeight, setNoveltyWeight] = useState(0.25);
-
-  const load = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
-    setRankings(await fetchHackathonRankings(token, params.id));
-    setLoading(false);
-  }, [getToken, params.id]);
+  const judgeWeight = 0.25;
+  const pitchWeight = 0.25;
+  const repoWeight = 0.25;
+  const noveltyWeight = 0.25;
 
   useEffect(() => {
-    load().catch((err) => {
-      setError(err instanceof Error ? err.message : "Failed to load rankings");
-      setLoading(false);
-    });
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetchHackathonRankings(token, params.id);
+        if (cancelled) return;
+        setRankings(res);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load rankings");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, params.id]);
 
   async function handleFinalize() {
     setFinalizing(true);
