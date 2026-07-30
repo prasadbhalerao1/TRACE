@@ -1296,3 +1296,24 @@ export function checkSubmission(token: string, submissionId: string): Promise<Ve
 export function checkProfileDuplicate(token: string, candidateId: string): Promise<VerificationCheckResponse> {
   return fraudJson(`/verification/profiles/${candidateId}/duplicate-check`, token, { method: "POST" });
 }
+
+// --- Recruiter pipeline enhancements (QA fix: Recruiter #1/#3/#4) ---
+// assignAssessment mirrors Track 1's createAssessment contract exactly (POST /assessments
+// accepting job_id/candidate_id/type/spec) -- kept minimal here since this file will be
+// reconciled with Track 1's fuller api.ts additions at merge time; not meant to duplicate
+// long-term, just lets the KanbanBoard "Assign Assessment" button compile and work now.
+export function assignAssessment(
+  token: string,
+  body: { jobId: string; candidateId: string; type: "coding" | "mcq" | "project_analysis"; spec: Record<string, unknown> },
+): Promise<{ id: string }> {
+  return recruitmentJson(`/assessments`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      job_id: body.jobId,
+      candidate_id: body.candidateId,
+      type: body.type,
+      spec: body.spec,
+    }),
+  });
+}
