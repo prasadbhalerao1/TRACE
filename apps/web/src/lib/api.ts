@@ -1135,3 +1135,152 @@ export function fetchPublicHackathonTeamDetail(hackathonId: string, teamId: stri
 export function fetchPublicHackathon(hackathonId: string): Promise<HackathonResponse> {
   return publicHackathonJson(`/hackathons/${hackathonId}`);
 }
+
+// --- Trust & Fraud Prevention (Module 06) ---
+//
+// Doc 06 §6's endpoint list has no shared prefix (matches recruitment.py/hackathons.py's
+// flat style). `raised` flags never auto-affect anything the frontend reads elsewhere
+// (Talent Score, Copilot, rankings) — this is enforced entirely backend-side; the
+// frontend just renders whatever the API returns.
+
+async function fraudJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+export type FraudFlagStatus = "raised" | "under_review" | "upheld" | "dismissed";
+
+export interface FraudFlagResponse {
+  id: string;
+  subject_type: string;
+  subject_id: string;
+  candidate_id: string | null;
+  flag_type: string;
+  status: FraudFlagStatus;
+  evidence: Record<string, unknown>;
+  raised_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+}
+
+export interface VerificationSignalResponse {
+  signal_type: string;
+  score: number | null;
+  confidence_label: "low" | "medium" | "high";
+  evidence: string | string[];
+}
+
+export interface VerificationCheckResponse {
+  subject_type: string;
+  subject_id: string;
+  signals: VerificationSignalResponse[];
+  flag: FraudFlagResponse | null;
+}
+
+export interface AuthenticityScoreResponse {
+  candidate_id: string;
+  score: number;
+  components: {
+    starting_score: number;
+    penalties_applied: { flag_id: string; flag_type: string; penalty: number }[];
+    total_penalty: number;
+  } | null;
+  computed_at: string;
+}
+
+export interface DisputeResponse {
+  id: string;
+  fraud_flag_id: string;
+  candidate_id: string;
+  candidate_statement: string | null;
+  supporting_files: string[] | null;
+  submitted_at: string;
+}
+
+export interface DisputeReviewAssist {
+  available: boolean;
+  candidate_context_summary: string | null;
+  points_of_agreement_or_conflict: string[];
+}
+
+export interface FraudFlagDetailResponse {
+  flag: FraudFlagResponse;
+  dispute: DisputeResponse | null;
+  dispute_review_assist: DisputeReviewAssist;
+}
+
+export interface FraudReviewQueueEntry {
+  flag: FraudFlagResponse;
+  candidate_headline: string | null;
+  candidate_github_username: string | null;
+  has_dispute: boolean;
+}
+
+// FR-6 — "corroboration strength," never a guilt score.
+export function fetchAuthenticityScore(token: string, candidateId: string): Promise<AuthenticityScoreResponse> {
+  return fraudJson(`/candidates/${candidateId}/authenticity-score`, token);
+}
+
+// FR-8 — candidate-visible view of flags raised against their own profile.
+export function fetchCandidateFlags(token: string, candidateId: string): Promise<FraudFlagResponse[]> {
+  return fraudJson(`/candidates/${candidateId}/flags`, token);
+}
+
+export function submitFlagDispute(
+  token: string,
+  flagId: string,
+  body: { candidate_statement: string; supporting_files?: string[] },
+): Promise<DisputeResponse> {
+  return fraudJson(`/flags/${flagId}/dispute`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Admin/recruiter review queue + actions.
+export function fetchFraudReviewQueue(token: string): Promise<FraudReviewQueueEntry[]> {
+  return fraudJson(`/admin/fraud-review-queue`, token);
+}
+
+export function fetchFraudFlagDetail(token: string, flagId: string): Promise<FraudFlagDetailResponse> {
+  return fraudJson(`/flags/${flagId}`, token);
+}
+
+export function reviewFraudFlag(
+  token: string,
+  flagId: string,
+  body: { status: "upheld" | "dismissed"; review_notes?: string | null },
+): Promise<FraudFlagResponse> {
+  return fraudJson(`/flags/${flagId}/review`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Verification-check triggers (FR-1/FR-2/FR-3/FR-4/FR-5) — admin/recruiter-initiated,
+// since this codebase has no async job queue (every module invokes its LangGraph
+// synchronously from the router, per `.agents/decisions.md`).
+export function checkCertificate(token: string, certificationId: string): Promise<VerificationCheckResponse> {
+  return fraudJson(`/verification/certificates/${certificationId}/check`, token, { method: "POST" });
+}
+
+export function checkSubmission(token: string, submissionId: string): Promise<VerificationCheckResponse> {
+  return fraudJson(`/verification/submissions/${submissionId}/check`, token, { method: "POST" });
+}
+
+export function checkProfileDuplicate(token: string, candidateId: string): Promise<VerificationCheckResponse> {
+  return fraudJson(`/verification/profiles/${candidateId}/duplicate-check`, token, { method: "POST" });
+}

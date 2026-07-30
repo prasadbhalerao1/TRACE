@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from services.api.core.config import get_settings
-from services.api.routers import assessments, candidates, hackathons, presentations, public, recruitment, users
+from services.api.routers import assessments, candidates, fraud, hackathons, presentations, public, recruitment, users
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ app.include_router(public.router)
 app.include_router(recruitment.router)
 app.include_router(assessments.router)
 app.include_router(hackathons.router)
+app.include_router(fraud.router)
 
 
 @app.exception_handler(Exception)
