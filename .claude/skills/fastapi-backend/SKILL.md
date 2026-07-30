@@ -6,9 +6,11 @@ description: Conventions for adding endpoints, models, and services to the servi
 # FastAPI Backend Conventions (`services/api`)
 
 ## Structure
-- `services/api/main.py` — app entrypoint, mounts routers only. No business logic here.
-- `services/api/routers/` — one file per feature/module (e.g. `candidates.py`, `jobs.py`, `assessments.py`). Route handlers call into services/agents, not the other way around.
-- `services/api/core/` — cross-cutting: config, DB session, security/auth, settings.
+- `services/api/main.py` — app entrypoint, mounts each domain module's router and wires global exception handlers/middleware. No business logic here.
+- `services/api/modules/<domain>/` — one package per domain (`recruitment`, `assessments`, `presentations`, `candidates`, `fraud`, `hackathons`, `users`, `admin`, `supervisor`, `public`). Each has `router.py` (the `APIRouter`, route handlers, and the domain's private helper functions) and an `__init__.py` that re-exports `router`. Route handlers call into services/agents, not the other way around. Cross-domain helper reuse (e.g. `assessments/router.py` importing `_require_consent` from `candidates/router.py`) is fine and already happens — don't duplicate a helper across modules.
+- `services/api/core/` — cross-cutting infrastructure: config, DB session, LLM client, storage, tracing, notifications, rate limiting, audit, RBAC/JWT verification.
+- `services/api/common/` — domain-agnostic building blocks: `exceptions.py` (`APIException` and subclasses — raise these instead of a bare `HTTPException` where a structured `{success, message, detail}` error body is wanted; caught by a global handler in `main.py`) and `responses.py` (generic `APIResponse`/`ErrorResponse` envelopes).
+- `services/api/integrations/` — thin facade modules (`clerk/`, `storage/`) that re-export the real third-party wiring from `core/` (e.g. `core/rbac.py`, `core/storage.py`). Domain modules should import auth/storage helpers through `integrations/`, not reach into `core/` directly, so the third-party boundary stays swappable.
 - `packages/shared_schemas/` — the **only** place Pydantic models get defined if they're used by both `services/api` and `services/agents`. Never duplicate a schema across the two — import from here.
 - `packages/db/migrations/` — Alembic. All schema changes go through a migration; no manual DDL, no `Base.metadata.create_all()` in application code.
 

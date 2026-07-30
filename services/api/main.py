@@ -6,10 +6,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from services.api.common.exceptions import APIException
 from services.api.core.config import get_settings
 from services.api.core.event_consumer import run_polling_loop
 from services.api.core.rate_limit import RateLimitMiddleware
-from services.api.routers import (
+from services.api.modules import (
     admin,
     assessments,
     candidates,
@@ -77,6 +78,14 @@ async def llm_unavailable_handler(request: Request, exc: LLMUnavailable) -> JSON
             "detail": f"AI Engine Temporarily Unavailable: {str(exc)}",
             "code": "LLM_UNAVAILABLE",
         },
+    )
+
+
+@app.exception_handler(APIException)
+async def api_exception_handler(request: Request, exc: APIException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"success": False, "message": exc.message, "detail": exc.detail},
     )
 
 

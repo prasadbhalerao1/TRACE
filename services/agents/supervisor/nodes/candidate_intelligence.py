@@ -1,6 +1,6 @@
 """Dispatches the supervisor's `candidate_score` intent to Module 01 (Candidate
 Intelligence) — reuses the exact response-shaping function
-(`services.api.routers.candidates._to_score_response`) the real `GET /candidates/me/score`
+(`services.api.modules.candidates.router._to_score_response`) the real `GET /candidates/me/score`
 endpoint calls, plus the same `TalentScore` query, rather than re-deriving the shape or
 issuing an HTTP call back into this same API process.
 
@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from packages.db.models import TalentScore
 from services.agents.supervisor.state import SupervisorState
-from services.api.routers.candidates import _to_score_response
+from services.api.modules.candidates.router import _to_score_response
 
 
 async def run(state: SupervisorState, config: RunnableConfig) -> dict:

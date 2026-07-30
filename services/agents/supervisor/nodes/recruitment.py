@@ -1,5 +1,5 @@
 """Dispatches the supervisor's `job_match` intent to Module 02 (Recruitment) — reuses the
-exact service function (`services.api.routers.recruitment._run_matching_and_persist`) the
+exact service function (`services.api.modules.recruitment.router._run_matching_and_persist`) the
 real `GET /jobs/{id}/matches?recompute=true` endpoint calls, running Flow B's real matching
 graph in-process against the job's live DB row (real candidate pool, real persisted
 `match_scores`), not a mock.
@@ -16,7 +16,7 @@ from sqlalchemy import select
 from packages.db.models import Job
 from services.agents.recruitment.tools.embeddings import RecruitmentUnavailable
 from services.agents.supervisor.state import SupervisorState
-from services.api.routers.recruitment import _run_matching_and_persist
+from services.api.modules.recruitment.router import _run_matching_and_persist
 
 
 async def run(state: SupervisorState, config: RunnableConfig) -> dict:

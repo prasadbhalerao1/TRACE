@@ -9,7 +9,7 @@ pre-fetches `pitch_score` (a plain table read) and this node just passes it thro
 Repos ARE actively triggered here, since a hackathon repo link never goes through Module
 03's own coding-assessment UI — this node invokes Module 03's real, unmodified
 verification graph (`get_verification_graph()`, the exact entrypoint
-`services/api/routers/assessments.py` itself calls) for any team whose repo hasn't been
+`services/api/modules/assessments/router.py` itself calls) for any team whose repo hasn't been
 scored yet. Reuses `_fetch_repo_sample_source` from that same router rather than
 duplicating the GitHub-fetch logic.
 
@@ -23,7 +23,7 @@ from services.agents.assessment.state import VerificationState
 from services.agents.assessment.tools.llm_review import AssessmentUnavailable
 from services.agents.assessment.verification_graph import get_verification_graph
 from services.agents.hackathon.state import HackathonRankingState
-from services.api.routers.assessments import _fetch_repo_sample_source
+from services.api.modules.assessments.router import _fetch_repo_sample_source
 
 
 def _repo_full_name(repo_url: str) -> str:

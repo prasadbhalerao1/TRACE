@@ -15,8 +15,8 @@ built around them here, not silently "fixed" (both logged in `.agents/decisions.
    -> invoke its own subgraph -> persist -> respond), not a bare importable subgraph this
    supervisor can `ainvoke()` and expect DB I/O to already be done. This supervisor's
    per-module nodes instead call the exact service functions the routers themselves call
-   (`services.api.routers.candidates._to_score_response`,
-   `services.api.routers.recruitment._run_matching_and_persist`) — doing real DB reads/
+   (`services.api.modules.candidates.router._to_score_response`,
+   `services.api.modules.recruitment.router._run_matching_and_persist`) — doing real DB reads/
    writes, not a mock. The live `AsyncSession` is threaded through via
    `RunnableConfig.configurable["db"]` (LangGraph's supported per-invocation context
    mechanism) rather than through `SupervisorState` itself, since a plain state dict
