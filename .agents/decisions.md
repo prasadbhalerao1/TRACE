@@ -543,3 +543,41 @@ expected, not a bug); idempotent re-finalize (upserts 3 ranking rows, not 6); re
 watchlist creation; top-performers feed. `python -c "import services.api.main"` clean.
 → `packages/db/models/hackathon.py`, `packages/shared_schemas/hackathon.py`,
 `services/agents/hackathon/`, `services/api/routers/hackathons.py`
+
+---
+
+## 2026-07-30 — QA fix, Track 1: Assessment assignment loop (Recruiter #1 / Candidate #4)
+
+**Schema**: `candidate_id` added to `Assessment` and `AssessmentCreateRequest` as **nullable**,
+FK to `candidate_profiles` (not `users`) — matches the convention every other candidate-scoped
+column in this module already uses (`Submission.candidate_id`, `InterviewSession.candidate_id`,
+`ContributionReport.candidate_id`). Nullable because a recruiter can author a reusable assessment
+template (e.g. per `job_id`) before assigning it to any specific candidate — mirrors `job_id`'s
+own existing nullability, not a new pattern.
+
+**Exact contract other tracks depend on** (Track 3's kanban "Assign Assessment" button calls
+this):
+- `POST /assessments` — request body: `{"job_id": "<uuid>|null", "candidate_id": "<uuid>|null",
+  "type": "coding"|"mcq"|"project_analysis", "spec": {...}}`. Response: the full
+  `AssessmentResponse` (`id`, `job_id`, `candidate_id`, `type`, `spec`, `created_at`).
+- `GET /assessments/mine` — candidate-only (`require_role("candidate")`), no request body,
+  returns `AssessmentResponse[]` filtered to `candidate_id == <authenticated candidate's
+  candidate_profiles.id>`.
+
+**Frontend**: new `apps/web/src/app/(candidate)/assessments/page.tsx` inbox/list page calling
+`GET /assessments/mine`, replacing the previously-hardcoded dead `/assessments/sample-assessment`
+nav link in `(candidate)/layout.tsx`.
+
+**Migration hygiene note**: this worktree's branch predates Module 06's merge to `main`, so its
+own local copy of Module 06's migration (`54e04d937561`) briefly existed as a stray duplicate
+file in this worktree — deleted before commit since it was byte-identical to what's already on
+`main`; this track's own migration (`b1c2d3e4f5a6`) correctly chains its `down_revision` onto
+`54e04d937561` regardless.
+
+**Verified**: Python syntax-checked clean (`ast.parse`); router/model/schema read carefully for
+correctness (no live-DB run performed in this pass — deferred to the consolidated post-merge
+verification pass covering all QA-fix tracks together).
+→ `packages/shared_schemas/assessment.py`, `packages/db/models/assessment.py`, migration
+`b1c2d3e4f5a6`, `services/api/routers/assessments.py`,
+`apps/web/src/app/(candidate)/assessments/page.tsx`, `apps/web/src/app/(candidate)/layout.tsx`,
+`apps/web/src/lib/api.ts`
