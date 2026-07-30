@@ -22,6 +22,12 @@ from packages.db.models.candidate import (
 from packages.db.models.consent import Consent
 from packages.db.models.event import Event
 from packages.db.models.file import File
+from packages.db.models.fraud import (
+    AuthenticityScore,
+    Dispute,
+    FraudFlag,
+    VerificationRecord,
+)
 from packages.db.models.hackathon import (
     Hackathon,
     HackathonRanking,
@@ -86,4 +92,8 @@ __all__ = [
     "HackathonSubmission",
     "HackathonRanking",
     "RecruiterWatchlist",
+    "VerificationRecord",
+    "FraudFlag",
+    "AuthenticityScore",
+    "Dispute",
 ]
