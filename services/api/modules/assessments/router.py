@@ -236,10 +236,10 @@ async def _definition_owned_by(db: AsyncSession, definition_id: uuid.UUID, user:
 @router.post("/interview-definitions/generate-questions", response_model=GenerateDefinitionQuestionsResponse)
 async def generate_definition_questions_endpoint(
     body: GenerateDefinitionQuestionsRequest,
-    user: User = Depends(require_role("recruiter")),
+    user: User = Depends(require_role("recruiter", "candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Generate interview topics from role/JD context without persisting."""
+    """Generate interview topics from role/JD context without persisting. Recruiters use this to create definitions; candidates use it for practice interviews."""
     initial_state: DefinitionQuestionState = {
         "role_title": body.role_title,
         "job_description": body.job_description,
