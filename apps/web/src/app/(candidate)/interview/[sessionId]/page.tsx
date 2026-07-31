@@ -36,7 +36,11 @@ export default function CandidateInterviewPage() {
   const [status, setStatus] = useState<"in_progress" | "completed" | null>(null);
   const [report, setReport] = useState<InterviewReportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   async function handleConsentAndStart() {
     setError(null);
@@ -103,6 +107,37 @@ export default function CandidateInterviewPage() {
     recognition.start();
     setListening(true);
   }
+
+  async function toggleCamera() {
+    if (cameraActive) {
+      // Stop camera
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setCameraActive(false);
+      setCameraError(null);
+      return;
+    }
+
+    // Start camera
+    setCameraError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      streamRef.current = stream;
+      setCameraActive(true);
+    } catch (err) {
+      setCameraError(err instanceof Error ? err.message : "Failed to access camera");
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      // Cleanup: stop all streams on unmount
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   useEffect(() => {
     // "SpeechSynthesis" TTS: speak the latest AI question aloud, browser-native, no
@@ -176,29 +211,54 @@ export default function CandidateInterviewPage() {
               {error && <p className="text-sm text-rose-flagged">{error}</p>}
             </div>
 
-            <div className="flex gap-2">
-              <Button onClick={toggleSpeech} variant={listening ? "destructive" : "secondary"}>
-                {listening ? "Listening..." : "🎤 Speak"}
-              </Button>
-              <input
-                className="flex-1 px-3 py-2 text-sm rounded-md border bg-background text-foreground focus:outline-none focus:ring-1"
-                placeholder="Type your response..."
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              />
-              <Button onClick={handleSend}>Send</Button>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Button onClick={toggleSpeech} variant={listening ? "destructive" : "secondary"} size="sm">
+                  {listening ? "Listening..." : "🎤"}
+                </Button>
+                <Button onClick={toggleCamera} variant={cameraActive ? "destructive" : "secondary"} size="sm">
+                  {cameraActive ? "📹 On" : "📹 Off"}
+                </Button>
+                <input
+                  className="flex-1 px-3 py-2 text-sm rounded-md border bg-background text-foreground focus:outline-none focus:ring-1"
+                  placeholder="Type your response..."
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                />
+                <Button onClick={handleSend}>Send</Button>
+              </div>
+              {cameraError && <p className="text-xs text-rose-flagged">{cameraError}</p>}
             </div>
           </CardContent>
         </Card>
 
         <div className="space-y-6">
+          {cameraActive && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Camera</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full rounded-md border bg-black aspect-video object-cover"
+                />
+                <p className="text-xs text-slate mt-2">Live video (not recorded or stored)</p>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-semibold">Instructions</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate space-y-2">
               <p>Speak or type your answer, then press Send. The interviewer adapts follow-up questions based on your answers.</p>
+              <p className="text-xs pt-2 border-t">Optional: Turn on your camera (📹) to practice on video. No recording — it&apos;s live only.</p>
             </CardContent>
           </Card>
         </div>
