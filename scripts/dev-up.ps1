@@ -10,13 +10,39 @@ $root = Split-Path -Parent $PSScriptRoot
 
 Write-Host "== DataAxle dev environment ==" -ForegroundColor Cyan
 
-# --- 1. Docker Desktop + redis -----------------------------------------
-$dockerOk = $true
-try {
-    docker info 2>$null | Out-Null
-} catch {
-    $dockerOk = $false
+# --- 0. Kill anything already bound to the dev ports --------------------------
+Write-Host "Freeing ports 3000 (web) and 8000 (api)..." -ForegroundColor Yellow
+foreach ($port in 3000, 8000) {
+    $pids = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($procId in $pids) {
+        try {
+            Stop-Process -Id $procId -Force -Confirm:$false -ErrorAction Stop
+            Write-Host "  Killed PID $procId on port $port" -ForegroundColor Yellow
+        } catch {
+            # Stop-Process can fail on Windows for processes with child watchers (e.g. uvicorn --reload).
+            # Fall back to taskkill /T to also terminate the process tree.
+            taskkill /PID $procId /T /F *>$null
+            if ($?) {
+                Write-Host "  Killed PID $procId on port $port (via taskkill)" -ForegroundColor Yellow
+            } else {
+                Write-Host "  Could not kill PID $procId on port $port" -ForegroundColor Red
+            }
+        }
+    }
 }
+
+# --- 1. Docker Desktop + redis -----------------------------------------
+function Test-DockerRunning {
+    try {
+        docker info *>$null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+$dockerOk = Test-DockerRunning
 
 if (-not $dockerOk) {
     Write-Host "Docker daemon not running, starting Docker Desktop..." -ForegroundColor Yellow
@@ -28,8 +54,7 @@ if (-not $dockerOk) {
         while ($waited -lt 90) {
             Start-Sleep -Seconds 3
             $waited += 3
-            docker info 2>$null | Out-Null
-            if ($?) { $dockerOk = $true; break }
+            if (Test-DockerRunning) { $dockerOk = $true; break }
         }
     } else {
         Write-Host "Docker Desktop.exe not found - start it manually, then re-run this script." -ForegroundColor Red
