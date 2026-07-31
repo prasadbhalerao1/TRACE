@@ -2,10 +2,11 @@
 Presentation & Pitch Deck Controller.
 Handles Deck Uploads, Multi-Agent Rubric Scoring, Plagiarism Checking, and Presentation Reports.
 """
+import logging
 import uuid
 
 import cloudinary.exceptions
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,11 +23,13 @@ from packages.shared_schemas.presentations import (
 from services.agents.ppt_analyzer.graph import get_graph
 from services.agents.ppt_analyzer.state import PitchAnalysisState
 from services.agents.ppt_analyzer.tools.extraction import UnsupportedDeckFormat, detect_format
-from services.api.core.config import get_settings
-from services.api.core.db import get_db
+from services.api.core.config import Settings, get_settings
+from services.api.core.db import async_session, get_db
 from services.api.core.rbac import get_current_user, require_role
 from services.api.core.storage import StorageUnavailable, upload_file
 from services.api.core.tracing import start_agent_trace
+
+logger = logging.getLogger("presentations")
 
 router = APIRouter(prefix="/presentations", tags=["Pitch Decks & Presentations"])
 
@@ -63,6 +66,7 @@ def _log_agent_run(
 
 @router.post("/upload", response_model=PresentationUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_presentation(
+    background_tasks: BackgroundTasks,
     file: UploadFile,
     linked_repo: str | None = Form(default=None),
     user: User = Depends(require_role("candidate")),
@@ -88,30 +92,107 @@ async def upload_presentation(
     await db.commit()
     await db.refresh(presentation)
 
-    status_detail: str | None = None
-    try:
-        public_url, storage_key = upload_file(
-            file_bytes, public_id=f"presentations/{presentation.id}", resource_type="raw"
-        )
-        db.add(
-            File(
-                owner_user_id=user.id,
-                storage_key=storage_key,
-                public_url=public_url,
-                file_type="ppt",
-            )
-        )
-        await db.flush()
-    except StorageUnavailable as exc:
-        status_detail = f"file_storage_unavailable: {exc}"
-    except cloudinary.exceptions.Error as exc:
-        status_detail = f"file_storage_unavailable: {exc}"
+    # The actual analysis (slide extraction/OCR, multi-agent rubric scoring, plagiarism
+    # check) previously ran inline here, blocking this response for 15-40+ seconds with
+    # no progress feedback beyond a static "Uploading and analyzing…" button label. The
+    # frontend (pitch-deck/[id]/page.tsx) already polls on status=="processing", and
+    # /status and /report both already handle a still-processing row gracefully — so the
+    # only change needed is to actually return as soon as the row exists, and let
+    # _analyze_presentation finish the work after the response is sent.
+    background_tasks.add_task(
+        _analyze_presentation,
+        presentation.id,
+        user.id,
+        file_bytes,
+        file.filename,
+        file.content_type,
+        linked_repo,
+    )
 
+    return PresentationUploadResponse(presentation_id=presentation.id, status=presentation.status)
+
+
+async def _analyze_presentation(
+    presentation_id: uuid.UUID,
+    owner_user_id: uuid.UUID,
+    file_bytes: bytes,
+    file_name: str | None,
+    file_content_type: str | None,
+    linked_repo: str | None,
+) -> None:
+    """Runs the full multi-agent analysis (slide extraction/OCR, rubric scoring,
+    plagiarism check, AI-content heuristic) and persists the result. Scheduled as a
+    FastAPI `BackgroundTask` from `upload_presentation` so the upload request can return
+    as soon as the file is validated and stored, instead of blocking the HTTP response
+    on this whole pipeline (previously 15-40+ seconds with zero progress feedback on the
+    upload button). Opens its own session — same "never hold a request-scoped session
+    past the request" pattern as `event_consumer.run_polling_loop` — and never raises:
+    any failure is recorded as `status="failed"` on the row so `/status` and `/report`
+    still resolve, rather than leaving the presentation stuck in `"processing"` forever.
+    """
+    settings = get_settings()
+    async with async_session() as db:
+        result = await db.execute(select(Presentation).where(Presentation.id == presentation_id))
+        presentation = result.scalar_one_or_none()
+        if presentation is None:
+            logger.error("presentation %s vanished before analysis could run", presentation_id)
+            return
+
+        status_detail: str | None = None
+        try:
+            public_url, storage_key = upload_file(
+                file_bytes, public_id=f"presentations/{presentation.id}", resource_type="raw"
+            )
+            db.add(
+                File(
+                    owner_user_id=owner_user_id,
+                    storage_key=storage_key,
+                    public_url=public_url,
+                    file_type="ppt",
+                )
+            )
+            await db.flush()
+        except StorageUnavailable as exc:
+            status_detail = f"file_storage_unavailable: {exc}"
+        except cloudinary.exceptions.Error as exc:
+            status_detail = f"file_storage_unavailable: {exc}"
+
+        try:
+            await _run_and_persist_analysis(
+                db,
+                presentation,
+                file_bytes=file_bytes,
+                file_name=file_name,
+                file_content_type=file_content_type,
+                linked_repo=linked_repo,
+                owner_user_id=owner_user_id,
+                status_detail=status_detail,
+                settings=settings,
+            )
+        except Exception:
+            logger.exception("ppt analysis failed for presentation %s", presentation_id)
+            presentation.status = "failed"
+            presentation.status_detail = "analysis_error: see server logs"
+            await db.commit()
+
+
+async def _run_and_persist_analysis(
+    db: AsyncSession,
+    presentation: Presentation,
+    *,
+    file_bytes: bytes,
+    file_name: str | None,
+    file_content_type: str | None,
+    linked_repo: str | None,
+    owner_user_id: uuid.UUID,
+    status_detail: str | None,
+    settings: Settings,
+) -> None:
     initial_state: PitchAnalysisState = {
         "presentation_id": str(presentation.id),
         "file_bytes": file_bytes,
-        "file_name": file.filename,
-        "file_content_type": file.content_type,
+        "file_name": file_name,
+        "file_content_type": file_content_type,
         "linked_repo": linked_repo,
         "normalized_pptx_bytes": None,
         "normalization_error": None,
@@ -134,8 +215,8 @@ async def upload_presentation(
 
     with start_agent_trace(
         "ppt_analyzer.analyze",
-        input_data={"file_name": file.filename, "linked_repo": linked_repo},
-        user_id=str(user.id),
+        input_data={"file_name": file_name, "linked_repo": linked_repo},
+        user_id=str(owner_user_id),
         tags=["ppt-analyzer"],
     ) as trace:
         result_state = await get_graph().ainvoke(initial_state)
@@ -164,7 +245,6 @@ async def upload_presentation(
     technical_feasibility = scores.get("technical_feasibility", {})
     ai_content_signal = result_state.get("ai_content_signal") or {}
 
-    settings = get_settings()
     db.add(
         PresentationScore(
             presentation_id=presentation.id,
@@ -234,8 +314,6 @@ async def upload_presentation(
         presentation.status_detail = status_detail or extraction_error
 
     await db.commit()
-
-    return PresentationUploadResponse(presentation_id=presentation.id, status=presentation.status)
 
 
 @router.get("/{presentation_id}/status", response_model=PresentationStatusResponse)

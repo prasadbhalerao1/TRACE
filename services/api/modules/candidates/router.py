@@ -2,6 +2,7 @@
 Candidate Controller & Intelligence Endpoints.
 Handles Candidate Profile Ingestion, Talent Score™ Calculation, GitHub Sync, and Career Guidance.
 """
+import asyncio
 import re
 import secrets
 import time
@@ -11,11 +12,13 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
 from fastapi.responses import RedirectResponse
 from github import Github
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from services.api.core.db import async_session
 
 from packages.db.models import (
     AgentRun,
@@ -329,6 +332,49 @@ async def _run_ingestion_and_persist(
     return profile
 
 
+async def _run_ingestion_background(
+    profile_id, state_overrides: dict, github_access_token: str | None = None
+) -> None:
+    """Runs `_run_ingestion_and_persist` outside the request/response cycle, in its own
+    DB session (the request's session is closed by the time this executes). Ingestion
+    involves dozens of blocking GitHub calls plus several LLM round-trips — synchronously
+    awaiting it in the request handler stalls the uploading candidate's own request for
+    the full duration and, combined with unindexed queries, degrades every other
+    concurrent request too. `ingestion_status` lets the frontend poll for completion.
+
+    `github_access_token` also triggers the Development Stats (contribution calendar)
+    GraphQL fetch — best-effort, folded in here since it's part of the same GitHub
+    connect flow and is itself a network call worth keeping off the request path.
+    """
+    async with async_session() as bg_db:
+        result = await bg_db.execute(select(CandidateProfile).where(CandidateProfile.id == profile_id))
+        profile = result.scalar_one_or_none()
+        if profile is None:
+            return
+        try:
+            await _run_ingestion_and_persist(bg_db, profile, state_overrides)
+            profile.ingestion_status = "done"
+            profile.ingestion_error = None
+        except Exception as exc:  # noqa: BLE001 - surfaced via ingestion_error, never crashes the worker
+            logger.exception("Background ingestion failed for candidate %s", profile_id)
+            profile.ingestion_status = "failed"
+            profile.ingestion_error = str(exc)[:2000]
+            await bg_db.commit()
+            return
+
+        if github_access_token and profile.github_username:
+            try:
+                calendar = await fetch_github_calendar(profile.github_username, github_access_token)
+                profile.github_stats = {**(profile.github_stats or {}), **asdict(calendar)}
+                profile.stats_refreshed_at = datetime.now(timezone.utc)
+            except GithubCalendarUnavailable:
+                logger.warning(
+                    "GitHub calendar fetch failed for %s", profile.github_username, exc_info=True
+                )
+
+        await bg_db.commit()
+
+
 @router.get("/me", response_model=CandidateProfileResponse)
 async def get_my_profile(
     user: User = Depends(require_role("candidate")),
@@ -360,28 +406,49 @@ async def grant_consent(
 @router.post("/me/ingest/resume", response_model=CandidateProfileResponse)
 async def ingest_resume(
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> CandidateProfile:
     await _require_consent(db, user.id, "resume_parsing")
     profile = await _get_or_create_profile(db, user)
     file_bytes = await file.read()
-    return await _run_ingestion_and_persist(
-        db,
-        profile,
+    profile.ingestion_status = "processing"
+    profile.ingestion_error = None
+    await db.commit()
+    await db.refresh(profile)
+    background_tasks.add_task(
+        _run_ingestion_background,
+        profile.id,
         {"raw_resume_bytes": file_bytes, "raw_resume_content_type": file.content_type},
     )
+    return profile
 
 
 @router.post("/me/ingest/certificate", response_model=CandidateProfileResponse)
 async def ingest_certificate(
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> CandidateProfile:
     profile = await _get_or_create_profile(db, user)
     file_bytes = await file.read()
-    return await _run_ingestion_and_persist(db, profile, {"certificate_file_bytes": file_bytes})
+    profile.ingestion_status = "processing"
+    profile.ingestion_error = None
+    await db.commit()
+    await db.refresh(profile)
+    background_tasks.add_task(_run_ingestion_background, profile.id, {"certificate_file_bytes": file_bytes})
+    return profile
+
+
+@router.get("/me/ingestion-status")
+async def get_ingestion_status(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    profile = await _get_or_create_profile(db, user)
+    return {"status": profile.ingestion_status, "error": profile.ingestion_error}
 
 
 @router.get("/github/oauth-url")
@@ -407,6 +474,7 @@ async def github_oauth_url(
 async def github_oauth_callback(
     code: str,
     state: str,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     settings = get_settings()
@@ -431,28 +499,26 @@ async def github_oauth_callback(
     if not access_token:
         return RedirectResponse(f"{settings.frontend_url}/profile/edit?github=token_exchange_failed")
 
-    github_username = Github(login_or_token=access_token).get_user().login
+    # Github(...).get_user() is a blocking PyGithub HTTP call — off-thread so it doesn't
+    # stall the event loop for every other in-flight request (same as github_analysis.py).
+    github_username = await asyncio.to_thread(
+        lambda: Github(login_or_token=access_token).get_user().login
+    )
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one()
     profile = await _get_or_create_profile(db, user)
     profile.github_username = github_username
+    profile.ingestion_status = "processing"
+    profile.ingestion_error = None
     await db.commit()
 
-    await _run_ingestion_and_persist(
-        db, profile, {"github_username": github_username, "github_access_token": access_token}
+    background_tasks.add_task(
+        _run_ingestion_background,
+        profile.id,
+        {"github_username": github_username, "github_access_token": access_token},
+        access_token,
     )
-
-    # Development Stats (contribution calendar/streak) — GraphQL, requires this OAuth
-    # token, so it's fetched here rather than in the REST-only ingestion graph above.
-    # Best-effort: a calendar fetch failure must never break the OAuth connect flow.
-    try:
-        calendar = await fetch_github_calendar(github_username, access_token)
-        profile.github_stats = {**(profile.github_stats or {}), **asdict(calendar)}
-        profile.stats_refreshed_at = datetime.now(timezone.utc)
-        await db.commit()
-    except GithubCalendarUnavailable:
-        logger.warning("GitHub calendar fetch failed for %s", github_username, exc_info=True)
 
     return RedirectResponse(f"{settings.frontend_url}/profile/edit?github=connected")
 

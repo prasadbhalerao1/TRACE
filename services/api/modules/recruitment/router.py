@@ -2,11 +2,12 @@
 Recruitment Controller.
 Handles Job Creation, Flow B Match Reranking, Recruiter Copilot, Applicant Tracking Kanban, and Hiring Analytics.
 """
+import time
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +53,7 @@ from services.agents.recruitment.matching_graph import get_matching_graph
 from services.agents.recruitment.state import CopilotState, MatchingState
 from services.agents.recruitment.tools.embeddings import RecruitmentUnavailable
 from services.api.core.config import get_settings
-from services.api.core.db import get_db
+from services.api.core.db import async_session, get_db
 from services.api.core.rbac import require_role
 from services.api.core.tracing import start_agent_trace
 
@@ -63,28 +64,60 @@ def _estimate_experience_years(experience: list[dict] | None) -> float:
     return sum(e.get("years") or 0 for e in (experience or []))
 
 
-async def _build_candidate_pool(db: AsyncSession) -> list[dict]:
+# _build_candidate_pool does 4 unfiltered full-table scans (every TalentScore, Badge,
+# GithubSnapshot, and CandidateProfile row) — expensive and was being re-run from scratch
+# on every job create, every recompute, and every Copilot query in the same session. A
+# short in-process TTL cache (same pattern as _oauth_state_cache in candidates/router.py)
+# avoids repeating that work for back-to-back calls without adding an infra dependency;
+# each entry is small (list of dicts) and self-expires, so no eviction logic is needed.
+_CANDIDATE_POOL_CACHE_TTL_SECONDS = 30
+_candidate_pool_cache: tuple[float, list[dict]] | None = None
+
+
+async def _build_candidate_pool(db: AsyncSession, *, use_cache: bool = True) -> list[dict]:
+    global _candidate_pool_cache
+    if use_cache and _candidate_pool_cache is not None:
+        cached_at, pool = _candidate_pool_cache
+        if time.monotonic() - cached_at < _CANDIDATE_POOL_CACHE_TTL_SECONDS:
+            return pool
+    # Candidates with no skills recorded yet contribute no skill_similarity signal and
+    # can't be meaningfully matched — excluding them narrows every scan below without
+    # changing who's actually eligible for matching (no recruiter-visibility opt-in
+    # field exists on this model to filter by instead).
+    profiles_result = await db.execute(
+        select(CandidateProfile).where(CandidateProfile.skills.is_not(None))
+    )
+    profiles = profiles_result.scalars().all()
+    candidate_ids = [p.id for p in profiles]
+
+    if not candidate_ids:
+        _candidate_pool_cache = (time.monotonic(), [])
+        return []
+
     scores_result = await db.execute(
-        select(TalentScore).order_by(TalentScore.candidate_id, TalentScore.computed_at.desc())
+        select(TalentScore)
+        .where(TalentScore.candidate_id.in_(candidate_ids))
+        .order_by(TalentScore.candidate_id, TalentScore.computed_at.desc())
     )
     latest_score_by_candidate: dict[uuid.UUID, float | None] = {}
     for s in scores_result.scalars().all():
         if s.candidate_id not in latest_score_by_candidate:
             latest_score_by_candidate[s.candidate_id] = s.overall
 
-    badges_result = await db.execute(select(Badge))
+    badges_result = await db.execute(select(Badge).where(Badge.candidate_id.in_(candidate_ids)))
     verified_skills_by_candidate: dict[uuid.UUID, set[str]] = defaultdict(set)
     for b in badges_result.scalars().all():
         verified_skills_by_candidate[b.candidate_id].add(b.skill_name.lower())
 
-    snapshots_result = await db.execute(select(GithubSnapshot))
+    snapshots_result = await db.execute(
+        select(GithubSnapshot).where(GithubSnapshot.candidate_id.in_(candidate_ids))
+    )
     snapshots_by_candidate: dict[uuid.UUID, list[GithubSnapshot]] = defaultdict(list)
     for gs in snapshots_result.scalars().all():
         snapshots_by_candidate[gs.candidate_id].append(gs)
 
-    profiles_result = await db.execute(select(CandidateProfile))
     pool: list[dict] = []
-    for p in profiles_result.scalars().all():
+    for p in profiles:
         verified = verified_skills_by_candidate.get(p.id, set())
         skills = [
             {"name": s["name"], "verified": s["name"].strip().lower() in verified}
@@ -108,6 +141,7 @@ async def _build_candidate_pool(db: AsyncSession) -> list[dict]:
                 "repo_summaries": repo_summaries,
             }
         )
+    _candidate_pool_cache = (time.monotonic(), pool)
     return pool
 
 
@@ -123,8 +157,10 @@ async def _job_owned_by(db: AsyncSession, job_id: uuid.UUID, user: User) -> Job:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_job_posting")
 
 
-async def _run_matching_and_persist(db: AsyncSession, job: Job) -> list[MatchScore]:
-    candidate_pool = await _build_candidate_pool(db)
+async def _run_matching_and_persist(
+    db: AsyncSession, job: Job, *, use_pool_cache: bool = True
+) -> list[MatchScore]:
+    candidate_pool = await _build_candidate_pool(db, use_cache=use_pool_cache)
     initial_state: MatchingState = {
         "job_id": str(job.id),
         "job_description": job.description,
@@ -188,6 +224,31 @@ async def _run_matching_and_persist(db: AsyncSession, job: Job) -> list[MatchSco
     return rows
 
 
+async def _run_matching_background(job_id: uuid.UUID, *, use_pool_cache: bool = True) -> None:
+    """Runs `_run_matching_and_persist` outside the request/response cycle, in its own DB
+    session. Matching does a full candidate-pool build plus per-candidate embedding/Qdrant
+    work — synchronously awaiting it in `POST /jobs` and `?recompute=true` blocked the
+    recruiter's request for however long that took and scaled linearly with candidate
+    count. `matching_status` lets the frontend poll for completion; `GET /jobs/{id}/matches`
+    remains the read path once it's done."""
+    async with async_session() as bg_db:
+        result = await bg_db.execute(select(Job).where(Job.id == job_id))
+        job = result.scalar_one_or_none()
+        if job is None:
+            return
+        try:
+            await _run_matching_and_persist(bg_db, job, use_pool_cache=use_pool_cache)
+            job.matching_status = "done"
+            job.matching_error = None
+        except RecruitmentUnavailable as exc:
+            job.matching_status = "failed"
+            job.matching_error = str(exc)[:2000]
+        except Exception as exc:  # noqa: BLE001 - surfaced via matching_error, never crashes the worker
+            job.matching_status = "failed"
+            job.matching_error = str(exc)[:2000]
+        await bg_db.commit()
+
+
 router_stage_values = set(APPLICATION_STAGES)
 _FRAUD_STATUS_SEVERITY = {"upheld": 3, "under_review": 2, "raised": 1}
 
@@ -249,6 +310,7 @@ async def _latest_report_refs_by_candidate(
 @router.post("/jobs", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     body: JobCreateRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(require_role("recruiter")),
     db: AsyncSession = Depends(get_db),
 ) -> Job:
@@ -261,15 +323,13 @@ async def create_job(
         min_experience_years=body.min_experience_years,
         location=body.location,
         is_remote=body.is_remote,
+        matching_status="processing",
     )
     db.add(job)
     await db.commit()
     await db.refresh(job)
 
-    try:
-        await _run_matching_and_persist(db, job)
-    except RecruitmentUnavailable:
-        pass
+    background_tasks.add_task(_run_matching_background, job.id)
     return job
 
 
@@ -298,20 +358,36 @@ async def list_open_jobs(
     return list(result.scalars().all())
 
 
+@router.get("/jobs/{job_id}/matching-status")
+async def get_matching_status(
+    job_id: uuid.UUID,
+    user: User = Depends(require_role("recruiter")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    job = await _job_owned_by(db, job_id, user)
+    return {"status": job.matching_status, "error": job.matching_error}
+
+
 @router.get("/jobs/{job_id}/matches", response_model=list[MatchScoreWithCandidateResponse])
 async def get_job_matches(
     job_id: uuid.UUID,
-    recompute: bool = Query(False, description="Force Flow B to re-run instead of reading persisted rows."),
+    background_tasks: BackgroundTasks,
+    recompute: bool = Query(
+        False,
+        description="Kick off Flow B in the background instead of reading persisted rows only. "
+        "Returns the currently-persisted rows immediately; poll GET /jobs/{id}/matching-status "
+        "and re-fetch once it's no longer 'processing'.",
+    ),
     user: User = Depends(require_role("recruiter")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
     job = await _job_owned_by(db, job_id, user)
 
     if recompute:
-        try:
-            await _run_matching_and_persist(db, job)
-        except RecruitmentUnavailable as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        job.matching_status = "processing"
+        job.matching_error = None
+        await db.commit()
+        background_tasks.add_task(_run_matching_background, job.id, use_pool_cache=False)
 
     result = await db.execute(
         select(MatchScore).where(MatchScore.job_id == job.id).order_by(MatchScore.match_percentage.desc())
@@ -444,12 +520,18 @@ async def list_applications(
 
     result = await db.execute(query.order_by(Application.stage_updated_at.desc()))
     rows = result.all()
-    scores_result = await db.execute(select(TalentScore).order_by(TalentScore.candidate_id, TalentScore.computed_at.desc()))
-    latest_score_by_candidate: dict[uuid.UUID, float | None] = {}
-    for s in scores_result.scalars().all():
-        latest_score_by_candidate.setdefault(s.candidate_id, s.overall)
-
     candidate_ids = [profile.id for _, profile in rows]
+
+    latest_score_by_candidate: dict[uuid.UUID, float | None] = {}
+    if candidate_ids:
+        scores_result = await db.execute(
+            select(TalentScore)
+            .where(TalentScore.candidate_id.in_(candidate_ids))
+            .order_by(TalentScore.candidate_id, TalentScore.computed_at.desc())
+        )
+        for s in scores_result.scalars().all():
+            latest_score_by_candidate.setdefault(s.candidate_id, s.overall)
+
     fraud_status_by_candidate = await _fraud_flag_status_by_candidate(db, candidate_ids)
     report_refs_by_candidate = await _latest_report_refs_by_candidate(db, candidate_ids)
 
