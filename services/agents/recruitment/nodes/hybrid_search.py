@@ -11,21 +11,61 @@ candidates, which is what keeps the downstream Sonnet re-rank cost-bounded (doc 
 
 from services.agents.recruitment.state import CopilotState
 from services.agents.recruitment.tools.embeddings import (
+    SKILL_SIMILARITY_THRESHOLD,
     candidate_skill_centroid,
     cosine_similarity,
     embed_texts,
 )
+from services.agents.recruitment.tools.skill_descriptions import describe_skill
 
 _SHORTLIST_LIMIT = 50
 
 
-def _matches_hard_filters(candidate: dict, hard_filters: dict) -> bool:
+def _skill_matches(
+    candidate_skill_names: list[str],
+    candidate_vectors: list[list[float]] | None,
+    required_skills: list[str],
+    required_vectors_by_name: dict[str, list[float]],
+) -> bool:
+    """A candidate satisfies a required skill if they have it literally (case-insensitive),
+    or if their skill list contains something embedding-similar (e.g. "Vue.js" against a
+    required "React") — previously this was pure exact-match, so a candidate with only
+    closely related skills was excluded from the shortlist before the semantic ranking
+    step below ever got a chance to see them, even though the ranking step already uses
+    real embeddings for the free-text query. Both `required_vectors_by_name` and
+    `candidate_vectors` are precomputed once per search/candidate (not once per
+    (candidate, skill) pair) to keep this an O(candidates + required_skills) number of
+    embedding calls, not O(candidates * required_skills)."""
+    candidate_by_lower = {name.lower() for name in candidate_skill_names}
+
+    for skill in required_skills:
+        if skill.lower() in candidate_by_lower:
+            continue
+        if not candidate_vectors:
+            return False
+        required_vector = required_vectors_by_name[skill]
+        best_similarity = max(
+            (cosine_similarity(required_vector, v) for v in candidate_vectors),
+            default=0.0,
+        )
+        if best_similarity < SKILL_SIMILARITY_THRESHOLD:
+            return False
+    return True
+
+
+def _matches_hard_filters(
+    candidate: dict,
+    hard_filters: dict,
+    required_vectors_by_name: dict[str, list[float]],
+    candidate_vectors_by_id: dict[str, list[list[float]] | None],
+) -> bool:
     if "location" in hard_filters:
         if (candidate.get("location") or "").strip().lower() != hard_filters["location"].strip().lower():
             return False
     if "skills" in hard_filters:
-        candidate_skill_names = {s["name"].lower() for s in candidate.get("skills", [])}
-        if not all(skill.lower() in candidate_skill_names for skill in hard_filters["skills"]):
+        candidate_skill_names = [s["name"] for s in candidate.get("skills", [])]
+        candidate_vectors = candidate_vectors_by_id.get(candidate["candidate_id"])
+        if not _skill_matches(candidate_skill_names, candidate_vectors, hard_filters["skills"], required_vectors_by_name):
             return False
     if "min_talent_score" in hard_filters:
         score = candidate.get("overall_talent_score")
@@ -42,7 +82,28 @@ async def run(state: CopilotState) -> dict:
     hard_filters = filters.get("_hard_filters", {})
     pool = state.get("candidate_pool") or []
 
-    survivors = [c for c in pool if _matches_hard_filters(c, hard_filters)]
+    # Only pay for embeddings when a "skills" hard filter is actually present — most
+    # Copilot queries filter on location/talent-score/hackathon-experience alone, and
+    # those stay free deterministic comparisons exactly as before.
+    required_vectors_by_name: dict[str, list[float]] = {}
+    candidate_vectors_by_id: dict[str, list[list[float]] | None] = {}
+    required_skills = hard_filters.get("skills") or []
+    if required_skills:
+        # Compared via each skill's curated description (skill_descriptions.py), not the
+        # bare name — bare short skill-name embeddings don't reliably separate genuinely
+        # related skills from unrelated ones (measured directly; see
+        # embeddings.SKILL_SIMILARITY_THRESHOLD's docstring).
+        required_vectors = embed_texts([describe_skill(s) for s in required_skills])
+        required_vectors_by_name = dict(zip(required_skills, required_vectors))
+        for candidate in pool:
+            skill_names = [s["name"] for s in candidate.get("skills", [])]
+            candidate_vectors_by_id[candidate["candidate_id"]] = (
+                embed_texts([describe_skill(name) for name in skill_names]) if skill_names else None
+            )
+
+    survivors = [
+        c for c in pool if _matches_hard_filters(c, hard_filters, required_vectors_by_name, candidate_vectors_by_id)
+    ]
 
     semantic_query = filters.get("semantic_query", "").strip()
     if semantic_query and survivors:

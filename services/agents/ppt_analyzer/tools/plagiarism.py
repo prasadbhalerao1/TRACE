@@ -15,7 +15,7 @@ import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
-from services.api.core.config import get_settings
+from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
 
 _QDRANT_COLLECTION = "presentation_slide_embeddings"
 # Tunable default (doc 08 §3 uses 0.75 for code AST-winnowing similarity; slide-text
@@ -25,13 +25,7 @@ SIMILARITY_THRESHOLD = 0.90
 
 
 def _get_client() -> QdrantClient | None:
-    settings = get_settings()
-    try:
-        client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None, timeout=5.0)
-        client.get_collections()
-        return client
-    except Exception:
-        return None
+    return _get_qdrant_client(raise_on_unavailable=False)
 
 
 def find_and_record_matches(

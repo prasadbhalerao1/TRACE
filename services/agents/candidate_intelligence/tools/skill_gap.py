@@ -23,7 +23,10 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from services.agents.candidate_intelligence.tools.role_taxonomy import ROLE_SKILL_TAXONOMY
+from services.agents.recruitment.tools.embeddings import RecruitmentUnavailable, get_embedder
 from services.api.core.config import get_settings
+from services.api.core.qdrant import QdrantUnavailable
+from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
 
 _COLLECTION = "skill_taxonomy_embeddings"
 # Below this cosine similarity to the candidate's closest matching skill, a required
@@ -44,22 +47,21 @@ class SkillGapResult:
 
 
 def _client() -> QdrantClient:
-    settings = get_settings()
     try:
-        client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None, timeout=5.0)
-        client.get_collections()
-        return client
-    except Exception as exc:
-        raise CareerGuidanceUnavailable(f"Qdrant is not reachable at {settings.qdrant_url}: {exc}") from exc
+        return _get_qdrant_client(raise_on_unavailable=True)
+    except QdrantUnavailable as exc:
+        raise CareerGuidanceUnavailable(str(exc)) from exc
 
 
 def _embedder():
+    """Shared process-level singleton with recruitment/tools/embeddings.py:get_embedder()
+    — this used to load its own uncached SentenceTransformer from disk on every call,
+    which is on FR-4.1's synchronous request path (every skill-gap analysis paid the
+    multi-second model-load cost). Same drift class as the Qdrant client constructor
+    duplication already found and fixed."""
     try:
-        from sentence_transformers import SentenceTransformer
-
-        settings = get_settings()
-        return SentenceTransformer(settings.embedding_model)
-    except Exception as exc:
+        return get_embedder()
+    except RecruitmentUnavailable as exc:
         raise CareerGuidanceUnavailable(f"Embedding model unavailable: {exc}") from exc
 
 

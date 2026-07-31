@@ -1,6 +1,7 @@
 """Talent Score aggregation — doc 08 §1 formula + §1.1 cold-start re-normalization."""
 
 from packages.shared_schemas.candidates import EvidenceConfidence, SubScore
+from services.agents.common.scoring import weighted_renormalized_mean
 
 SUB_SCORE_WEIGHTS = {
     "coding_ability": 0.20,
@@ -23,11 +24,11 @@ def compute_overall(sub_scores: dict[str, SubScore]) -> tuple[float | None, list
     available = {name: s for name, s in sub_scores.items() if s.value is not None}
     missing = [name for name in SUB_SCORE_WEIGHTS if name not in available]
 
-    if not available:
+    overall = weighted_renormalized_mean(
+        [(SUB_SCORE_WEIGHTS[name], s.value) for name, s in available.items()]
+    )
+    if overall is None:
         return None, missing
-
-    weight_sum = sum(SUB_SCORE_WEIGHTS[name] for name in available)
-    overall = sum(SUB_SCORE_WEIGHTS[name] * available[name].value for name in available) / weight_sum
     return round(overall, 1), missing
 
 

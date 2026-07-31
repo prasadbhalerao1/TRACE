@@ -5,6 +5,8 @@ the doc's mermaid diagram) — LangGraph waits for both predecessors before runn
 node, so `slide_ocr_notes` is guaranteed populated (possibly empty) by the time this runs.
 """
 
+import asyncio
+
 from services.agents.ppt_analyzer.state import PitchAnalysisState
 from services.agents.ppt_analyzer.tools.repo_crosscheck import fetch_repo_evidence
 from services.agents.ppt_analyzer.tools.rubric_scoring import (
@@ -29,7 +31,9 @@ async def run(state: PitchAnalysisState) -> dict:
         return {"technical_feasibility": {"value": None, "rationale": "No slide text extracted.", "gaps": []}}
 
     ocr_context = _ocr_context(state.get("slide_ocr_notes") or [])
-    repo_evidence = fetch_repo_evidence(state.get("linked_repo"))
+    # Blocking PyGithub calls — run off-thread so this async node doesn't stall the
+    # event loop, same pattern as candidate_intelligence/nodes/github_analysis.py.
+    repo_evidence = await asyncio.to_thread(fetch_repo_evidence, state.get("linked_repo"))
 
     try:
         result = await score_technical_feasibility(slides_text(slides), ocr_context, repo_evidence)

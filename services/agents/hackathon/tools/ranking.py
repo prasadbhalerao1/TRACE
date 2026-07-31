@@ -7,6 +7,8 @@ for this event/team has its weight zeroed and the rest re-normalized, never sile
 zero-filled.
 """
 
+from services.agents.common.scoring import weighted_renormalized_mean
+
 _WEIGHTS = {
     "judge_score_component": 0.40,
     "pitch_score_component": 0.30,
@@ -44,9 +46,7 @@ def compute_composite_score(
         "renormalized": renormalized,
     }
 
-    if not available:
+    composite = weighted_renormalized_mean([(_WEIGHTS[k], v) for k, v in available.items()])
+    if composite is None:
         return None, breakdown
-
-    weight_sum = sum(_WEIGHTS[k] for k in available)
-    composite = sum(_WEIGHTS[k] * available[k] for k in available) / weight_sum
     return round(composite, 2), breakdown

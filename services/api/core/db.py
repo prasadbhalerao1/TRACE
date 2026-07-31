@@ -13,7 +13,14 @@ if settings.database_ssl_required:
     # Neon's pooled (PgBouncer-style) endpoint.
     _connect_args = {"ssl": True, "statement_cache_size": 0}
 
-engine = create_async_engine(settings.database_url, connect_args=_connect_args)
+engine = create_async_engine(
+    settings.database_url,
+    connect_args=_connect_args,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout_seconds,
+    pool_recycle=settings.db_pool_recycle_seconds,
+)
 async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 

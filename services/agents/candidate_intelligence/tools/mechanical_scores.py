@@ -16,6 +16,7 @@ from services.agents.candidate_intelligence.tools.normalization import (
     percentile_normalize,
     winsorize,
 )
+from services.agents.common.scoring import weighted_renormalized_mean
 
 
 def _language_score_fallback(total_commits: float) -> float:
@@ -59,8 +60,7 @@ def coding_ability(
     if not available:
         return SubScore(value=None, rationale="No language, quality, or assessment signal available.")
 
-    weight_sum = sum(w for w, _ in available.values())
-    value = sum(w * v for w, v in available.values()) / weight_sum
+    value = weighted_renormalized_mean(list(available.values()))
 
     return SubScore(
         value=round(value, 1),

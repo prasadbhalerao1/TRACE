@@ -7,6 +7,7 @@ whether because a key is missing or the service/model isn't available in this
 environment. Doc 08 §1.1's cold-start re-normalization is what absorbs that gracefully.
 """
 
+import asyncio
 import base64
 import uuid
 
@@ -19,8 +20,11 @@ from radon.complexity import cc_visit
 from packages.shared_schemas.candidates import SubScore
 from services.agents.candidate_intelligence.tools.github import GithubAnalysis
 from services.agents.candidate_intelligence.tools.normalization import recency_weight
+from services.agents.recruitment.tools.embeddings import get_embedder
 from services.api.core.config import get_settings
 from services.api.core.llm import LLMUnavailable, generate_structured
+from services.agents.recruitment.tools.embeddings import CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION
+from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
 
 _JUDGMENT_PARAMETERS = {
     "type": "object",
@@ -31,7 +35,7 @@ _JUDGMENT_PARAMETERS = {
     "required": ["score", "rationale"],
 }
 
-_QDRANT_COLLECTION = "candidate_project_embeddings"
+_QDRANT_COLLECTION = CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION
 
 
 def _penalty_curve(avg_complexity: float) -> float:
@@ -112,7 +116,11 @@ async def project_quality(
     github_username: str, access_token: str | None, analysis: GithubAnalysis
 ) -> SubScore:
     settings = get_settings()
-    avg_complexity, sampled_files = sample_complexity(github_username, access_token, analysis)
+    # Blocking PyGithub calls (repo contents fetch) — run off-thread so this async node
+    # doesn't stall the event loop, same pattern as github_analysis.py's node.
+    avg_complexity, sampled_files = await asyncio.to_thread(
+        sample_complexity, github_username, access_token, analysis
+    )
     mechanical = _penalty_curve(avg_complexity) if avg_complexity is not None else None
 
     summaries = [f"{r.repo_full_name}: {r.stars} stars, languages {list(r.languages)}" for r in analysis.repos[:5]]
@@ -133,21 +141,14 @@ async def project_quality(
 
 
 def _get_qdrant() -> QdrantClient | None:
-    settings = get_settings()
-    try:
-        client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None, timeout=5.0)
-        client.get_collections()
-        return client
-    except Exception:
-        return None
+    return _get_qdrant_client(raise_on_unavailable=False)
 
 
 def _embed(texts: list[str]) -> list[list[float]] | None:
     try:
-        from sentence_transformers import SentenceTransformer
-
-        settings = get_settings()
-        model = SentenceTransformer(settings.embedding_model)
+        # Shared process-level singleton with recruitment/tools/embeddings.py — avoids
+        # loading a second SentenceTransformer instance from disk in the same process.
+        model = get_embedder()
         return model.encode(texts).tolist()
     except Exception:
         return None

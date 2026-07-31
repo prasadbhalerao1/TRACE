@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     # server-side prepared-statement caching, which breaks against PgBouncer-style
     # transaction poolers. False (default) for local docker-compose Postgres.
     database_ssl_required: bool = False
+    # SQLAlchemy async engine pool — defaults (5 + 10 overflow) were too small once
+    # matching/copilot/dashboard requests run concurrently against a remote pooled
+    # Postgres (Neon); each round-trip pays real network latency, so starving the pool
+    # queues requests behind each other instead of running them in parallel.
+    db_pool_size: int = 20
+    db_max_overflow: int = 20
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800
     # Langfuse `environment` attribute (services/api/core/tracing.py) — keeps test/dev
     # traces separate from production in dashboards and evaluations.
     environment: str = "development"

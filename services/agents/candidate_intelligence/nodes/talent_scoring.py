@@ -9,6 +9,8 @@ DB session) rather than queried here — this node stays DB-free, same conventio
 rest of candidate_intelligence.
 """
 
+import asyncio
+
 from packages.shared_schemas.candidates import SubScore
 from services.agents.candidate_intelligence.state import CandidateProfileState
 from services.agents.candidate_intelligence.tools import mechanical_scores
@@ -29,8 +31,13 @@ async def run(state: CandidateProfileState) -> dict:
     assessment_score = state.get("assessment_score")
     assessment_population = state.get("assessment_population") or []
 
+    # code_quality_score samples source files via blocking PyGithub calls — same
+    # rationale as github_analysis.py's node: run off-thread so it doesn't stall the
+    # event loop for every other in-flight request.
     quality_score, _ = (
-        code_quality_score(state["github_username"], state.get("github_access_token"), analysis)
+        await asyncio.to_thread(
+            code_quality_score, state["github_username"], state.get("github_access_token"), analysis
+        )
         if github_raw is not None
         else (None, [])
     )

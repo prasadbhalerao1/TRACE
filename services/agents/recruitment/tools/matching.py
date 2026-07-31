@@ -11,6 +11,9 @@ resolution style as Module 01's additive-but-undocumented schema choices.
 
 from dataclasses import dataclass
 
+from services.agents.common.scoring import weighted_renormalized_mean
+from services.agents.recruitment.tools.embeddings import SKILL_SIMILARITY_THRESHOLD, best_skill_similarity
+
 # doc 08 §2 canonical weights — tunable defaults, sum to 1.0.
 W_SKILL_OVERLAP = 0.35
 W_SEMANTIC_SIMILARITY = 0.30
@@ -37,10 +40,19 @@ def skill_overlap(candidate_skills: list[CandidateSkillSignal], required_skills:
     list contributes to the overlap ratio; a `verified` match contributes a full point,
     an unverified (self-declared) match contributes a discounted 0.6 point — this is
     what makes resume keyword-stuffing score lower than the same skill backed by an
-    actual GitHub repo or verified certificate."""
+    actual GitHub repo or verified certificate.
+
+    A required skill with no exact/case-insensitive match falls back to embedding
+    similarity against the candidate's own skill list (e.g. a candidate listing "Vue.js"
+    against a job requiring "React" previously scored zero overlap for that skill, even
+    though Qdrant already computes exactly this kind of skill-name embedding elsewhere in
+    this codebase for Copilot search). A near-miss above SKILL_SIMILARITY_THRESHOLD earns
+    partial, similarity-scaled credit, further discounted like an unverified match since
+    it's inferred rather than a literal skill the candidate actually claimed."""
     if not required_skills:
         return 0.0
     candidate_by_name = {s.name.lower(): s.verified for s in candidate_skills}
+    candidate_names = [s.name for s in candidate_skills]
     earned = 0.0
     for required in required_skills:
         verified = candidate_by_name.get(required.lower())
@@ -48,6 +60,10 @@ def skill_overlap(candidate_skills: list[CandidateSkillSignal], required_skills:
             earned += 1.0
         elif verified is False:
             earned += 0.6
+        else:
+            _, similarity = best_skill_similarity(candidate_names, required)
+            if similarity >= SKILL_SIMILARITY_THRESHOLD:
+                earned += 0.6 * similarity
     return round(100.0 * earned / len(required_skills), 1)
 
 
@@ -115,9 +131,9 @@ def aggregate_match_score(
         (W_EXPERIENCE_MATCH, experience_match_value),
         (W_TALENT_SCORE_ALIGNMENT, talent_score_alignment_value),
     ]
-    available = [(w, v) for w, v in terms if v is not None]
-    total_weight = sum(w for w, _ in available)
-    if total_weight == 0:
-        return 0.0
-    weighted_sum = sum(w * v for w, v in available)
-    return round(weighted_sum / total_weight, 1)
+    result = weighted_renormalized_mean(terms)
+    # Unlike the other 4 sites reusing this helper, a total weight of zero here falls
+    # back to 0.0 rather than None — skill_overlap_value/semantic_similarity_value are
+    # never actually None in practice (both always resolve to a number upstream), so
+    # this branch is effectively unreachable defensive code, not a real cold-start case.
+    return round(result, 1) if result is not None else 0.0

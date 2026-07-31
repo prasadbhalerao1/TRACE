@@ -10,6 +10,7 @@ and the rest re-normalized, rather than penalizing a deck for a missing sub-scor
 """
 
 from packages.shared_schemas.presentations import PITCH_SCORE_NAMES
+from services.agents.common.scoring import weighted_renormalized_mean
 
 _EQUAL_WEIGHT = 0.25
 
@@ -19,9 +20,7 @@ def compute_overall_pitch_score(scores: dict[str, float | None]) -> tuple[float 
     available = {name: value for name, value in scores.items() if value is not None}
     missing = [name for name in PITCH_SCORE_NAMES if name not in available]
 
-    if not available:
+    overall = weighted_renormalized_mean([(_EQUAL_WEIGHT, value) for value in available.values()])
+    if overall is None:
         return None, missing
-
-    weight_sum = _EQUAL_WEIGHT * len(available)
-    overall = sum(_EQUAL_WEIGHT * value for value in available.values()) / weight_sum
     return round(overall, 1), missing

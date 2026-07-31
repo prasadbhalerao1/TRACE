@@ -1,18 +1,16 @@
 """Project Relevance Agent — FR-2.3, "rules + embedding" per the agent registry. Node
 contract: constraints.md §2.3. Queries `candidate_project_embeddings` (reused from Module
-01) filtered per-candidate against the job vector."""
+01) filtered per-candidate against the job vector, in one batched Qdrant round-trip for
+the whole candidate pool rather than one sequential `.search()` call per candidate."""
 
 from services.agents.recruitment.state import MatchingState
-from services.agents.recruitment.tools.embeddings import candidate_project_relevance, get_qdrant_client
+from services.agents.recruitment.tools.embeddings import batch_candidate_project_relevance, get_qdrant_client
 
 
 async def run(state: MatchingState) -> dict:
     client = get_qdrant_client()
     job_vector = state["job_embedding"]
+    candidate_ids = [c["candidate_id"] for c in state.get("candidate_pool") or []]
 
-    scores: dict[str, float | None] = {}
-    for candidate in state.get("candidate_pool") or []:
-        cid = candidate["candidate_id"]
-        scores[cid] = candidate_project_relevance(client, cid, job_vector)
-
+    scores = batch_candidate_project_relevance(client, candidate_ids, job_vector)
     return {"project_relevance_scores": scores}

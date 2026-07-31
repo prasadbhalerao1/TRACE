@@ -12,9 +12,18 @@ tool-use already makes most schema failures rare.
 """
 
 import json
+import time
 
 from services.api.core.llm import LLMUnavailable, generate_structured
 from services.agents.recruitment.tools.embeddings import RecruitmentUnavailable
+
+# Recruiters often issue near-identical queries back-to-back within a session (typo fix,
+# re-running the same search) — a short in-process TTL cache on the parsed filters avoids
+# a repeat LLM round-trip. Keyed on (raw_query, prior_filters) since prior_filters changes
+# the parse (follow-up refinement vs. fresh search). Same pattern as
+# recruitment/router.py's _candidate_pool_cache — no infra dependency, self-expiring.
+_UNDERSTAND_QUERY_CACHE_TTL_SECONDS = 30
+_understand_query_cache: dict[str, tuple[float, dict]] = {}
 
 _QUERY_UNDERSTANDING_PARAMETERS = {
     "type": "object",
@@ -126,6 +135,13 @@ async def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
     that drops the earlier location/skills filters."""
     from services.agents.prompts_loader import load_prompt
 
+    cache_key = json.dumps({"raw_query": raw_query, "prior_filters": prior_filters}, sort_keys=True)
+    cached = _understand_query_cache.get(cache_key)
+    if cached is not None:
+        cached_at, result = cached
+        if time.monotonic() - cached_at < _UNDERSTAND_QUERY_CACHE_TTL_SECONDS:
+            return result
+
     prior_context = (
         f"\n\nThe recruiter's PREVIOUS filters in this conversation were: "
         f"{json.dumps(prior_filters)}. If this new message is a refinement/follow-up "
@@ -148,7 +164,7 @@ async def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
     )
 
     try:
-        return await _call_structured(
+        result = await _call_structured(
             "structured_search_filters",
             schema_description,
             _QUERY_UNDERSTANDING_PARAMETERS,
@@ -161,7 +177,7 @@ async def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
         # Single corrective retry — the `langgraph-agents` skill's explicit instruction
         # to "reject and re-prompt on schema-validation failure, never silently accept a
         # malformed filter" rather than an unbounded loop.
-        return await _call_structured(
+        result = await _call_structured(
             "structured_search_filters",
             schema_description,
             _QUERY_UNDERSTANDING_PARAMETERS,
@@ -171,6 +187,9 @@ async def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
             max_tokens=1024,
             agent_name="recruitment.copilot.understand_query_retry",
         )
+
+    _understand_query_cache[cache_key] = (time.monotonic(), result)
+    return result
 
 
 async def rerank_candidates(raw_query: str, candidates: list[dict]) -> list[str]:
