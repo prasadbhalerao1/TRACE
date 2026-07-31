@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { endInterview, grantConsent, interviewTurn, startInterview, type InterviewReportResponse } from "@/lib/api";
+import { endInterview, getInterviewSession, grantConsent, interviewTurn, startInterview, type InterviewReportResponse } from "@/lib/api";
 
 interface ChatMessage {
   role: "ai" | "user";
@@ -28,8 +28,10 @@ export default function CandidateInterviewPage() {
   const router = useRouter();
   const { getToken } = useAuth();
 
+  const initialSessionId = params.sessionId !== "new" ? params.sessionId : null;
   const [consentGiven, setConsentGiven] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(params.sessionId !== "new" ? params.sessionId : null);
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
+  const [hydrating, setHydrating] = useState(initialSessionId !== null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [listening, setListening] = useState(false);
@@ -58,6 +60,36 @@ export default function CandidateInterviewPage() {
       setError(err instanceof Error ? err.message : "Failed to start interview");
     }
   }
+
+  useEffect(() => {
+    // Landing directly on /interview/{sessionId} (fresh navigation, reload, or a shared
+    // link) — the first question only ever comes back in the POST /interview-sessions
+    // response, so without this the chat renders empty until the candidate types
+    // something. Hydrate the transcript so far and resume from there.
+    if (!initialSessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("No session token");
+        const session = await getInterviewSession(token, initialSessionId);
+        if (cancelled) return;
+        setMessages(
+          session.transcript.map((t) => ({ role: t.role === "agent" ? "ai" : "user", text: t.text }))
+        );
+        setStatus(session.status);
+        setConsentGiven(true);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load interview session");
+      } finally {
+        if (!cancelled) setHydrating(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSessionId]);
 
   async function handleSend() {
     if (!inputText.trim() || !sessionId) return;
@@ -122,15 +154,21 @@ export default function CandidateInterviewPage() {
     setCameraError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
       streamRef.current = stream;
       setCameraActive(true);
     } catch (err) {
       setCameraError(err instanceof Error ? err.message : "Failed to access camera");
     }
   }
+
+  useEffect(() => {
+    // The <video> element only mounts once cameraActive is true, so attach the
+    // already-acquired stream here rather than in toggleCamera (videoRef.current
+    // is still null at the moment getUserMedia resolves).
+    if (cameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [cameraActive]);
 
   useEffect(() => {
     return () => {
@@ -147,6 +185,10 @@ export default function CandidateInterviewPage() {
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(last.text));
     }
   }, [messages]);
+
+  if (hydrating) {
+    return <div className="max-w-lg mx-auto p-8 text-sm text-slate">Loading interview…</div>;
+  }
 
   if (!consentGiven && !sessionId) {
     return (

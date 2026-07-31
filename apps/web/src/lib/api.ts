@@ -1151,6 +1151,16 @@ export function startInterview(
   });
 }
 
+export interface InterviewSessionWithTranscript {
+  session_id: string;
+  status: "in_progress" | "completed";
+  transcript: TranscriptTurn[];
+}
+
+export function getInterviewSession(token: string, sessionId: string): Promise<InterviewSessionWithTranscript> {
+  return assessmentJson(`/interview-sessions/${sessionId}`, token);
+}
+
 export function interviewTurn(token: string, sessionId: string, answerText: string): Promise<InterviewTurnResponse> {
   return assessmentJson(`/interview-sessions/${sessionId}/turn`, token, {
     method: "POST",

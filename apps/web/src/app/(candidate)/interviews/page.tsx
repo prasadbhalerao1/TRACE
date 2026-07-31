@@ -41,8 +41,9 @@ export default function CandidateInterviewsPage() {
         if (!token) throw new Error("No session token");
         const definitions = await fetchOpenInterviewDefinitions(token);
         if (!cancelled) setOpenDefinitions(definitions);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load interview definitions");
+      } catch {
+        // Treat load failures as "no open interviews" rather than surfacing a raw fetch error.
+        if (!cancelled) setOpenDefinitions([]);
       } finally {
         if (!cancelled) setLoadingDefinitions(false);
       }
@@ -129,11 +130,16 @@ export default function CandidateInterviewsPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {error && <p className="text-sm text-rose-flagged">{error}</p>}
-          {loadingDefinitions && <p className="text-sm text-slate">Loading…</p>}
-          {openDefinitions?.length === 0 && (
+          {loadingDefinitions && (
+            <div className="flex items-center gap-2 py-6 justify-center text-slate">
+              <span className="h-4 w-4 rounded-full border-2 border-slate/30 border-t-slate animate-spin" />
+              <span className="text-sm">Loading open interviews…</span>
+            </div>
+          )}
+          {!loadingDefinitions && openDefinitions?.length === 0 && (
             <p className="text-sm text-slate">No open interviews yet. Try creating a practice interview below.</p>
           )}
-          {openDefinitions?.map((def) => (
+          {!loadingDefinitions && openDefinitions?.map((def) => (
             <div
               key={def.id}
               className="p-4 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-zinc-900 shadow-sm"

@@ -173,6 +173,12 @@ class TranscriptTurnResponse(BaseModel):
     ts: datetime
 
 
+class InterviewSessionWithTranscriptResponse(BaseModel):
+    session_id: UUID
+    status: str
+    transcript: list[TranscriptTurnResponse]
+
+
 class InterviewReportResponse(BaseModel):
     model_config = {"from_attributes": True}
 

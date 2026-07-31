@@ -40,6 +40,7 @@ from packages.shared_schemas.assessment import (
     InterviewDefinitionUpdateRequest,
     InterviewReportWithTranscriptResponse,
     InterviewSessionResponse,
+    InterviewSessionWithTranscriptResponse,
     InterviewStartRequest,
     InterviewTurnResponse,
     SubmissionRequest,
@@ -219,8 +220,22 @@ async def get_submission(
 
 
 def _default_topic_plan(profile: CandidateProfile) -> list[str]:
+    """Generate a rich set of interview topics from the candidate's profile.
+    If skills are available, use them; otherwise, generate breadth-based topics
+    that cover fundamental to advanced areas based on profile signals."""
     skills = [s.get("name") for s in (profile.skills or []) if s.get("name")]
-    return skills[:4] if skills else ["general software engineering experience"]
+    if skills:
+        return skills[:5]
+
+    # Fallback: generate rich, progressive topics covering breadth
+    # of technical competencies (foundational → advanced)
+    return [
+        "Core programming fundamentals and language proficiency",
+        "Problem-solving approach and algorithm design",
+        "System design and architectural thinking",
+        "Real-world project experience and technical depth",
+        "Collaboration, communication, and adaptability",
+    ]
 
 
 async def _definition_owned_by(db: AsyncSession, definition_id: uuid.UUID, user: User) -> InterviewDefinition:
@@ -476,6 +491,39 @@ async def start_interview(
         "question": result_state["next_question"],
         "topics_remaining": len(topic_plan) - result_state["current_topic_idx"],
         "status": result_state["interview_status"],
+    }
+
+
+@router.get("/interview-sessions/{session_id}", response_model=InterviewSessionWithTranscriptResponse)
+async def get_interview_session(
+    session_id: uuid.UUID,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Lets the frontend hydrate an in-progress (or completed) session's transcript on
+    page load/reload — e.g. a direct link to /interview/{session_id} — since the initial
+    question is otherwise only ever returned once, from the POST /interview-sessions
+    response that started it."""
+    result = await db.execute(select(InterviewSession).where(InterviewSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_session_not_found")
+
+    profile = await _get_or_create_profile(db, user)
+    if session.candidate_id != profile.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_interview_session")
+
+    turns_result = await db.execute(
+        select(InterviewTranscriptTurn)
+        .where(InterviewTranscriptTurn.session_id == session_id)
+        .order_by(InterviewTranscriptTurn.turn_index)
+    )
+    turns = turns_result.scalars().all()
+
+    return {
+        "session_id": session.id,
+        "status": session.status,
+        "transcript": turns,
     }
 
 
