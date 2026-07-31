@@ -77,8 +77,67 @@ class SubmissionResponse(BaseModel):
 # --- FR-2: AI Interview Agent ---
 
 
+class InterviewDefinitionQuestion(BaseModel):
+    id: str
+    topic: str
+
+
+class InterviewDefinitionCreateRequest(BaseModel):
+    title: str
+    role_title: str
+    job_description: str
+    years_experience: int | None = None
+    questions: list[InterviewDefinitionQuestion]
+    duration_minutes: int | None = None
+
+
+class InterviewDefinitionUpdateRequest(BaseModel):
+    title: str | None = None
+    questions: list[InterviewDefinitionQuestion] | None = None
+    duration_minutes: int | None = None
+    is_active: bool | None = None
+
+
+class InterviewDefinitionResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    created_by_user_id: UUID
+    title: str
+    role_title: str
+    job_description: str
+    years_experience: int | None
+    questions: list[InterviewDefinitionQuestion]
+    question_count: int
+    duration_minutes: int | None
+    is_active: bool
+    created_at: datetime
+
+
+class GenerateDefinitionQuestionsRequest(BaseModel):
+    role_title: str
+    job_description: str
+    years_experience: int | None = None
+    question_count: int = 5
+
+
+class GenerateDefinitionQuestionsResponse(BaseModel):
+    questions: list[InterviewDefinitionQuestion]
+
+
+class InterviewDefinitionAttemptResponse(BaseModel):
+    session_id: UUID
+    candidate_id: UUID
+    candidate_name: str | None
+    status: str
+    started_at: datetime
+    ended_at: datetime | None
+    has_report: bool
+
+
 class InterviewStartRequest(BaseModel):
     job_id: UUID | None = None
+    interview_definition_id: UUID | None = None
     topic_plan: list[str] = []  # empty = auto-derive from candidate profile
 
 
@@ -99,6 +158,7 @@ class InterviewSessionResponse(BaseModel):
     id: UUID
     candidate_id: UUID
     job_id: UUID | None
+    interview_definition_id: UUID | None
     status: str
     started_at: datetime
     ended_at: datetime | None

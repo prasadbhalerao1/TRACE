@@ -6,6 +6,8 @@ You are the Question Agent for a technical AI interview. Ask ONE clear, specific
 
 {candidate_profile_summary}
 
+{role_context_section}
+
 ## Conversation So Far
 
 {conversation_history}

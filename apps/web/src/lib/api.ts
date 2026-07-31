@@ -1041,14 +1041,113 @@ export interface InterviewReportResponse {
   transcript: TranscriptTurn[];
 }
 
+export interface InterviewDefinitionQuestion {
+  id: string;
+  topic: string;
+}
+
+export interface InterviewDefinitionResponse {
+  id: string;
+  created_by_user_id: string;
+  title: string;
+  role_title: string;
+  job_description: string;
+  years_experience: number | null;
+  questions: InterviewDefinitionQuestion[];
+  question_count: number;
+  duration_minutes: number | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface InterviewDefinitionAttempt {
+  session_id: string;
+  candidate_id: string;
+  candidate_name: string | null;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+  has_report: boolean;
+}
+
+export function generateDefinitionQuestions(
+  token: string,
+  body: { role_title: string; job_description: string; years_experience?: number; question_count?: number },
+): Promise<{ questions: InterviewDefinitionQuestion[] }> {
+  return assessmentJson(`/interview-definitions/generate-questions`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      role_title: body.role_title,
+      job_description: body.job_description,
+      years_experience: body.years_experience ?? null,
+      question_count: body.question_count ?? 5,
+    }),
+  });
+}
+
+export function createInterviewDefinition(
+  token: string,
+  body: {
+    title: string;
+    role_title: string;
+    job_description: string;
+    years_experience?: number;
+    questions: InterviewDefinitionQuestion[];
+    duration_minutes?: number;
+  },
+): Promise<InterviewDefinitionResponse> {
+  return assessmentJson(`/interview-definitions`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchMyInterviewDefinitions(token: string): Promise<InterviewDefinitionResponse[]> {
+  return assessmentJson(`/interview-definitions/mine`, token);
+}
+
+export function fetchOpenInterviewDefinitions(token: string): Promise<InterviewDefinitionResponse[]> {
+  return assessmentJson(`/interview-definitions/open`, token);
+}
+
+export function updateInterviewDefinition(
+  token: string,
+  id: string,
+  body: Partial<{
+    title: string;
+    questions: InterviewDefinitionQuestion[];
+    duration_minutes: number;
+    is_active: boolean;
+  }>,
+): Promise<InterviewDefinitionResponse> {
+  return assessmentJson(`/interview-definitions/${id}`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchInterviewDefinitionAttempts(
+  token: string,
+  id: string,
+): Promise<InterviewDefinitionAttempt[]> {
+  return assessmentJson(`/interview-definitions/${id}/attempts`, token);
+}
+
 export function startInterview(
   token: string,
-  body?: { job_id?: string; topic_plan?: string[] },
+  body?: { job_id?: string; interview_definition_id?: string; topic_plan?: string[] },
 ): Promise<InterviewTurnResponse> {
   return assessmentJson(`/interview-sessions`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ job_id: body?.job_id ?? null, topic_plan: body?.topic_plan ?? [] }),
+    body: JSON.stringify({
+      job_id: body?.job_id ?? null,
+      interview_definition_id: body?.interview_definition_id ?? null,
+      topic_plan: body?.topic_plan ?? [],
+    }),
   });
 }
 

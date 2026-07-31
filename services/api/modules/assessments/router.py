@@ -18,6 +18,7 @@ from packages.db.models import (
     CandidateProfile,
     Consent,
     ContributionReport,
+    InterviewDefinition,
     InterviewReport,
     InterviewSession,
     InterviewTranscriptTurn,
@@ -29,7 +30,14 @@ from packages.shared_schemas.assessment import (
     AssessmentResponse,
     ContributionReportGenerateRequest,
     ContributionReportResponse,
+    GenerateDefinitionQuestionsRequest,
+    GenerateDefinitionQuestionsResponse,
     InterviewAnswerRequest,
+    InterviewDefinitionAttemptResponse,
+    InterviewDefinitionCreateRequest,
+    InterviewDefinitionQuestion,
+    InterviewDefinitionResponse,
+    InterviewDefinitionUpdateRequest,
     InterviewReportWithTranscriptResponse,
     InterviewSessionResponse,
     InterviewStartRequest,
@@ -38,10 +46,12 @@ from packages.shared_schemas.assessment import (
     SubmissionResponse,
 )
 from services.agents.assessment.contribution_graph import get_contribution_graph
+from services.agents.assessment.interview_definition_graph import get_interview_definition_graph
 from services.agents.assessment.interview_graph import get_interview_graph
 from services.agents.assessment.interview_report_graph import get_interview_report_graph
-from services.agents.assessment.state import ContributionState, InterviewReportState, InterviewState, VerificationState
+from services.agents.assessment.state import ContributionState, DefinitionQuestionState, InterviewReportState, InterviewState, VerificationState
 from services.agents.assessment.tools.llm_review import AssessmentUnavailable
+from services.agents.assessment.tools.interview_llm import generate_definition_questions
 from services.agents.assessment.verification_graph import get_verification_graph
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
@@ -213,6 +223,164 @@ def _default_topic_plan(profile: CandidateProfile) -> list[str]:
     return skills[:4] if skills else ["general software engineering experience"]
 
 
+async def _definition_owned_by(db: AsyncSession, definition_id: uuid.UUID, user: User) -> InterviewDefinition:
+    result = await db.execute(select(InterviewDefinition).where(InterviewDefinition.id == definition_id))
+    definition = result.scalar_one_or_none()
+    if definition is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_definition_not_found")
+    if definition.created_by_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_interview_definition")
+    return definition
+
+
+@router.post("/interview-definitions/generate-questions", response_model=GenerateDefinitionQuestionsResponse)
+async def generate_definition_questions_endpoint(
+    body: GenerateDefinitionQuestionsRequest,
+    user: User = Depends(require_role("recruiter")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Generate interview topics from role/JD context without persisting."""
+    initial_state: DefinitionQuestionState = {
+        "role_title": body.role_title,
+        "job_description": body.job_description,
+        "years_experience": body.years_experience,
+        "question_count": body.question_count,
+        "topics": [],
+    }
+
+    with start_agent_trace(
+        "assessment.interview.definition_questions",
+        input_data={"role_title": body.role_title, "question_count": body.question_count},
+        user_id=str(user.id),
+        tags=["assessment", "interview", "definition"],
+    ) as trace:
+        try:
+            result_state = await get_interview_definition_graph().ainvoke(initial_state)
+        except AssessmentUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        trace.update(output={"topics": result_state["topics"]})
+
+    questions = [
+        InterviewDefinitionQuestion(id=str(i), topic=topic)
+        for i, topic in enumerate(result_state["topics"])
+    ]
+    return {"questions": questions}
+
+
+@router.post("/interview-definitions", response_model=InterviewDefinitionResponse, status_code=status.HTTP_201_CREATED)
+async def create_interview_definition(
+    body: InterviewDefinitionCreateRequest,
+    user: User = Depends(require_role("recruiter")),
+    db: AsyncSession = Depends(get_db),
+) -> InterviewDefinition:
+    """Persist a new interview definition."""
+    definition = InterviewDefinition(
+        created_by_user_id=user.id,
+        title=body.title,
+        role_title=body.role_title,
+        job_description=body.job_description,
+        years_experience=body.years_experience,
+        questions=[q.model_dump() for q in body.questions],
+        question_count=len(body.questions),
+        duration_minutes=body.duration_minutes,
+        is_active=True,
+    )
+    db.add(definition)
+    await db.commit()
+    await db.refresh(definition)
+    return definition
+
+
+@router.get("/interview-definitions/mine", response_model=list[InterviewDefinitionResponse])
+async def list_my_interview_definitions(
+    user: User = Depends(require_role("recruiter")),
+    db: AsyncSession = Depends(get_db),
+) -> list[InterviewDefinition]:
+    """List interview definitions created by the recruiter."""
+    result = await db.execute(
+        select(InterviewDefinition)
+        .where(InterviewDefinition.created_by_user_id == user.id)
+        .order_by(InterviewDefinition.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/interview-definitions/open", response_model=list[InterviewDefinitionResponse])
+async def list_open_interview_definitions(
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+) -> list[InterviewDefinition]:
+    """Browse open interview definitions (candidates)."""
+    result = await db.execute(
+        select(InterviewDefinition)
+        .where(InterviewDefinition.is_active == True)
+        .order_by(InterviewDefinition.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.patch("/interview-definitions/{definition_id}", response_model=InterviewDefinitionResponse)
+async def update_interview_definition(
+    definition_id: uuid.UUID,
+    body: InterviewDefinitionUpdateRequest,
+    user: User = Depends(require_role("recruiter")),
+    db: AsyncSession = Depends(get_db),
+) -> InterviewDefinition:
+    """Update an interview definition (ownership-checked)."""
+    definition = await _definition_owned_by(db, definition_id, user)
+
+    if body.title is not None:
+        definition.title = body.title
+    if body.questions is not None:
+        definition.questions = [q.model_dump() for q in body.questions]
+        definition.question_count = len(body.questions)
+    if body.duration_minutes is not None:
+        definition.duration_minutes = body.duration_minutes
+    if body.is_active is not None:
+        definition.is_active = body.is_active
+
+    await db.commit()
+    await db.refresh(definition)
+    return definition
+
+
+@router.get("/interview-definitions/{definition_id}/attempts", response_model=list[InterviewDefinitionAttemptResponse])
+async def list_interview_definition_attempts(
+    definition_id: uuid.UUID,
+    user: User = Depends(require_role("recruiter")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """List all interview attempts for a definition (ownership-checked)."""
+    definition = await _definition_owned_by(db, definition_id, user)
+
+    result = await db.execute(
+        select(InterviewSession, CandidateProfile)
+        .join(CandidateProfile, InterviewSession.candidate_id == CandidateProfile.id)
+        .where(InterviewSession.interview_definition_id == definition_id)
+        .order_by(InterviewSession.started_at.desc())
+    )
+
+    attempts = []
+    for session, profile in result.all():
+        # Check if a report exists
+        report_result = await db.execute(
+            select(InterviewReport).where(InterviewReport.session_id == session.id)
+        )
+        has_report = report_result.scalar_one_or_none() is not None
+
+        attempts.append({
+            "session_id": session.id,
+            "candidate_id": profile.id,
+            "candidate_name": profile.full_name,
+            "status": session.status,
+            "started_at": session.started_at,
+            "ended_at": session.ended_at,
+            "has_report": has_report,
+        })
+
+    return attempts
+
+
 @router.post("/interview-sessions", response_model=InterviewTurnResponse, status_code=status.HTTP_201_CREATED)
 async def start_interview(
     body: InterviewStartRequest,
@@ -229,11 +397,27 @@ async def start_interview(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="consent_required:ai_interview")
 
     profile = await _get_or_create_profile(db, user)
-    topic_plan = body.topic_plan or _default_topic_plan(profile)
+
+    # Derive topic_plan and job_context from definition if provided
+    job_context = None
+    if body.interview_definition_id:
+        def_result = await db.execute(select(InterviewDefinition).where(InterviewDefinition.id == body.interview_definition_id))
+        definition = def_result.scalar_one_or_none()
+        if definition is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_definition_not_found")
+        topic_plan = [q["topic"] for q in definition.questions]
+        job_context = {
+            "role_title": definition.role_title,
+            "job_description": definition.job_description,
+            "years_experience": definition.years_experience,
+        }
+    else:
+        topic_plan = body.topic_plan or _default_topic_plan(profile)
 
     session = InterviewSession(
         candidate_id=profile.id,
         job_id=body.job_id,
+        interview_definition_id=body.interview_definition_id,
         consent_id=consent.consent_id,
         state={
             "topic_plan": topic_plan,
@@ -241,6 +425,7 @@ async def start_interview(
             "transcript": [],
             "per_topic_scores": {},
             "follow_up_count_this_topic": 0,
+            "job_context": job_context,
         },
     )
     db.add(session)
@@ -251,7 +436,7 @@ async def start_interview(
         "candidate_id": str(profile.id),
         "mode": "start",
         "candidate_profile_summary": _candidate_profile_summary(profile),
-        "job_context": None,
+        "job_context": job_context,
         "topic_plan": topic_plan,
         "current_topic_idx": 0,
         "transcript": [],
@@ -319,7 +504,7 @@ async def interview_turn(
         "candidate_id": str(session.candidate_id),
         "mode": "turn",
         "candidate_profile_summary": _candidate_profile_summary(profile),
-        "job_context": None,
+        "job_context": saved.get("job_context"),
         "topic_plan": saved.get("topic_plan", []),
         "current_topic_idx": saved.get("current_topic_idx", 0),
         "transcript": transcript,
@@ -348,6 +533,7 @@ async def interview_turn(
         "transcript": result_state["transcript"],
         "per_topic_scores": result_state["per_topic_scores"],
         "follow_up_count_this_topic": result_state["follow_up_count_this_topic"],
+        "job_context": result_state.get("job_context"),
     }
 
     existing_turns = await db.execute(

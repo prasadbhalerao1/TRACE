@@ -2,6 +2,7 @@ from packages.db.models.agent_run import AgentRun
 from packages.db.models.assessment import (
     Assessment,
     ContributionReport,
+    InterviewDefinition,
     InterviewReport,
     InterviewSession,
     InterviewTranscriptTurn,
@@ -85,6 +86,7 @@ __all__ = [
     "InterviewSession",
     "InterviewTranscriptTurn",
     "InterviewReport",
+    "InterviewDefinition",
     "ContributionReport",
     "Hackathon",
     "HackathonTeam",

@@ -66,6 +66,16 @@ class InterviewReportState(TypedDict):
     hiring_recommendation: Optional[str]
 
 
+class DefinitionQuestionState(TypedDict):
+    """On-demand subgraph for drafting interview topics from role/JD/years-exp context."""
+
+    role_title: str
+    job_description: str
+    years_experience: Optional[int]
+    question_count: int
+    topics: list[str]
+
+
 class ContributionState(TypedDict):
     """Flow C — team contribution analytics (doc 03 §4), batch job over a shared repo."""
 

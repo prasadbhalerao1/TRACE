@@ -4,7 +4,7 @@ from sqlalchemy import CheckConstraint, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from sqlalchemy.types import DateTime, Float, Integer
+from sqlalchemy.types import DateTime, Float, Integer, Boolean
 
 from packages.db.models.base import Base
 
@@ -71,6 +71,9 @@ class InterviewSession(Base):
         UUID(as_uuid=True), ForeignKey("candidate_profiles.id"), nullable=False
     )
     job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.id"))
+    interview_definition_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("interview_definitions.id")
+    )
     consent_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("consents.consent_id"), nullable=False
     )
@@ -124,6 +127,30 @@ class InterviewReport(Base):
     communication_rating: Mapped[float | None] = mapped_column(Float)
     hiring_recommendation: Mapped[str | None] = mapped_column(Text)
     generated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class InterviewDefinition(Base):
+    """Recruiter-authored, reusable interview templates. Each definition specifies a role,
+    job description, and expected years of experience; the LLM drafts interview topics from
+    this context, and candidates can browse open definitions to self-serve practice interviews."""
+
+    __tablename__ = "interview_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    role_title: Mapped[str] = mapped_column(Text, nullable=False)
+    job_description: Mapped[str] = mapped_column(Text, nullable=False)
+    years_experience: Mapped[int | None] = mapped_column(Integer)
+    questions: Mapped[list] = mapped_column(JSONB, nullable=False)  # [{id: str, topic: str}, ...]
+    question_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("idx_interview_definitions_created_by", "created_by_user_id"),)
 
 
 class ContributionReport(Base):

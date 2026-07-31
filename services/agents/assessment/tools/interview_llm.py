@@ -9,7 +9,19 @@ import json
 from services.agents.assessment.tools.llm_review import AssessmentUnavailable
 from services.api.core.llm import generate_structured
 
-__all__ = ["AssessmentUnavailable", "generate_question", "evaluate_turn", "generate_followup", "generate_interview_report"]
+__all__ = ["AssessmentUnavailable", "generate_question", "evaluate_turn", "generate_followup", "generate_interview_report", "generate_definition_questions"]
+
+_DEFINITION_QUESTIONS_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "topics": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of interview topic phrases, ordered by difficulty.",
+        }
+    },
+    "required": ["topics"],
+}
 
 _QUESTION_PARAMETERS = {
     "type": "object",
@@ -71,16 +83,29 @@ _REPORT_PARAMETERS = {
 }
 
 
-def generate_question(topic: str, candidate_profile_summary: str, transcript: list[dict]) -> str:
+def generate_question(topic: str, candidate_profile_summary: str, transcript: list[dict], job_context: dict | None = None) -> str:
     from services.agents.prompts_loader import load_prompt
 
     history = "\n".join(f"{t['role']}: {t['text']}" for t in transcript) or "(interview just starting)"
+
+    role_context_section = ""
+    if job_context:
+        role_context_section = f"""## Role Context
+
+**Role Title:** {job_context.get('role_title', 'Not specified')}
+
+**Job Description:** {job_context.get('job_description', 'Not specified')}
+
+**Expected Experience:** {job_context.get('years_experience', 'Not specified')} years
+"""
+
     prompt = load_prompt(
         "assessment",
         "generate_question",
         topic=topic,
         candidate_profile_summary=candidate_profile_summary,
         conversation_history=history,
+        role_context_section=role_context_section,
     )
     result = generate_structured(
         schema_name="interview_question",
@@ -132,6 +157,30 @@ def generate_followup(topic: str, question: str, answer: str) -> str:
         agent_name="assessment.interview.followup",
     )
     return result["question"]
+
+
+def generate_definition_questions(
+    role_title: str, job_description: str, years_experience: int | None, question_count: int
+) -> list[str]:
+    from services.agents.prompts_loader import load_prompt
+
+    prompt = load_prompt(
+        "assessment",
+        "generate_definition_questions",
+        role_title=role_title,
+        job_description=job_description,
+        years_experience=str(years_experience) if years_experience else "not specified",
+        question_count=str(question_count),
+    )
+    result = generate_structured(
+        schema_name="definition_questions",
+        schema_description="Drafted interview topics for a recruiter-authored interview definition.",
+        parameters=_DEFINITION_QUESTIONS_PARAMETERS,
+        prompt=prompt,
+        max_tokens=512,
+        agent_name="assessment.interview.definition_questions",
+    )
+    return result["topics"]
 
 
 def generate_interview_report(transcript: list[dict], per_topic_scores: dict[str, float]) -> dict:
