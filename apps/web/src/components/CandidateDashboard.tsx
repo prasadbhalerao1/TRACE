@@ -2,13 +2,12 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 
 import { AchievementsGrid } from "@/components/achievements/AchievementsGrid";
 import { BadgeGrid } from "@/components/BadgeGrid";
-import { CommitActivityChart } from "@/components/charts/CommitActivityChart";
-import { ContributionHeatmap } from "@/components/charts/ContributionHeatmap";
-import { LanguageChart } from "@/components/charts/LanguageChart";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Section } from "@/components/common/Section";
 import { SectionError } from "@/components/common/SectionError";
@@ -16,8 +15,6 @@ import { EvidenceReceipt } from "@/components/EvidenceReceipt";
 import { ProblemSolvingStats } from "@/components/ProblemSolvingStats";
 import { ProfileSidebar } from "@/components/profile/ProfileSidebar";
 import { RepositoryGrid } from "@/components/repositories/RepositoryGrid";
-import { ScoreRadarChart } from "@/components/ScoreRadarChart";
-import { ScoreTrendLine } from "@/components/ScoreTrendLine";
 import { SkillsSection } from "@/components/skills/SkillsSection";
 import { GithubStatsCards } from "@/components/stats/GithubStatsCards";
 import { StatsGrid } from "@/components/stats/StatsGrid";
@@ -25,65 +22,93 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
+  fetchDashboard,
   fetchGithubOAuthUrl,
   grantConsent,
-  fetchGithubSummary,
-  fetchMyBadges,
-  fetchMyLatestScore,
-  fetchMyProfile,
-  fetchMyScoreHistory,
   publishPortfolio,
   refreshStats,
   unpublishPortfolio,
-  type BadgeResponse,
   type CandidateProfileResponse,
-  type TalentScoreResponse,
 } from "@/lib/api";
+
+// Dynamically imported: recharts + framer-motion are heavy dependencies only needed
+// once GitHub/Talent Score data has actually loaded — keeping them out of this page's
+// initial JS bundle shortens time-to-interactive for everything above the fold
+// (profile sidebar, connect-GitHub CTA) that doesn't depend on them. ssr: false since
+// these only ever render after client-side data resolves, so there's nothing to
+// server-render for them anyway.
+const ContributionHeatmap = dynamic(
+  () => import("@/components/charts/ContributionHeatmap").then((m) => m.ContributionHeatmap),
+  { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-md bg-zinc-100" /> },
+);
+const LanguageChart = dynamic(
+  () => import("@/components/charts/LanguageChart").then((m) => m.LanguageChart),
+  { ssr: false, loading: () => <div className="h-56 animate-pulse rounded-md bg-zinc-100" /> },
+);
+const CommitActivityChart = dynamic(
+  () => import("@/components/charts/CommitActivityChart").then((m) => m.CommitActivityChart),
+  { ssr: false, loading: () => <div className="h-56 animate-pulse rounded-md bg-zinc-100" /> },
+);
+const ScoreRadarChart = dynamic(
+  () => import("@/components/ScoreRadarChart").then((m) => m.ScoreRadarChart),
+  { ssr: false, loading: () => <div className="h-72 animate-pulse rounded-md bg-zinc-100" /> },
+);
+const ScoreTrendLine = dynamic(
+  () => import("@/components/ScoreTrendLine").then((m) => m.ScoreTrendLine),
+  { ssr: false, loading: () => <div className="h-56 animate-pulse rounded-md bg-zinc-100" /> },
+);
 
 // Mirrors the backend's `_STATS_REFRESH_COOLDOWN` (services/api/modules/candidates/router.py)
 // so the countdown is accurate without waiting on a 429 to learn the retry time.
 const STATS_REFRESH_COOLDOWN_MS = 15 * 60 * 1000;
 
-interface TalentSection {
-  latestScore: TalentScoreResponse | null;
-  scoreHistory: TalentScoreResponse[];
-  badges: BadgeResponse[];
-}
-
 export function CandidateDashboard() {
   const { getToken } = useAuth();
   const [refreshBusy, setRefreshBusy] = useState(false);
 
-  // Three independent sections — a failure in one (e.g. Talent Score) must never blank
-  // the others (e.g. Development Stats). Each gets its own loading/error/retry.
-  const profileFetcher = useCallback(async () => {
+  // Single batched fetch (one Clerk-token round trip + one backend round trip instead of
+  // three) — /me/dashboard already computes profile, github_summary, and talent/badges
+  // together server-side, so there's no per-section partial-failure case to guard here:
+  // either the whole bundle loads or none of it does. Sections still render/error/retry
+  // independently at the UI level (below) so the layout doesn't change, but they all
+  // share this one request instead of issuing their own.
+  const dashboardFetcher = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error("No session token");
-    return fetchMyProfile(token);
+    return fetchDashboard(token);
   }, [getToken]);
-  const profileResource = useAsyncResource(profileFetcher);
+  // cacheKey enables stale-while-revalidate: navigating away from the dashboard and back
+  // shows the last-loaded data instantly instead of re-paying the backend round-trip
+  // (which includes the DB's cold-connection latency on the first query of a session).
+  const dashboardResource = useAsyncResource(dashboardFetcher, "dashboard:bundle");
 
-  const githubFetcher = useCallback(async () => {
-    const token = await getToken();
-    if (!token) throw new Error("No session token");
-    return fetchGithubSummary(token);
-  }, [getToken]);
-  const githubResource = useAsyncResource(githubFetcher);
-
-  const talentFetcher = useCallback(async (): Promise<TalentSection> => {
-    const token = await getToken();
-    if (!token) throw new Error("No session token");
-    const [latestScore, scoreHistory, badges] = await Promise.all([
-      fetchMyLatestScore(token),
-      fetchMyScoreHistory(token),
-      fetchMyBadges(token),
-    ]);
-    return { latestScore, scoreHistory, badges };
-  }, [getToken]);
-  const talentResource = useAsyncResource(talentFetcher);
+  const profileResource = {
+    data: dashboardResource.data?.profile ?? null,
+    loading: dashboardResource.loading,
+    error: dashboardResource.error,
+    retry: dashboardResource.retry,
+  };
+  const githubResource = {
+    data: dashboardResource.data?.github_summary ?? null,
+    loading: dashboardResource.loading,
+    error: dashboardResource.error,
+    retry: dashboardResource.retry,
+  };
+  const talentResource = {
+    data: dashboardResource.data
+      ? {
+          latestScore: dashboardResource.data.latest_score,
+          scoreHistory: dashboardResource.data.score_history,
+          badges: dashboardResource.data.badges,
+        }
+      : null,
+    loading: dashboardResource.loading,
+    error: dashboardResource.error,
+    retry: dashboardResource.retry,
+  };
 
   // Optimistically-updatable local copy — publish/unpublish/refresh mutate this directly
-  // via their own response payload rather than re-fetching the whole profile.
+  // via their own response payload rather than re-fetching the whole bundle.
   const [profile, setProfile] = useState<CandidateProfileResponse | null>(null);
   const [prevProfileData, setPrevProfileData] = useState<CandidateProfileResponse | null>(null);
 
@@ -99,9 +124,10 @@ export function CandidateDashboard() {
     try {
       const updated = published ? await publishPortfolio(token) : await unpublishPortfolio(token);
       setProfile(updated);
-    } catch {
-      // Surfaced via the sidebar's own error state on next render would require another
-      // resource; a toast would be the natural upgrade here if this proves confusing.
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : `Failed to ${published ? "publish" : "unpublish"} portfolio`,
+      );
     }
   }
 
@@ -116,7 +142,7 @@ export function CandidateDashboard() {
       const authorizeUrl = await fetchGithubOAuthUrl(token);
       window.location.href = authorizeUrl;
     } catch (err) {
-      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Could not start GitHub connection");
       setBusyConnect(false);
     }
   }
@@ -128,6 +154,8 @@ export function CandidateDashboard() {
     try {
       const updated = await refreshStats(token);
       setProfile(updated);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to refresh stats");
     } finally {
       setRefreshBusy(false);
     }

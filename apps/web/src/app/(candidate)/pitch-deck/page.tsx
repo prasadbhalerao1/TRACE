@@ -71,7 +71,7 @@ export default function PitchDeckUploadPage() {
           </div>
 
           <Button disabled={busy} onClick={() => fileInputRef.current?.click()}>
-            {busy ? "Uploading and analyzing…" : "Choose deck to upload"}
+            {busy ? "Uploading…" : "Choose deck to upload"}
           </Button>
           <input
             ref={fileInputRef}

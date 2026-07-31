@@ -1,16 +1,15 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import Link from "next/link";
-import { fetchMe } from "@/lib/api";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { SectionError } from "@/components/common/SectionError";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-  const [allowed, setAllowed] = useState(false);
+  const { me, isLoaded, isSignedIn, error, reload } = useCurrentUser();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -18,28 +17,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace("/sign-in");
       return;
     }
+    if (!me) return;
+    if (me.onboarding_required || !me.profile) {
+      router.replace("/onboarding");
+      return;
+    }
+    if (me.profile.role !== "admin") {
+      router.replace("/dashboard");
+    }
+  }, [isLoaded, isSignedIn, me, router]);
 
-    let cancelled = false;
-    (async () => {
-      const token = await getToken();
-      if (!token) return;
-      const me = await fetchMe(token);
-      if (cancelled) return;
-      if (me.onboarding_required || !me.profile) {
-        router.replace("/onboarding");
-        return;
-      }
-      if (me.profile.role !== "admin") {
-        router.replace("/dashboard");
-        return;
-      }
-      setAllowed(true);
-    })();
+  if (error) {
+    return (
+      <div className="p-8">
+        <SectionError message={error} onRetry={reload} retrying={false} />
+      </div>
+    );
+  }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, isSignedIn, getToken, router]);
+  const allowed = isLoaded && isSignedIn && me?.profile?.role === "admin";
 
   if (!allowed) {
     return <div className="p-8 text-muted-foreground">Loading Admin panel…</div>;

@@ -9,6 +9,8 @@ import { shadcn } from "@clerk/ui/themes";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Space_Grotesk, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Toaster } from "@/components/ui/sonner";
+import { CurrentUserProvider } from "@/components/CurrentUserProvider";
 import "./globals.css";
 
 const display = Space_Grotesk({
@@ -72,7 +74,10 @@ export default function RootLayout({
               </Show>
             </div>
           </header>
-          <div className="flex flex-1 flex-col">{children}</div>
+          <CurrentUserProvider>
+            <div className="flex flex-1 flex-col">{children}</div>
+          </CurrentUserProvider>
+          <Toaster />
         </ClerkProvider>
       </body>
     </html>

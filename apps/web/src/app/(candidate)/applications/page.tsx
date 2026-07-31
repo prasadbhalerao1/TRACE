@@ -1,33 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { APPLICATION_STAGE_LABELS, fetchMyApplications, type ApplicationWithJobResponse } from "@/lib/api";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { APPLICATION_STAGE_LABELS, fetchMyApplications } from "@/lib/api";
 
 export default function CandidateApplicationsPage() {
   const { getToken } = useAuth();
-  const [applications, setApplications] = useState<ApplicationWithJobResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const result = await fetchMyApplications(token);
-        if (!cancelled) setApplications(result);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load applications");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const applicationsFetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchMyApplications(token);
   }, [getToken]);
+  const { data: applications, error } = useAsyncResource(applicationsFetcher, "applications:mine");
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">

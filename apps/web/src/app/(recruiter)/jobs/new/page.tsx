@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { createJob, type JobResponse } from "@/lib/api";
+import { createJob, pollMatchingStatus, type JobResponse } from "@/lib/api";
 
 export default function RecruiterNewJobPage() {
   const { getToken } = useAuth();
@@ -19,6 +19,7 @@ export default function RecruiterNewJobPage() {
   const [created, setCreated] = useState<JobResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [matchingStatus, setMatchingStatus] = useState<"processing" | "done" | "failed">("processing");
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +41,11 @@ export default function RecruiterNewJobPage() {
         is_remote: isRemote,
       });
       setCreated(job);
+      setMatchingStatus("processing");
+      // Matching now runs as a background task — poll until it's done rather than
+      // claiming "the AI Matching Engine has run" immediately after creation.
+      const result = await pollMatchingStatus(token, job.id);
+      setMatchingStatus(result.status === "failed" ? "failed" : "done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create job posting");
     } finally {
@@ -131,10 +137,19 @@ export default function RecruiterNewJobPage() {
               <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded text-sm space-y-2">
                 <h4 className="font-semibold text-emerald-800 dark:text-emerald-400">Job Posting Created</h4>
                 <p className="text-xs text-slate">
-                  The AI Matching Engine has run and scored every candidate in the pool against this posting.
+                  {matchingStatus === "processing" &&
+                    "The AI Matching Engine is scoring candidates in the background…"}
+                  {matchingStatus === "done" &&
+                    "The AI Matching Engine has scored every candidate in the pool against this posting."}
+                  {matchingStatus === "failed" &&
+                    "Matching couldn't complete — you can retry from the matches page."}
                 </p>
-                <Button render={<Link href={`/jobs/${created.id}/matches`} />} className="w-full">
-                  View Ranked Matches
+                <Button
+                  render={<Link href={`/jobs/${created.id}/matches`} />}
+                  className="w-full"
+                  disabled={matchingStatus === "processing"}
+                >
+                  {matchingStatus === "processing" ? "Scoring…" : "View Ranked Matches"}
                 </Button>
                 <Button
                   render={<Link href={`/pipeline/${created.id}`} />}

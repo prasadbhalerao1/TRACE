@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchJobMatches, type MatchScoreWithCandidateResponse } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { fetchJobMatches } from "@/lib/api";
 
 function ScoreRow({ label, value }: { label: string; value: number | null }) {
   return (
@@ -21,25 +23,13 @@ function ScoreRow({ label, value }: { label: string; value: number | null }) {
 export default function RecruiterMatchesPage() {
   const params = useParams<{ id: string }>();
   const { getToken } = useAuth();
-  const [matches, setMatches] = useState<MatchScoreWithCandidateResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const result = await fetchJobMatches(token, params.id);
-        if (!cancelled) setMatches(result);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load matches");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchJobMatches(token, params.id);
   }, [getToken, params.id]);
+  const { data: matches, error } = useAsyncResource(fetcher, `job-matches:${params.id}`);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -61,7 +51,7 @@ export default function RecruiterMatchesPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {error && <p className="text-sm text-rose-flagged">{error}</p>}
-            {!error && matches === null && <p className="text-sm text-slate">Loading matches…</p>}
+            {!error && matches === null && <CardListSkeleton />}
             {matches !== null && matches.length === 0 && (
               <p className="text-sm text-slate">No candidates in the pool yet — matches will populate as candidates onboard.</p>
             )}

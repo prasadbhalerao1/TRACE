@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { KanbanSkeleton } from "@/components/KanbanSkeleton";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
   fetchApplications,
   updateApplicationStage,
@@ -15,49 +17,47 @@ import {
 export default function RecruiterPipelinePage() {
   const params = useParams<{ jobId: string }>();
   const { getToken } = useAuth();
-  const [applications, setApplications] = useState<ApplicationWithCandidateResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("No session token");
-      const result = await fetchApplications(token, { jobId: params.jobId });
-      setApplications(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load pipeline");
-    }
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchApplications(token, { jobId: params.jobId });
   }, [getToken, params.jobId]);
+  // useAsyncResource owns the mount-fetch + cancellation-on-unmount pattern — previously
+  // duplicated by hand between a useEffect body and a separate load() callback, which
+  // fired the same request twice on mount.
+  const { data: fetchedApplications, error: fetchError, retry } = useAsyncResource(
+    fetcher,
+    `pipeline:${params.jobId}`,
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const result = await fetchApplications(token, { jobId: params.jobId });
-        if (!cancelled) setApplications(result);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load pipeline");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken, params.jobId]);
+  // Local override so optimistic drag updates apply instantly on top of the fetched
+  // data. Reset during render (not in an effect — see React's "adjusting state during
+  // render" pattern) whenever a fresh fetch result lands, identified by that array's
+  // identity changing; retry() only bumps a tick and returns before the refetch
+  // resolves, so clearing the override eagerly on the retry() call itself would flash
+  // the stale pre-drag state back in for the gap until the new fetch actually lands.
+  const [override, setOverride] = useState<ApplicationWithCandidateResponse[] | null>(null);
+  const [stageError, setStageError] = useState<string | null>(null);
+  const [lastSeenFetched, setLastSeenFetched] = useState(fetchedApplications);
+  if (fetchedApplications !== lastSeenFetched) {
+    setLastSeenFetched(fetchedApplications);
+    setOverride(null);
+  }
+  const applications = override ?? fetchedApplications;
+  const error = stageError ?? fetchError;
 
   async function handleStageChange(applicationId: string, nextStage: ApplicationStage) {
-    // Optimistic update so the drag feels instant; reconciled with a refetch after.
-    setApplications((prev) =>
-      prev?.map((a) => (a.id === applicationId ? { ...a, stage: nextStage } : a)) ?? prev,
-    );
+    setOverride((applications ?? []).map((a) => (a.id === applicationId ? { ...a, stage: nextStage } : a)));
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
       await updateApplicationStage(token, applicationId, nextStage);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update stage");
-      load();
+      setStageError(err instanceof Error ? err.message : "Failed to update stage");
+      // Roll back the optimistic update by re-syncing from the server — on success the
+      // optimistic state already matches, so no refetch is needed there.
+      retry();
     }
   }
 
@@ -69,7 +69,7 @@ export default function RecruiterPipelinePage() {
       </div>
 
       {error && <p className="text-sm text-rose-flagged">{error}</p>}
-      {applications === null && !error && <p className="text-sm text-slate">Loading pipeline…</p>}
+      {applications === null && !error && <KanbanSkeleton />}
       {applications !== null && applications.length === 0 && (
         <p className="text-sm text-slate">No applications yet for this job posting.</p>
       )}

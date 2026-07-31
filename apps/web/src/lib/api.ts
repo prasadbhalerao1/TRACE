@@ -21,29 +21,17 @@ export interface MeResponse {
 }
 
 export async function fetchMe(token: string): Promise<MeResponse> {
-  try {
-    const res = await fetch(`${API_URL}/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      throw new Error(`GET /me failed: ${res.status}`);
-    }
-    return res.json();
-  } catch {
-    // Quietly serve demo candidate profile when backend API is offline
-    return {
-      onboarding_required: false,
-      profile: {
-        id: "demo-user-id",
-        email: "demo.candidate@dataaxle.ai",
-        full_name: "Demo Candidate",
-        role: "candidate",
-        organization_id: null,
-        is_active: true,
-      },
-    };
+  // Previously fell back to a fake "Demo Candidate" profile on any failure, which
+  // silently masked backend-down/slow-request symptoms as if the app were just showing
+  // demo data. Callers must now handle the rejection and surface a real error state.
+  const res = await fetch(`${API_URL}/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`GET /me failed: ${res.status}`);
   }
+  return res.json();
 }
 
 export async function completeOnboarding(
@@ -143,7 +131,40 @@ export interface CandidateProfileResponse {
   github_stats: GithubStats | null;
   leetcode_stats: LeetcodeStats | null;
   stats_refreshed_at: string | null;
+  ingestion_status: "idle" | "processing" | "done" | "failed";
+  ingestion_error: string | null;
   updated_at: string;
+}
+
+export interface IngestionStatusResponse {
+  status: "idle" | "processing" | "done" | "failed";
+  error: string | null;
+}
+
+export async function fetchIngestionStatus(token: string): Promise<IngestionStatusResponse> {
+  const res = await fetch(`${API_URL}/candidates/me/ingestion-status`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`GET /candidates/me/ingestion-status failed: ${res.status}`);
+  return res.json();
+}
+
+/** Polls fetchIngestionStatus until it leaves "processing" (or maxAttempts is hit), then
+ * resolves with the final status. Ingestion (resume/certificate/GitHub sync parsing) now
+ * runs as a backend background task instead of blocking the upload request, so callers
+ * that want to know when it's actually done (e.g. to refresh the Talent Score display)
+ * need to poll rather than trust the upload response alone. */
+export async function pollIngestionStatus(
+  token: string,
+  { intervalMs = 2000, maxAttempts = 30 }: { intervalMs?: number; maxAttempts?: number } = {},
+): Promise<IngestionStatusResponse> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await fetchIngestionStatus(token);
+    if (result.status !== "processing") return result;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return fetchIngestionStatus(token);
 }
 
 export interface BadgeResponse {
@@ -695,6 +716,37 @@ export interface JobResponse {
   location: string | null;
   is_remote: boolean;
   created_at: string;
+  matching_status: "idle" | "processing" | "done" | "failed";
+  matching_error: string | null;
+}
+
+export interface MatchingStatusResponse {
+  status: "idle" | "processing" | "done" | "failed";
+  error: string | null;
+}
+
+export async function fetchMatchingStatus(token: string, jobId: string): Promise<MatchingStatusResponse> {
+  const res = await fetch(`${API_URL}/jobs/${jobId}/matching-status`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`GET /jobs/${jobId}/matching-status failed: ${res.status}`);
+  return res.json();
+}
+
+/** Same reasoning as pollIngestionStatus — job matching now runs as a backend background
+ * task instead of blocking POST /jobs or the ?recompute=true request. */
+export async function pollMatchingStatus(
+  token: string,
+  jobId: string,
+  { intervalMs = 2000, maxAttempts = 30 }: { intervalMs?: number; maxAttempts?: number } = {},
+): Promise<MatchingStatusResponse> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await fetchMatchingStatus(token, jobId);
+    if (result.status !== "processing") return result;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return fetchMatchingStatus(token, jobId);
 }
 
 export interface JobCreateRequest {

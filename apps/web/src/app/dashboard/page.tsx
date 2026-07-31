@@ -1,20 +1,17 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 
 import { CandidateDashboard } from "@/components/CandidateDashboard";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { fetchMe, type UserProfile } from "@/lib/api";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { me, isLoaded, isSignedIn, error, reload } = useCurrentUser();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -22,38 +19,28 @@ export default function DashboardPage() {
       router.replace("/sign-in");
       return;
     }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const me = await fetchMe(token);
-        if (cancelled) return;
-        if (me.onboarding_required || !me.profile) {
-          router.replace("/onboarding");
-          return;
-        }
-        setProfile(me.profile);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load profile");
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, isSignedIn, getToken, router]);
+    if (!me) return;
+    if (me.onboarding_required || !me.profile) {
+      router.replace("/onboarding");
+    }
+  }, [isLoaded, isSignedIn, me, router]);
 
   if (error) {
-    return <div className="p-8 text-rose-500 font-medium">{error}</div>;
+    return (
+      <div className="p-8 text-rose-500 font-medium">
+        {error}{" "}
+        <button onClick={reload} className="underline">
+          Retry
+        </button>
+      </div>
+    );
   }
 
-  if (!profile) {
+  if (!isLoaded || !isSignedIn || !me || !me.profile) {
     return <div className="p-8 text-slate animate-pulse">Loading your dashboard…</div>;
   }
+
+  const profile = me.profile;
 
   if (profile.role === "candidate") {
     return (

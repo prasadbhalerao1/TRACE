@@ -40,6 +40,7 @@ export default function CandidateInterviewPage() {
   const [status, setStatus] = useState<"in_progress" | "completed" | null>(null);
   const [report, setReport] = useState<InterviewReportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [awaitingResponse, setAwaitingResponse] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -94,11 +95,12 @@ export default function CandidateInterviewPage() {
   }, [initialSessionId]);
 
   async function handleSend() {
-    if (!inputText.trim() || !sessionId) return;
+    if (!inputText.trim() || !sessionId || awaitingResponse) return;
     const userMsg = inputText;
     setInputText("");
     setMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setError(null);
+    setAwaitingResponse(true);
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
@@ -113,6 +115,8 @@ export default function CandidateInterviewPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send answer");
+    } finally {
+      setAwaitingResponse(false);
     }
   }
 
@@ -275,25 +279,40 @@ export default function CandidateInterviewPage() {
                   </div>
                 </div>
               ))}
+              {awaitingResponse && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] p-3 rounded-lg text-sm bg-white dark:bg-zinc-800 text-ink dark:text-zinc-50 shadow-sm">
+                    <p className="font-semibold text-xs mb-1 opacity-70">AI Interviewer</p>
+                    <p className="flex gap-1 items-center opacity-60">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce" />
+                    </p>
+                  </div>
+                </div>
+              )}
               {error && <p className="text-sm text-rose-flagged">{error}</p>}
             </div>
 
             <div className="flex flex-col gap-2">
               <div className="flex gap-2">
-                <Button onClick={toggleSpeech} variant={listening ? "destructive" : "secondary"} size="sm">
+                <Button onClick={toggleSpeech} variant={listening ? "destructive" : "secondary"} size="sm" disabled={awaitingResponse}>
                   {listening ? "Listening..." : "🎤"}
                 </Button>
                 <Button onClick={toggleCamera} variant={cameraActive ? "destructive" : "secondary"} size="sm">
                   {cameraActive ? "📹 On" : "📹 Off"}
                 </Button>
                 <input
-                  className="flex-1 px-3 py-2 text-sm rounded-md border bg-background text-foreground focus:outline-none focus:ring-1"
-                  placeholder="Type your response..."
+                  className="flex-1 px-3 py-2 text-sm rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 disabled:opacity-60"
+                  placeholder={awaitingResponse ? "Waiting for the interviewer…" : "Type your response..."}
                   value={inputText + (interimTranscript ? ` ${interimTranscript}` : "")}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  disabled={awaitingResponse}
                 />
-                <Button onClick={handleSend}>Send</Button>
+                <Button onClick={handleSend} disabled={awaitingResponse || !inputText.trim()}>
+                  {awaitingResponse ? "Thinking…" : "Send"}
+                </Button>
               </div>
               {interimTranscript && <p className="text-xs text-slate italic opacity-60">{interimTranscript}</p>}
               {speechConfidence !== null && (

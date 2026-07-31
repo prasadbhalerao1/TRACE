@@ -8,8 +8,9 @@ import { AIContentSignalBadge } from "@/components/AIContentSignalBadge";
 import { PitchScoreRadarChart } from "@/components/PitchScoreRadarChart";
 import { PlagiarismMatchList } from "@/components/PlagiarismMatchList";
 import { SlideViewer } from "@/components/SlideViewer";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchMe, fetchPresentationReport, PITCH_SCORE_LABELS, type PresentationReportResponse } from "@/lib/api";
+import { fetchPresentationReport, PITCH_SCORE_LABELS, type PresentationReportResponse } from "@/lib/api";
 
 // Lives OUTSIDE any (role) route group — same reasoning as the shared /dashboard route
 // (.agents/decisions.md): doc/SRS/04 §1/§2 says this module is "fully self-contained"
@@ -18,7 +19,8 @@ import { fetchMe, fetchPresentationReport, PITCH_SCORE_LABELS, type Presentation
 export default function PitchDeckReportPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { getToken } = useAuth();
+  const { me, isLoaded, isSignedIn, error: meError } = useCurrentUser();
   const [report, setReport] = useState<PresentationReportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,22 +30,19 @@ export default function PitchDeckReportPage() {
       router.replace("/sign-in");
       return;
     }
+    if (!me) return;
+    if (me.onboarding_required || !me.profile) {
+      router.replace("/onboarding");
+      return;
+    }
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function load() {
-      const token = await getToken();
-      if (!token) return;
-
-      const me = await fetchMe(token);
-      if (cancelled) return;
-      if (me.onboarding_required || !me.profile) {
-        router.replace("/onboarding");
-        return;
-      }
-
       try {
+        const token = await getToken();
+        if (!token) throw new Error("No session token");
         const data = await fetchPresentationReport(token, params.id);
         if (cancelled) return;
         setReport(data);
@@ -64,8 +63,9 @@ export default function PitchDeckReportPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [isLoaded, isSignedIn, getToken, router, params.id]);
+  }, [isLoaded, isSignedIn, me, getToken, router, params.id]);
 
+  if (meError) return <div className="p-8 text-sm text-destructive">{meError}</div>;
   if (error) return <div className="p-8 text-sm text-destructive">{error}</div>;
   if (!report) return <div className="p-8 text-sm text-muted-foreground">Loading pitch report…</div>;
 
@@ -87,7 +87,24 @@ export default function PitchDeckReportPage() {
   }
 
   if (report.status === "processing") {
-    return <div className="p-8 text-sm text-muted-foreground">Analyzing your deck…</div>;
+    return (
+      <div className="mx-auto w-full max-w-2xl p-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-heading">Analyzing your deck…</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full w-full animate-pulse rounded-full bg-primary" />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Extracting slides, scoring problem clarity/innovation/feasibility, and checking for plagiarism —
+              this usually takes under a minute. This page updates automatically.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

@@ -1,33 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { fetchJobs, type JobResponse } from "@/lib/api";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { fetchJobs } from "@/lib/api";
 
 export default function RecruiterJobsListPage() {
   const { getToken } = useAuth();
-  const [jobs, setJobs] = useState<JobResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const result = await fetchJobs(token);
-        if (!cancelled) setJobs(result);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load jobs");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const jobsFetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchJobs(token);
   }, [getToken]);
+  // cacheKey: revisiting this list after viewing a job's matches/pipeline shows the
+  // last-loaded postings instantly instead of re-paying the backend round-trip.
+  const { data: jobs, error } = useAsyncResource(jobsFetcher, "job-postings:list");
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
