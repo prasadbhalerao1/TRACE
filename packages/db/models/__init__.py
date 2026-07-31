@@ -27,6 +27,7 @@ from packages.db.models.fraud import (
     AuthenticityScore,
     Dispute,
     FraudFlag,
+    TrustedIssuer,
     VerificationRecord,
 )
 from packages.db.models.hackathon import (
@@ -98,4 +99,5 @@ __all__ = [
     "FraudFlag",
     "AuthenticityScore",
     "Dispute",
+    "TrustedIssuer",
 ]
