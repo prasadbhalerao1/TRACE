@@ -43,6 +43,11 @@ class CandidateProfile(Base):
     # candidate opts in via POST /candidates/me/portfolio/publish.
     username: Mapped[str | None] = mapped_column(Text, unique=True)
     portfolio_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # Ingestion (resume/certificate/GitHub OAuth) now runs as a FastAPI BackgroundTask
+    # instead of inline in the request — the endpoint returns immediately and the
+    # frontend polls GET /candidates/me/ingestion-status until this leaves "processing".
+    ingestion_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="idle")
+    ingestion_error: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship("User", lazy="joined")

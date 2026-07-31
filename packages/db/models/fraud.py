@@ -119,6 +119,43 @@ class AuthenticityScore(Base):
     __table_args__ = (Index("idx_authenticity_scores_candidate_time", "candidate_id", "computed_at"),)
 
 
+class TrustedIssuer(Base):
+    """FR-1's known-issuer registry — replaces the previous hardcoded Python dict in
+    `services/agents/fraud/tools/issuer_lookup.py` with a real, admin-manageable table.
+    An issuer NOT in this table is now an explicit "unrecognized issuer" signal
+    (`services/agents/fraud/nodes/cert_verdict.py`) contributing its own elevated-risk
+    evidence, rather than silently falling through to Visual Forensics as if that were an
+    equally strong verification path.
+
+    `aliases` preserves the old dict's substring-matching flexibility (e.g. "AWS" should
+    match a candidate-entered issuer of "Amazon Web Services (AWS)") without needing an
+    exact string — `resolve_issuer` (issuer_lookup.py) checks the canonical `name` and
+    every alias, case-insensitively, as a substring of the candidate's entered issuer
+    text. `verification_url_template` is nullable: an issuer can be trusted/known without
+    the platform having a URL-based verification path for it yet (falls through to Visual
+    Forensics same as before, but WITHOUT the unrecognized-issuer penalty, since being
+    "known" and being "URL-verifiable" are different facts)."""
+
+    __tablename__ = "trusted_issuers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    aliases: Mapped[list | None] = mapped_column(JSONB)  # ["aws", "amazon web services"]
+    verification_url_template: Mapped[str | None] = mapped_column(Text)  # "https://.../{credential_id}"
+    trust_tier: Mapped[str] = mapped_column(Text, nullable=False, server_default="platform")
+    notes: Mapped[str | None] = mapped_column(Text)
+    added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "trust_tier IN ('platform','university','employer','community')",
+            name="ck_trusted_issuers_trust_tier",
+        ),
+    )
+
+
 class Dispute(Base):
     """FR-8 — candidate's context/evidence submitted against a flag raised on their own
     profile. Submitting a dispute moves the flag's status to `under_review` (router-side

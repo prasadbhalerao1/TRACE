@@ -39,6 +39,10 @@ class Job(Base):
     location: Mapped[str | None] = mapped_column(Text)
     is_remote: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Matching now runs as a FastAPI BackgroundTask instead of inline in POST /jobs — the
+    # endpoint returns immediately and the frontend polls GET /jobs/{id}/matching-status.
+    matching_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="idle")
+    matching_error: Mapped[str | None] = mapped_column(Text)
 
 
 class Application(Base):
@@ -96,6 +100,9 @@ class MatchScore(Base):
     __table_args__ = (
         UniqueConstraint("job_id", "candidate_id", name="uq_match_scores_job_candidate"),
         Index("idx_match_scores_job_time", "job_id", "computed_at"),
+        # GET /jobs/{id}/matches filters by job_id and orders by match_percentage —
+        # idx_match_scores_job_time's second column (computed_at) doesn't cover that sort.
+        Index("idx_match_scores_job_percentage", "job_id", "match_percentage"),
     )
 
 

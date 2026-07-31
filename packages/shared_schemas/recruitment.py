@@ -35,6 +35,8 @@ class JobResponse(BaseModel):
     location: str | None
     is_remote: bool
     created_at: datetime
+    matching_status: str
+    matching_error: str | None
 
 
 class ApplicationResponse(BaseModel):

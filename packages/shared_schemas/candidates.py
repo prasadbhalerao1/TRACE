@@ -52,6 +52,8 @@ class CandidateProfileResponse(BaseModel):
     github_stats: dict | None
     leetcode_stats: dict | None
     stats_refreshed_at: datetime | None
+    ingestion_status: str
+    ingestion_error: str | None
     updated_at: datetime
 
 

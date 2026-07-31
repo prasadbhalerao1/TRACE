@@ -180,4 +180,7 @@ class ContributionReport(Base):
     anomaly_note: Mapped[str | None] = mapped_column(Text)
     generated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (Index("idx_contribution_reports_repo", "repo_full_name"),)
+    __table_args__ = (
+        Index("idx_contribution_reports_repo", "repo_full_name"),
+        Index("idx_contribution_reports_candidate_id", "candidate_id"),
+    )
