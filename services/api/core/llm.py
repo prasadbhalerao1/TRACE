@@ -23,6 +23,7 @@ functions rather than instantiating a provider SDK client directly, so tracing a
 provider-switching both stay centralized here.
 """
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -92,7 +93,7 @@ def get_llm_client() -> tuple[str, Any]:
     raise LLMUnavailable(f"Unsupported LLM provider: {provider}")
 
 
-def generate_completion(
+async def generate_completion(
     prompt: str,
     system_prompt: str | None = None,
     tools: list[dict[str, Any]] | None = None,
@@ -108,6 +109,10 @@ def generate_completion(
     (the overwhelming majority of this codebase's LLM calls) — it handles the
     Anthropic-vs-OpenAI tool-calling schema differences for you. This function is for
     the rare free-text/narrative case.
+
+    The underlying provider SDKs are used synchronously and run via `asyncio.to_thread`
+    so a slow LLM round-trip doesn't block the event loop (and every other in-flight
+    request) for the duration of the call.
     """
     settings = get_settings()
     provider, client = get_llm_client()
@@ -131,7 +136,7 @@ def generate_completion(
             if tool_choice:
                 kwargs["tool_choice"] = tool_choice
 
-            res = client.messages.create(**kwargs)
+            res = await asyncio.to_thread(client.messages.create, **kwargs)
             output: Any = None
             if tools:
                 for block in res.content:
@@ -158,7 +163,7 @@ def generate_completion(
         if response_json:
             kwargs["response_format"] = {"type": "json_object"}
 
-        res = client.chat.completions.create(**kwargs)
+        res = await asyncio.to_thread(client.chat.completions.create, **kwargs)
         content = res.choices[0].message.content or ""
 
         output = content
@@ -176,7 +181,7 @@ def generate_completion(
         return output
 
 
-def generate_structured(
+async def generate_structured(
     schema_name: str,
     schema_description: str,
     parameters: dict[str, Any],
@@ -201,6 +206,10 @@ def generate_structured(
     Every call is wrapped in a Langfuse `generation` observation (model, token usage,
     input/output) via `start_llm_generation`, nested under whatever `start_agent_trace`
     span is active — see `services.api.core.tracing`.
+
+    The underlying provider SDKs are used synchronously and run via `asyncio.to_thread`
+    so a slow LLM round-trip doesn't block the event loop (and every other in-flight
+    request) for the duration of the call.
     """
     settings = get_settings()
     provider, client = get_llm_client()
@@ -232,7 +241,7 @@ def generate_structured(
                 kwargs["temperature"] = temperature
 
             try:
-                response = client.messages.create(**kwargs)
+                response = await asyncio.to_thread(client.messages.create, **kwargs)
             except Exception as exc:
                 raise LLMUnavailable(f"Anthropic structured-output call failed: {exc}") from exc
 
@@ -260,7 +269,8 @@ def generate_structured(
             completion_kwargs["temperature"] = temperature
 
         try:
-            response = client.chat.completions.create(
+            response = await asyncio.to_thread(
+                client.chat.completions.create,
                 **completion_kwargs,
                 tools=[
                     {

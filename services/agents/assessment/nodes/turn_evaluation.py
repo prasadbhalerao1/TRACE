@@ -18,7 +18,7 @@ async def run(state: InterviewState) -> dict:
     question_turn = transcript[-2] if len(transcript) >= 2 else {"text": ""}
     topic = state["topic_plan"][state["current_topic_idx"]]
 
-    evaluation = evaluate_turn(topic, question_turn["text"], answer_turn["text"])
+    evaluation = await evaluate_turn(topic, question_turn["text"], answer_turn["text"])
 
     per_topic_scores = {**state["per_topic_scores"]}
     follow_up_count = state["follow_up_count_this_topic"]

@@ -13,8 +13,8 @@ from services.api.core.llm import LLMUnavailable, generate_structured
 PitchScoringUnavailable = LLMUnavailable
 
 
-def _call(schema_name: str, schema_description: str, parameters: dict, prompt: str, max_tokens: int = 1024) -> dict:
-    return generate_structured(
+async def _call(schema_name: str, schema_description: str, parameters: dict, prompt: str, max_tokens: int = 1024) -> dict:
+    return await generate_structured(
         schema_name=schema_name,
         schema_description=schema_description,
         parameters=parameters,
@@ -40,7 +40,7 @@ _PROBLEM_SOLUTION_PARAMETERS = {
 }
 
 
-def score_problem_solution(slides_text: str) -> dict:
+async def score_problem_solution(slides_text: str) -> dict:
     prompt = (
         "You are scoring a pitch deck against a rubric for PROBLEM UNDERSTANDING and SOLUTION "
         "CLARITY (0-100). Ground your score and gaps only in what's actually written below — do not "
@@ -48,7 +48,7 @@ def score_problem_solution(slides_text: str) -> dict:
         "audience, vague solution mechanics, etc.), not generic advice.\n\n"
         f"Deck content (per slide):\n{slides_text}"
     )
-    return _call(
+    return await _call(
         "problem_solution_clarity",
         "Rubric-score how clearly a pitch deck states the problem and its proposed solution.",
         _PROBLEM_SOLUTION_PARAMETERS,
@@ -75,7 +75,7 @@ _INNOVATION_BUSINESS_PARAMETERS = {
 }
 
 
-def score_innovation_business(slides_text: str, novelty_context: str | None = None) -> dict:
+async def score_innovation_business(slides_text: str, novelty_context: str | None = None) -> dict:
     context = f"\n\nNovelty signal vs prior submissions: {novelty_context}" if novelty_context else ""
     prompt = (
         "You are scoring a pitch deck against a rubric for INNOVATION (novelty vs existing solutions) "
@@ -83,7 +83,7 @@ def score_innovation_business(slides_text: str, novelty_context: str | None = No
         "both scores and gaps only in what's actually written below.\n\n"
         f"Deck content (per slide):\n{slides_text}{context}"
     )
-    return _call(
+    return await _call(
         "innovation_business_impact",
         "Rubric-score a pitch deck's innovation and business potential.",
         _INNOVATION_BUSINESS_PARAMETERS,
@@ -102,7 +102,7 @@ _TECHNICAL_FEASIBILITY_PARAMETERS = {
 }
 
 
-def score_technical_feasibility(slides_text: str, ocr_context: str | None, repo_evidence: str | None) -> dict:
+async def score_technical_feasibility(slides_text: str, ocr_context: str | None, repo_evidence: str | None) -> dict:
     parts = [f"Deck content (per slide):\n{slides_text}"]
     if ocr_context:
         parts.append(f"Diagram/architecture image understanding:\n{ocr_context}")
@@ -119,7 +119,7 @@ def score_technical_feasibility(slides_text: str, ocr_context: str | None, repo_
         "deck claims a technology/architecture that the repo evidence doesn't support, call that out "
         "as a gap rather than trusting the deck's claim at face value.\n\n" + "\n\n".join(parts)
     )
-    return _call(
+    return await _call(
         "technical_feasibility",
         "Rubric-score a pitch deck's technical depth and feasibility.",
         _TECHNICAL_FEASIBILITY_PARAMETERS,
@@ -139,16 +139,16 @@ _SUMMARY_PARAMETERS = {
 }
 
 
-def generate_summary(slides_text: str) -> str:
+async def generate_summary(slides_text: str) -> str:
     prompt = (
         "Write a 2-3 sentence summary PER SECTION of this pitch deck (e.g. problem, solution, market, "
         "technology, team) — not a slide-by-slide restatement. Ground it only in what's written; do not "
         "invent details.\n\n"
         f"Deck content (per slide):\n{slides_text}"
     )
-    return _call(
+    return (await _call(
         "pitch_summary",
         "Write a grounded per-section summary of a pitch deck.",
         _SUMMARY_PARAMETERS,
         prompt,
-    )["summary"]
+    ))["summary"]

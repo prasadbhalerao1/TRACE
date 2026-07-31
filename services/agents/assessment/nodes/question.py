@@ -14,7 +14,7 @@ async def run(state: InterviewState) -> dict:
     if idx >= len(topic_plan):
         return {"next_question": None, "interview_status": "completed"}
 
-    question = generate_question(
+    question = await generate_question(
         topic_plan[idx],
         state["candidate_profile_summary"],
         state["transcript"],

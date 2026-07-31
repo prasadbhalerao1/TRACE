@@ -39,7 +39,7 @@ FACT_CHECK_PARAMETERS = {
 FactCheckUnavailable = LLMUnavailable
 
 
-def fact_check_claims(
+async def fact_check_claims(
     merged_profile: dict, generated_content: dict, document_type: str
 ) -> tuple[str, list[dict]]:
     """Returns (status, findings) where status is 'passed' or 'failed'.
@@ -56,7 +56,7 @@ def fact_check_claims(
         merged_profile_json=json.dumps(merged_profile, default=str),
         generated_content_json=json.dumps(generated_content, default=str),
     )
-    result = generate_structured(
+    result = await generate_structured(
         schema_name="fact_check_result",
         schema_description="List every distinct factual claim in the generated document and whether the candidate profile supports it.",
         parameters=FACT_CHECK_PARAMETERS,

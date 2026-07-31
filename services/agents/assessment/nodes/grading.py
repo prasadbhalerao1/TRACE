@@ -22,7 +22,7 @@ async def run(state: VerificationState) -> dict:
         tests_passed = sum(1 for r in results if r.get("passed"))
         rationale = None
         if 0 < tests_passed < tests_total:
-            rationale = grading_rationale(
+            rationale = await grading_rationale(
                 state["spec"].get("problem_statement", ""),
                 tests_passed,
                 tests_total,

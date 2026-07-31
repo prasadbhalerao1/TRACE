@@ -13,7 +13,7 @@ async def run(state: CareerGuidanceState) -> dict:
     if not gaps:
         return {"roadmap": {"stages": []}}
 
-    roadmap = generate_roadmap(
+    roadmap = await generate_roadmap(
         target_role=state.get("resolved_target_role") or state.get("target_role") or "the target role",
         skill_gaps=[g["skill"] for g in gaps],
         covered_skills=state.get("covered_skills") or [],

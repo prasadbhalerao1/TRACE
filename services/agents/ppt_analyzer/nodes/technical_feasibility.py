@@ -32,7 +32,7 @@ async def run(state: PitchAnalysisState) -> dict:
     repo_evidence = fetch_repo_evidence(state.get("linked_repo"))
 
     try:
-        result = score_technical_feasibility(slides_text(slides), ocr_context, repo_evidence)
+        result = await score_technical_feasibility(slides_text(slides), ocr_context, repo_evidence)
         return {
             "technical_feasibility": {
                 "value": float(result["score"]),

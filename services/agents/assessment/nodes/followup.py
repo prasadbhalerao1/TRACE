@@ -11,7 +11,7 @@ async def run(state: InterviewState) -> dict:
     question_turn = transcript[-2] if len(transcript) >= 2 else {"text": ""}
     topic = state["topic_plan"][state["current_topic_idx"]]
 
-    question = generate_followup(topic, question_turn["text"], answer_turn["text"])
+    question = await generate_followup(topic, question_turn["text"], answer_turn["text"])
     return {
         "next_question": question,
         "interview_status": "in_progress",

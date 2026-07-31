@@ -33,7 +33,7 @@ async def run(state: PitchAnalysisState) -> dict:
         # slide_embedding, not a predecessor of this node — it may not have landed in
         # this superstep yet. Only used as optional soft context when already present.
         novelty_context = _novelty_context(state.get("plagiarism_matches") or [])
-        result = score_innovation_business(slides_text(slides), novelty_context)
+        result = await score_innovation_business(slides_text(slides), novelty_context)
         gaps = result.get("gaps", [])
         return {
             "innovation_business": {

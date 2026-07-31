@@ -216,7 +216,7 @@ async def receive_webhook(
 ) -> TeamResponse:
     await _get_hackathon_or_404(db, hackathon_id)
     try:
-        team_input = normalize_webhook_payload(body)
+        team_input = await normalize_webhook_payload(body)
     except NormalizationUnavailable as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 

@@ -31,10 +31,19 @@ class CandidateProfileState(TypedDict):
     # never the accumulated list, since the reducer does the accumulating.
     conflicts: Annotated[list[str], operator.add]
 
+    # Scoring input — population/assessment data the router fetched via the DB session
+    # it owns (nodes stay DB-free, same convention as the rest of this module).
+    commit_population: list[float]
+    star_population: list[float]
+    leadership_population: list[float]
+    assessment_score: Optional[float]
+    assessment_population: list[float]
+
     # Scoring output
     sub_scores: dict[str, SubScore]
     overall_score: Optional[float]
     renormalized_subscores: list[str]
+    confidence: Optional[Any]
 
     # Badge output
     badges: list[dict]

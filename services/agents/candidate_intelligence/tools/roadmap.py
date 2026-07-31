@@ -34,7 +34,7 @@ ROADMAP_PARAMETERS = {
 RoadmapGenerationUnavailable = LLMUnavailable
 
 
-def generate_roadmap(target_role: str, skill_gaps: list[str], covered_skills: list[str]) -> dict:
+async def generate_roadmap(target_role: str, skill_gaps: list[str], covered_skills: list[str]) -> dict:
     if not skill_gaps:
         return {"stages": []}
 
@@ -47,7 +47,7 @@ def generate_roadmap(target_role: str, skill_gaps: list[str], covered_skills: li
         "covers, and a realistic estimated duration in weeks for someone learning part-time. "
         "Ground every stage only in the listed gap skills — don't invent unrelated skills."
     )
-    return generate_structured(
+    return await generate_structured(
         schema_name="career_roadmap",
         schema_description="A staged learning roadmap to close a candidate's skill gaps for a target role.",
         parameters=ROADMAP_PARAMETERS,

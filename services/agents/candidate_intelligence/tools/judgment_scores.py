@@ -18,6 +18,7 @@ from radon.complexity import cc_visit
 
 from packages.shared_schemas.candidates import SubScore
 from services.agents.candidate_intelligence.tools.github import GithubAnalysis
+from services.agents.candidate_intelligence.tools.normalization import recency_weight
 from services.api.core.config import get_settings
 from services.api.core.llm import LLMUnavailable, generate_structured
 
@@ -42,7 +43,7 @@ def _penalty_curve(avg_complexity: float) -> float:
     return max(0.0, 80.0 - (avg_complexity - 15) * 5.0)
 
 
-def _sample_complexity(
+def sample_complexity(
     github_username: str, access_token: str | None, analysis: GithubAnalysis, max_repos: int = 3
 ) -> tuple[float | None, list[str]]:
     client = Github(login_or_token=access_token, retry=None) if access_token else Github(retry=None)
@@ -70,7 +71,7 @@ def _sample_complexity(
     return sum(complexities) / len(complexities), sampled
 
 
-def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple[float | None, str | None]:
+async def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple[float | None, str | None]:
     from services.agents.prompts_loader import load_prompt
 
     if not project_summaries:
@@ -81,7 +82,7 @@ def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple[float
         project_summaries="\n---\n".join(project_summaries),
     )
     try:
-        result = generate_structured(
+        result = await generate_structured(
             schema_name="project_quality_judgment",
             schema_description="Rate architecture/README quality of a candidate's projects.",
             parameters=_JUDGMENT_PARAMETERS,
@@ -94,15 +95,28 @@ def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple[float
     return float(result["score"]), result.get("rationale")
 
 
-def project_quality(
+def code_quality_score(
+    github_username: str, access_token: str | None, analysis: GithubAnalysis
+) -> tuple[float | None, list[str]]:
+    """Public wrapper around the complexity sample + penalty curve — shared between
+    project_quality's mechanical component and coding_ability's quality_score term
+    (proposal's `coding_ability = 0.25 language + 0.35 quality + 0.40 assessment`) so
+    the same static-analysis pass isn't run twice per candidate per scoring cycle."""
+    avg_complexity, sampled_files = sample_complexity(github_username, access_token, analysis)
+    if avg_complexity is None:
+        return None, sampled_files
+    return _penalty_curve(avg_complexity), sampled_files
+
+
+async def project_quality(
     github_username: str, access_token: str | None, analysis: GithubAnalysis
 ) -> SubScore:
     settings = get_settings()
-    avg_complexity, sampled_files = _sample_complexity(github_username, access_token, analysis)
+    avg_complexity, sampled_files = sample_complexity(github_username, access_token, analysis)
     mechanical = _penalty_curve(avg_complexity) if avg_complexity is not None else None
 
     summaries = [f"{r.repo_full_name}: {r.stars} stars, languages {list(r.languages)}" for r in analysis.repos[:5]]
-    llm_score, llm_rationale = _llm_quality_judgment(summaries, settings)
+    llm_score, llm_rationale = await _llm_quality_judgment(summaries, settings)
 
     if mechanical is None and llm_score is None:
         return SubScore(value=None, rationale="No sampled Python source and no LLM judgment available.")
@@ -139,9 +153,15 @@ def _embed(texts: list[str]) -> list[list[float]] | None:
         return None
 
 
-def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
+async def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
     settings = get_settings()
-    descriptions = [f"{r.repo_full_name}: {list(r.languages)}" for r in analysis.repos[:5]]
+    # Already sorted most-recently-pushed-first (fetch_github_analysis) — recency-decay
+    # the novelty score itself so a project that was innovative years ago and has since
+    # been abandoned doesn't score as highly as one that's actively developed.
+    candidate_repos = analysis.repos[:5]
+    descriptions = [f"{r.repo_full_name}: {list(r.languages)}" for r in candidate_repos]
+    most_recent_push = max((r.pushed_at for r in candidate_repos if r.pushed_at), default=None)
+    decay = recency_weight(most_recent_push, half_life_days=365.0) if most_recent_push else 1.0
 
     novelty_score: float | None = None
     qdrant = _get_qdrant() if descriptions else None
@@ -174,7 +194,7 @@ def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
         except Exception:
             novelty_score = novelty_score  # keep whatever was computed before the failure
 
-    llm_score, llm_rationale = _llm_quality_judgment(descriptions, settings)  # reuse judgment shape
+    llm_score, llm_rationale = await _llm_quality_judgment(descriptions, settings)  # reuse judgment shape
 
     if novelty_score is None and llm_score is None:
         return SubScore(
@@ -182,11 +202,11 @@ def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
             rationale="No embedding corpus yet (cold start) and no LLM judgment available.",
         )
     if novelty_score is not None and llm_score is not None:
-        value = 0.5 * novelty_score + 0.5 * llm_score
-        rationale = f"Novelty vs corpus + LLM judgment: {llm_rationale}"
+        value = decay * (0.5 * novelty_score + 0.5 * llm_score)
+        rationale = f"Novelty vs corpus + LLM judgment (recency weight {decay:.2f}): {llm_rationale}"
     elif novelty_score is not None:
-        value = novelty_score
-        rationale = "Embedding-novelty vs corpus only; LLM judgment unavailable."
+        value = decay * novelty_score
+        rationale = f"Embedding-novelty vs corpus only (recency weight {decay:.2f}); LLM judgment unavailable."
     else:
         value = llm_score
         rationale = f"LLM judgment only; no embedding corpus yet. {llm_rationale}"

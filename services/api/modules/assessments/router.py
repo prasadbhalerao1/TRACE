@@ -584,10 +584,14 @@ async def interview_turn(
         "job_context": result_state.get("job_context"),
     }
 
-    existing_turns = await db.execute(
-        select(InterviewTranscriptTurn.turn_index).where(InterviewTranscriptTurn.session_id == session.id)
+    last_turn = await db.execute(
+        select(InterviewTranscriptTurn.turn_index)
+        .where(InterviewTranscriptTurn.session_id == session.id)
+        .order_by(InterviewTranscriptTurn.turn_index.desc())
+        .limit(1)
     )
-    next_index = max((row[0] for row in existing_turns.all()), default=-1) + 1
+    last_index = last_turn.scalar_one_or_none()
+    next_index = 0 if last_index is None else last_index + 1
     db.add(InterviewTranscriptTurn(session_id=session.id, turn_index=next_index, role="candidate", text=body.answer_text))
     if result_state["next_question"]:
         db.add(

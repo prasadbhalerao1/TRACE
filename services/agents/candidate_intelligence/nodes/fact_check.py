@@ -15,7 +15,7 @@ from services.agents.candidate_intelligence.tools.fact_check import (
 
 async def run(state: DocumentBuilderState) -> dict:
     try:
-        status, findings = fact_check_claims(
+        status, findings = await fact_check_claims(
             state["merged_profile"], state["generated_content"], state["document_type"]
         )
     except FactCheckUnavailable as exc:

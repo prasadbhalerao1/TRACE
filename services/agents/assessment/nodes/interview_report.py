@@ -8,7 +8,7 @@ from services.agents.assessment.tools.interview_llm import generate_interview_re
 
 
 async def run(state: InterviewReportState) -> dict:
-    report = generate_interview_report(state["transcript"], state["per_topic_scores"])
+    report = await generate_interview_report(state["transcript"], state["per_topic_scores"])
     return {
         "response_confidence_signal": report["response_confidence_signal"],
         "technical_rating": report["technical_rating"],

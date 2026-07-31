@@ -59,7 +59,7 @@ async def run(state: PitchAnalysisState) -> dict:
         return {"summary": "No slide content could be extracted from this deck.", "suggestions": suggestions}
 
     try:
-        summary = generate_summary(slides_text(slides))
+        summary = await generate_summary(slides_text(slides))
     except PitchScoringUnavailable as exc:
         summary = f"Summary unavailable ({exc}). See per-section rubric scores and suggestions below."
 

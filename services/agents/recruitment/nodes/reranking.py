@@ -22,7 +22,7 @@ async def run(state: CopilotState) -> dict:
         }
         for c in shortlist
     ]
-    ordered_ids = rerank_candidates(state["raw_query"], payload)
+    ordered_ids = await rerank_candidates(state["raw_query"], payload)
 
     # Defensive: the model is instructed not to add/omit ids, but never trust that blindly
     # — fall back to the pre-rerank order for anything it dropped, and drop anything it

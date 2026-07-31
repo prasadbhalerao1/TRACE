@@ -6,7 +6,7 @@ from services.agents.recruitment.tools.taxonomy import resolve_location, resolve
 
 
 async def run(state: CopilotState) -> dict:
-    raw = understand_query(state["raw_query"], state.get("prior_filters"))
+    raw = await understand_query(state["raw_query"], state.get("prior_filters"))
 
     skill_synonyms = state.get("skill_synonyms") or {}
     location_aliases = state.get("location_aliases") or {}

@@ -15,7 +15,7 @@ async def run(state: PitchAnalysisState) -> dict:
         return {"presentation_quality": {"value": None, "rationale": "No slide text extracted.", "gaps": []}}
 
     try:
-        result = score_problem_solution(slides_text(slides))
+        result = await score_problem_solution(slides_text(slides))
         return {
             "presentation_quality": {
                 "value": float(result["score"]),

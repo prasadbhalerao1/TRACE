@@ -6,7 +6,7 @@ from services.agents.assessment.tools.interview_llm import generate_definition_q
 
 
 async def run(state: DefinitionQuestionState) -> dict:
-    topics = generate_definition_questions(
+    topics = await generate_definition_questions(
         state["role_title"],
         state["job_description"],
         state["years_experience"],

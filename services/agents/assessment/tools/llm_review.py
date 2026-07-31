@@ -36,7 +36,7 @@ _GRADING_RATIONALE_PARAMETERS = {
 }
 
 
-def review_code(problem_statement: str, source: str, static_analysis: dict) -> dict:
+async def review_code(problem_statement: str, source: str, static_analysis: dict) -> dict:
     """Grounded in the actual submitted source and the deterministic static-analysis
     findings above it — never invents an architectural judgment unrelated to what's
     actually in the code."""
@@ -51,7 +51,7 @@ def review_code(problem_statement: str, source: str, static_analysis: dict) -> d
         f"SUBMITTED SOURCE:\n{source}\n\n"
         f"STATIC ANALYSIS FINDINGS (JSON):\n{json.dumps(static_analysis, default=str)}"
     )
-    return generate_structured(
+    return await generate_structured(
         schema_name="code_review",
         schema_description="Structured rubric review of submitted source code.",
         parameters=_CODE_REVIEW_PARAMETERS,
@@ -60,7 +60,7 @@ def review_code(problem_statement: str, source: str, static_analysis: dict) -> d
     )
 
 
-def grading_rationale(problem_statement: str, tests_passed: int, tests_total: int, source: str) -> str | None:
+async def grading_rationale(problem_statement: str, tests_passed: int, tests_total: int, source: str) -> str | None:
     """Only called for near-miss submissions (some but not all tests passing) — a clean
     pass or a total fail needs no LLM rationale, the numbers already say it. Best-effort:
     returns `None` rather than raising if the configured provider is unavailable."""
@@ -74,7 +74,7 @@ def grading_rationale(problem_statement: str, tests_passed: int, tests_total: in
         f"SUBMITTED SOURCE:\n{source}"
     )
     try:
-        result = generate_structured(
+        result = await generate_structured(
             schema_name="partial_credit_rationale",
             schema_description="One short sentence explaining a near-miss test result for partial credit.",
             parameters=_GRADING_RATIONALE_PARAMETERS,

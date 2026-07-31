@@ -32,11 +32,13 @@ from packages.db.models import (
     User,
 )
 from packages.shared_schemas.candidates import (
+    SUB_SCORE_NAMES,
     BadgeResponse,
     CandidateProfileResponse,
     CareerGuidanceResponse,
     CoverLetterGenerateRequest,
     DashboardResponse,
+    EvidenceConfidence,
     GeneratedDocumentResponse,
     GithubSummary,
     LeetcodeConnectRequest,
@@ -55,9 +57,17 @@ from services.agents.candidate_intelligence.state import CandidateProfileState, 
 from services.agents.candidate_intelligence.tools.document_generation import (
     DocumentGenerationUnavailable,
 )
+from services.agents.candidate_intelligence.tools.assessment_bridge import (
+    assessment_score_population,
+    latest_assessment_score,
+)
 from services.agents.candidate_intelligence.tools.github_calendar import (
     GithubCalendarUnavailable,
     fetch_github_calendar,
+)
+from services.agents.candidate_intelligence.tools.population import (
+    commit_count_population,
+    latest_subscore_population,
 )
 from services.agents.candidate_intelligence.tools.leetcode import (
     LeetcodeUnavailable,
@@ -163,6 +173,15 @@ async def _require_consent(db: AsyncSession, user_id, consent_type: str) -> None
 async def _run_ingestion_and_persist(
     db: AsyncSession, profile: CandidateProfile, state_overrides: dict
 ) -> CandidateProfile:
+    # Population/assessment data for Talent Score v2's percentile normalization —
+    # fetched here (the router owns the DB session) and injected into graph state so the
+    # talent_scoring node stays DB-free, same convention as the rest of this module.
+    commit_population = await commit_count_population(db)
+    star_population = await latest_subscore_population(db, "community_participation")
+    leadership_population = await latest_subscore_population(db, "leadership")
+    assessment_score = await latest_assessment_score(db, profile.id)
+    assessment_population = await assessment_score_population(db)
+
     initial_state: CandidateProfileState = {
         "candidate_id": str(profile.id),
         "user_id": str(profile.user_id),
@@ -184,9 +203,15 @@ async def _run_ingestion_and_persist(
         "certificate_extracted": None,
         "merged_profile": None,
         "conflicts": [],
+        "commit_population": commit_population,
+        "star_population": star_population,
+        "leadership_population": leadership_population,
+        "assessment_score": assessment_score,
+        "assessment_population": assessment_population,
         "sub_scores": {},
         "overall_score": None,
         "renormalized_subscores": [],
+        "confidence": None,
         "badges": [],
         **state_overrides,
     }
@@ -251,6 +276,7 @@ async def _run_ingestion_and_persist(
         )
 
     sub_scores: dict[str, SubScore] = result_state["sub_scores"]
+    confidence = result_state.get("confidence")
     settings = get_settings()
     if sub_scores:
         score_row = TalentScore(
@@ -264,6 +290,9 @@ async def _run_ingestion_and_persist(
             leadership=sub_scores["leadership"].value,
             overall=result_state["overall_score"],
             renormalized_subscores=result_state["renormalized_subscores"],
+            confidence_available_signals=confidence.available_signals if confidence else None,
+            confidence_expected_signals=confidence.expected_signals if confidence else None,
+            confidence=confidence.confidence if confidence else None,
         )
         db.add(score_row)
 
@@ -496,6 +525,13 @@ def _to_score_response(score: TalentScore) -> TalentScoreResponse:
             "leadership": SubScore(value=score.leadership),
         },
         renormalized_subscores=score.renormalized_subscores or [],
+        confidence=EvidenceConfidence(
+            # Pre-v2 rows have no confidence columns — treat as fully unknown (0/7)
+            # rather than fabricating a number for historical scores.
+            available_signals=score.confidence_available_signals or 0,
+            expected_signals=score.confidence_expected_signals or len(SUB_SCORE_NAMES),
+            confidence=score.confidence if score.confidence is not None else 0.0,
+        ),
         score_version=score.score_version,
         computed_at=score.computed_at,
     )

@@ -44,14 +44,14 @@ _GROUNDING_RULE = (
 DisputeReviewUnavailable = LLMUnavailable
 
 
-def summarize_dispute_for_reviewer(original_evidence: dict, candidate_statement: str) -> dict:
+async def summarize_dispute_for_reviewer(original_evidence: dict, candidate_statement: str) -> dict:
     """Returns {candidate_context_summary, points_of_agreement_or_conflict}. Raises
     `DisputeReviewUnavailable` if the configured provider can't run."""
     prompt = (
         f"{_GROUNDING_RULE}\n\nORIGINAL EVIDENCE:\n{json.dumps(original_evidence, indent=2, default=str)}"
         f"\n\nCANDIDATE'S DISPUTE STATEMENT:\n{candidate_statement}"
     )
-    return generate_structured(
+    return await generate_structured(
         schema_name="dispute_review_summary",
         schema_description="An assistive summary for a human reviewer — NOT a decision. Never includes a recommended verdict.",
         parameters=_SUMMARY_PARAMETERS,

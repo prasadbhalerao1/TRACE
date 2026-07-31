@@ -159,7 +159,7 @@ async def _persist_check_result(
         flag = existing.scalar_one_or_none()
         if flag is None:
             evidence_items = verdict["evidence"] if isinstance(verdict["evidence"], list) else [verdict["evidence"]]
-            report = generate_fraud_risk_report(verdict["flag_type"], evidence_items)
+            report = await generate_fraud_risk_report(verdict["flag_type"], evidence_items)
             flag = FraudFlag(
                 subject_type=subject_type,
                 subject_id=subject_id,
@@ -541,7 +541,7 @@ async def get_flag_detail(
     assist = DisputeReviewAssist(available=False)
     if dispute is not None:
         try:
-            summary = summarize_dispute_for_reviewer(flag.evidence, dispute.candidate_statement or "")
+            summary = await summarize_dispute_for_reviewer(flag.evidence, dispute.candidate_statement or "")
             assist = DisputeReviewAssist(
                 available=True,
                 candidate_context_summary=summary["candidate_context_summary"],

@@ -56,7 +56,13 @@ class Submission(Base):
     score: Mapped[float | None] = mapped_column(Float)
     submitted_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (Index("idx_submissions_assessment", "assessment_id"),)
+    __table_args__ = (
+        Index("idx_submissions_assessment", "assessment_id"),
+        # Talent Score v2's coding_ability/problem_solving pull the candidate's latest
+        # submission score directly (services/agents/candidate_intelligence/tools/
+        # assessment_bridge.py) — without this, that lookup full-scans the table.
+        Index("idx_submissions_candidate", "candidate_id"),
+    )
 
 
 class InterviewSession(Base):

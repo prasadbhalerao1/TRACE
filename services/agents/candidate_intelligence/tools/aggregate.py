@@ -1,6 +1,6 @@
 """Talent Score aggregation — doc 08 §1 formula + §1.1 cold-start re-normalization."""
 
-from packages.shared_schemas.candidates import SubScore
+from packages.shared_schemas.candidates import EvidenceConfidence, SubScore
 
 SUB_SCORE_WEIGHTS = {
     "coding_ability": 0.20,
@@ -29,3 +29,19 @@ def compute_overall(sub_scores: dict[str, SubScore]) -> tuple[float | None, list
     weight_sum = sum(SUB_SCORE_WEIGHTS[name] for name in available)
     overall = sum(SUB_SCORE_WEIGHTS[name] * available[name].value for name in available) / weight_sum
     return round(overall, 1), missing
+
+
+def compute_confidence(sub_scores: dict[str, SubScore]) -> EvidenceConfidence:
+    """Evidence Confidence Score (proposed algorithm): how much of the Talent Score is
+    backed by real evidence vs. cold-start gaps — available_signals / expected_signals,
+    where "signals" are the 7 sub-scores that resolved to a value. A score's overall
+    number is never withheld below the 50% threshold, only flagged for the recruiter.
+    """
+    expected_signals = len(SUB_SCORE_WEIGHTS)
+    available_signals = sum(1 for s in sub_scores.values() if s.value is not None)
+    confidence = available_signals / expected_signals if expected_signals else 0.0
+    return EvidenceConfidence(
+        available_signals=available_signals,
+        expected_signals=expected_signals,
+        confidence=round(confidence, 2),
+    )

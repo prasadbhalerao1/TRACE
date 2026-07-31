@@ -99,14 +99,14 @@ _EXPLANATION_PARAMETERS = {
 }
 
 
-def _call_structured(
+async def _call_structured(
     schema_name: str, schema_description: str, parameters: dict, prompt: str, *, is_fast: bool, max_tokens: int, agent_name: str
 ) -> dict:
     """Thin wrapper translating the gateway's `LLMUnavailable` into this module's
     `RecruitmentUnavailable` (defined in `tools/embeddings.py`, not here) so callers and
     routers that already `except RecruitmentUnavailable` keep working unchanged."""
     try:
-        return generate_structured(
+        return await generate_structured(
             schema_name=schema_name,
             schema_description=schema_description,
             parameters=parameters,
@@ -119,7 +119,7 @@ def _call_structured(
         raise RecruitmentUnavailable(str(exc)) from exc
 
 
-def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
+async def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
     """Parses a recruiter's NL query into structured filters. `prior_filters` (from the
     same conversation's previous turn, if any) is given as context so a follow-up like
     "now only show ones open to remote" is understood as a refinement, not a fresh query
@@ -148,7 +148,7 @@ def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
     )
 
     try:
-        return _call_structured(
+        return await _call_structured(
             "structured_search_filters",
             schema_description,
             _QUERY_UNDERSTANDING_PARAMETERS,
@@ -161,7 +161,7 @@ def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
         # Single corrective retry — the `langgraph-agents` skill's explicit instruction
         # to "reject and re-prompt on schema-validation failure, never silently accept a
         # malformed filter" rather than an unbounded loop.
-        return _call_structured(
+        return await _call_structured(
             "structured_search_filters",
             schema_description,
             _QUERY_UNDERSTANDING_PARAMETERS,
@@ -173,7 +173,7 @@ def understand_query(raw_query: str, prior_filters: dict | None) -> dict:
         )
 
 
-def rerank_candidates(raw_query: str, candidates: list[dict]) -> list[str]:
+async def rerank_candidates(raw_query: str, candidates: list[dict]) -> list[str]:
     """`candidates` is the cheap-retrieval shortlist (already bounded to ~20-50 by the
     caller — this function does not itself limit the input, cost-bounding is the
     caller's responsibility per doc 02 §2's "LLM only on the final shortlist" rule).
@@ -186,7 +186,7 @@ def rerank_candidates(raw_query: str, candidates: list[dict]) -> list[str]:
         raw_query=raw_query,
         candidates_json=json.dumps(candidates, default=str),
     )
-    result = _call_structured(
+    result = await _call_structured(
         "reranked_candidates",
         "Re-order a shortlist of candidates by genuine fit to the recruiter's query.",
         _RERANK_PARAMETERS,
@@ -198,7 +198,7 @@ def rerank_candidates(raw_query: str, candidates: list[dict]) -> list[str]:
     return result.get("ordered_candidate_ids", [])
 
 
-def explain_matches(raw_query: str, candidates: list[dict]) -> dict[str, str]:
+async def explain_matches(raw_query: str, candidates: list[dict]) -> dict[str, str]:
     """One grounded sentence per candidate. `candidates` must already include whatever
     concrete evidence fields (repo names, stars, hackathon wins, talent score) the
     explanation is allowed to cite — the prompt explicitly forbids inventing anything not
@@ -211,7 +211,7 @@ def explain_matches(raw_query: str, candidates: list[dict]) -> dict[str, str]:
         raw_query=raw_query,
         candidates_json=json.dumps(candidates, default=str),
     )
-    result = _call_structured(
+    result = await _call_structured(
         "match_explanations",
         "One grounded, evidence-citing sentence per candidate explaining why they matched.",
         _EXPLANATION_PARAMETERS,

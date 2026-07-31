@@ -15,7 +15,7 @@ async def run(state: VerificationState) -> dict:
     if not source:
         return {"llm_review": None}
 
-    review = review_code(
+    review = await review_code(
         state["spec"].get("problem_statement", ""), source, state.get("static_analysis") or {}
     )
     return {"llm_review": review}

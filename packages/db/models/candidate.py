@@ -116,6 +116,11 @@ class TalentScore(Base):
     # Which sub-scores were N/A and had their weight re-normalized away (doc 08 §1.1) —
     # part of the provenance trail, never a silent adjustment.
     renormalized_subscores: Mapped[list | None] = mapped_column(JSONB)
+    # Evidence Confidence Score (Talent Score v2) — available_signals/expected_signals,
+    # surfaced so recruiters can tell a low score from a low-evidence score apart.
+    confidence_available_signals: Mapped[int | None] = mapped_column(Integer)
+    confidence_expected_signals: Mapped[int | None] = mapped_column(Integer)
+    confidence: Mapped[float | None] = mapped_column(Float)
     score_version: Mapped[str] = mapped_column(Text, nullable=False, server_default="v1")
     computed_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

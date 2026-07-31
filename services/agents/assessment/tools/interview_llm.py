@@ -83,8 +83,11 @@ _REPORT_PARAMETERS = {
 }
 
 
-def generate_question(topic: str, candidate_profile_summary: str, transcript: list[dict], job_context: dict | None = None) -> str:
+async def generate_question(topic: str, candidate_profile_summary: str, transcript: list[dict], job_context: dict | None = None) -> str:
+    import logging
     from services.agents.prompts_loader import load_prompt
+
+    logger = logging.getLogger(__name__)
 
     history = "\n".join(f"{t['role']}: {t['text']}" for t in transcript) or "(interview just starting)"
 
@@ -107,18 +110,27 @@ def generate_question(topic: str, candidate_profile_summary: str, transcript: li
         conversation_history=history,
         role_context_section=role_context_section,
     )
-    result = generate_structured(
-        schema_name="interview_question",
-        schema_description="The next interview question to ask the candidate.",
-        parameters=_QUESTION_PARAMETERS,
-        prompt=prompt,
-        max_tokens=256,
-        agent_name="assessment.interview.question",
-    )
-    return result["question"]
+
+    logger.info(f"Generating question for topic: {topic}")
+    logger.debug(f"Prompt:\n{prompt}")
+
+    try:
+        result = await generate_structured(
+            schema_name="interview_question",
+            schema_description="The next interview question to ask the candidate.",
+            parameters=_QUESTION_PARAMETERS,
+            prompt=prompt,
+            max_tokens=256,
+            agent_name="assessment.interview.question",
+        )
+        logger.info(f"Question generated: {result.get('question', '?')}")
+        return result["question"]
+    except Exception as e:
+        logger.error(f"Failed to generate question: {e}", exc_info=True)
+        raise
 
 
-def evaluate_turn(topic: str, question: str, answer: str) -> dict:
+async def evaluate_turn(topic: str, question: str, answer: str) -> dict:
     from services.agents.prompts_loader import load_prompt
 
     prompt = load_prompt(
@@ -128,7 +140,7 @@ def evaluate_turn(topic: str, question: str, answer: str) -> dict:
         question=question,
         answer=answer,
     )
-    return generate_structured(
+    return await generate_structured(
         schema_name="turn_evaluation",
         schema_description="Evaluation of the candidate's most recent answer against the current topic.",
         parameters=_TURN_EVAL_PARAMETERS,
@@ -138,7 +150,7 @@ def evaluate_turn(topic: str, question: str, answer: str) -> dict:
     )
 
 
-def generate_followup(topic: str, question: str, answer: str) -> str:
+async def generate_followup(topic: str, question: str, answer: str) -> str:
     from services.agents.prompts_loader import load_prompt
 
     prompt = load_prompt(
@@ -148,7 +160,7 @@ def generate_followup(topic: str, question: str, answer: str) -> str:
         question=question,
         answer=answer,
     )
-    result = generate_structured(
+    result = await generate_structured(
         schema_name="followup_question",
         schema_description="A targeted follow-up question probing the weak spot in the candidate's last answer.",
         parameters=_FOLLOWUP_PARAMETERS,
@@ -159,7 +171,7 @@ def generate_followup(topic: str, question: str, answer: str) -> str:
     return result["question"]
 
 
-def generate_definition_questions(
+async def generate_definition_questions(
     role_title: str, job_description: str, years_experience: int | None, question_count: int
 ) -> list[str]:
     from services.agents.prompts_loader import load_prompt
@@ -172,7 +184,7 @@ def generate_definition_questions(
         years_experience=str(years_experience) if years_experience else "not specified",
         question_count=str(question_count),
     )
-    result = generate_structured(
+    result = await generate_structured(
         schema_name="definition_questions",
         schema_description="Drafted interview topics for a recruiter-authored interview definition.",
         parameters=_DEFINITION_QUESTIONS_PARAMETERS,
@@ -183,7 +195,7 @@ def generate_definition_questions(
     return result["topics"]
 
 
-def generate_interview_report(transcript: list[dict], per_topic_scores: dict[str, float]) -> dict:
+async def generate_interview_report(transcript: list[dict], per_topic_scores: dict[str, float]) -> dict:
     from services.agents.prompts_loader import load_prompt
 
     history = "\n".join(f"{t['role']}: {t['text']}" for t in transcript)
@@ -193,7 +205,7 @@ def generate_interview_report(transcript: list[dict], per_topic_scores: dict[str
         per_topic_scores_json=json.dumps(per_topic_scores),
         transcript_history=history,
     )
-    return generate_structured(
+    return await generate_structured(
         schema_name="interview_report",
         schema_description="Final interview report synthesized from the full transcript.",
         parameters=_REPORT_PARAMETERS,

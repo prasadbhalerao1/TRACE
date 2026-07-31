@@ -20,6 +20,6 @@ async def run(state: CandidateProfileState) -> dict:
 
     text = extract_resume_text(state["raw_resume_bytes"], state["raw_resume_content_type"])
     try:
-        return {"resume_parsed": extract_resume_fields(text)}
+        return {"resume_parsed": await extract_resume_fields(text)}
     except ResumeExtractionUnavailable as exc:
         return {"conflicts": [f"resume_extraction_unavailable: {exc}"]}

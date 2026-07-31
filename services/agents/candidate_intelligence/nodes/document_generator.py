@@ -18,9 +18,9 @@ async def run(state: DocumentBuilderState) -> dict:
     attempts = state.get("attempts", 0) + 1
     try:
         if state["document_type"] == "resume":
-            content = generate_resume_content(state["merged_profile"], state.get("target_job_description"))
+            content = await generate_resume_content(state["merged_profile"], state.get("target_job_description"))
         else:
-            content = generate_cover_letter_content(
+            content = await generate_cover_letter_content(
                 state["merged_profile"], state.get("target_job_description") or ""
             )
     except DocumentGenerationUnavailable as exc:

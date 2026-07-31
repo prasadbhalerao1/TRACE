@@ -84,7 +84,7 @@ def _rule_based_normalize(raw: dict[str, Any]) -> TeamSubmissionInput | None:
     )
 
 
-def _haiku_fallback_normalize(raw: dict[str, Any]) -> TeamSubmissionInput:
+async def _haiku_fallback_normalize(raw: dict[str, Any]) -> TeamSubmissionInput:
     prompt = (
         "You are the Normalization Agent for a hackathon-hosting platform ingesting a "
         "webhook push from an external hackathon platform (e.g. Devpost, Devfolio). Map "
@@ -92,7 +92,7 @@ def _haiku_fallback_normalize(raw: dict[str, Any]) -> TeamSubmissionInput:
         "present — never invent a team name or member that isn't in the payload.\n\n"
         f"RAW PAYLOAD:\n{json.dumps(raw, default=str)}"
     )
-    data = generate_structured(
+    data = await generate_structured(
         schema_name="normalized_submission",
         schema_description=(
             "Map an arbitrary hackathon-platform submission payload onto this platform's "
@@ -115,8 +115,8 @@ def _haiku_fallback_normalize(raw: dict[str, Any]) -> TeamSubmissionInput:
     )
 
 
-def normalize_webhook_payload(raw: dict[str, Any]) -> TeamSubmissionInput:
+async def normalize_webhook_payload(raw: dict[str, Any]) -> TeamSubmissionInput:
     result = _rule_based_normalize(raw)
     if result is not None:
         return result
-    return _haiku_fallback_normalize(raw)
+    return await _haiku_fallback_normalize(raw)

@@ -47,7 +47,7 @@ def _deterministic_fallback(flag_type: str, evidence_items: list[str]) -> dict:
     }
 
 
-def generate_fraud_risk_report(flag_type: str, evidence_items: list[str]) -> dict:
+async def generate_fraud_risk_report(flag_type: str, evidence_items: list[str]) -> dict:
     """Returns {summary, cited_evidence}. Falls back to a deterministic template (never
     raises) if the configured provider is unavailable — matches every other module's
     "typed unavailable, degrade gracefully, never fabricate OR block" pattern."""
@@ -60,7 +60,7 @@ def generate_fraud_risk_report(flag_type: str, evidence_items: list[str]) -> dic
         evidence_json=json.dumps(evidence_items, indent=2),
     )
     try:
-        return generate_structured(
+        return await generate_structured(
             schema_name="fraud_risk_report",
             schema_description="A structured, evidence-linked fraud risk report for one flagged signal.",
             parameters=_REPORT_PARAMETERS,

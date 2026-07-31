@@ -29,5 +29,5 @@ async def run(state: CopilotState) -> dict:
         }
         for c in top
     ]
-    explanations = explain_matches(state["raw_query"], payload)
+    explanations = await explain_matches(state["raw_query"], payload)
     return {"explanations": explanations}

@@ -20,6 +20,19 @@ class SubScore(BaseModel):
     rationale: str | None = None
 
 
+class EvidenceConfidence(BaseModel):
+    """How much of the Talent Score is backed by real evidence vs. cold-start gaps.
+
+    available_signals / expected_signals, where "signals" are the 7 sub-scores that
+    resolved to a non-None value. Recruiters should treat scores below the 50%
+    confidence threshold as based on a sparse profile, not a weak candidate.
+    """
+
+    available_signals: int
+    expected_signals: int
+    confidence: float  # available_signals / expected_signals, 0-1
+
+
 class CandidateProfileResponse(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -55,6 +68,7 @@ class TalentScoreResponse(BaseModel):
     overall: float | None
     sub_scores: dict[str, SubScore]
     renormalized_subscores: list[str]
+    confidence: EvidenceConfidence
     score_version: str
     computed_at: datetime
 

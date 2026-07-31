@@ -80,8 +80,8 @@ COVER_LETTER_GENERATION_PARAMETERS = {
 DocumentGenerationUnavailable = LLMUnavailable
 
 
-def _call_structured(schema_name: str, schema_description: str, parameters: dict, prompt: str, *, is_fast: bool) -> dict:
-    return generate_structured(
+async def _call_structured(schema_name: str, schema_description: str, parameters: dict, prompt: str, *, is_fast: bool) -> dict:
+    return await generate_structured(
         schema_name=schema_name,
         schema_description=schema_description,
         parameters=parameters,
@@ -92,7 +92,7 @@ def _call_structured(schema_name: str, schema_description: str, parameters: dict
     )
 
 
-def generate_resume_content(merged_profile: dict, target_job_description: str | None) -> dict:
+async def generate_resume_content(merged_profile: dict, target_job_description: str | None) -> dict:
     jd_instruction = (
         (
             "\n\nTARGET JOB DESCRIPTION (FR-5.4 optimization): re-rank and re-word the "
@@ -111,7 +111,7 @@ def generate_resume_content(merged_profile: dict, target_job_description: str | 
         "Generate ATS-friendly resume content: plain structure, no tables/graphics, "
         "standard section headings only."
     )
-    return _call_structured(
+    return await _call_structured(
         "generated_resume",
         "ATS-friendly resume content generated strictly from the candidate's own profile data.",
         RESUME_GENERATION_PARAMETERS,
@@ -120,7 +120,7 @@ def generate_resume_content(merged_profile: dict, target_job_description: str | 
     )
 
 
-def generate_cover_letter_content(merged_profile: dict, target_job_description: str) -> dict:
+async def generate_cover_letter_content(merged_profile: dict, target_job_description: str) -> dict:
     prompt = (
         f"{_GROUNDING_RULE}\n\n"
         f"CANDIDATE PROFILE JSON:\n{json.dumps(merged_profile, default=str)}\n\n"
@@ -129,7 +129,7 @@ def generate_cover_letter_content(merged_profile: dict, target_job_description: 
         "connections between the candidate's actual experience/skills and the role's "
         "requirements. Do not fabricate enthusiasm-driven claims not backed by the profile."
     )
-    return _call_structured(
+    return await _call_structured(
         "generated_cover_letter",
         "A cover letter grounded strictly in the candidate's own profile data.",
         COVER_LETTER_GENERATION_PARAMETERS,

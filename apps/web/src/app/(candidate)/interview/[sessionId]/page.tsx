@@ -35,6 +35,8 @@ export default function CandidateInterviewPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [listening, setListening] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [speechConfidence, setSpeechConfidence] = useState<number | null>(null);
   const [status, setStatus] = useState<"in_progress" | "completed" | null>(null);
   const [report, setReport] = useState<InterviewReportResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +120,8 @@ export default function CandidateInterviewPage() {
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
+      setInterimTranscript("");
+      setSpeechConfidence(null);
       return;
     }
     const SpeechRecognitionCtor =
@@ -128,16 +132,37 @@ export default function CandidateInterviewPage() {
     }
     const recognition = new SpeechRecognitionCtor();
     recognition.lang = "en-US";
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.onresult = (e: unknown) => {
-      const event = e as { results: { transcript: string }[][] };
-      const transcript = event.results[event.results.length - 1]?.[0]?.transcript;
-      if (transcript) setInputText(transcript);
+      const event = e as { results: { transcript: string; isFinal: boolean; confidence?: number }[][] };
+      let interim = "";
+      let final = "";
+      let confidence = 0;
+
+      for (let i = 0; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i][0].isFinal) {
+          final += transcript;
+          confidence = Math.max(confidence, event.results[i][0].confidence || 0);
+        } else {
+          interim += transcript;
+        }
+      }
+
+      if (final) {
+        setInputText((prev) => prev + final);
+        setSpeechConfidence(confidence > 0 ? Math.round(confidence * 100) : null);
+      }
+      setInterimTranscript(interim);
     };
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      setInterimTranscript("");
+    };
     recognitionRef.current = recognition;
     recognition.start();
     setListening(true);
+    setSpeechConfidence(null);
   }
 
   async function toggleCamera() {
@@ -264,12 +289,16 @@ export default function CandidateInterviewPage() {
                 <input
                   className="flex-1 px-3 py-2 text-sm rounded-md border bg-background text-foreground focus:outline-none focus:ring-1"
                   placeholder="Type your response..."
-                  value={inputText}
+                  value={inputText + (interimTranscript ? ` ${interimTranscript}` : "")}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 />
                 <Button onClick={handleSend}>Send</Button>
               </div>
+              {interimTranscript && <p className="text-xs text-slate italic opacity-60">{interimTranscript}</p>}
+              {speechConfidence !== null && (
+                <p className="text-xs text-slate">Confidence: {speechConfidence}%</p>
+              )}
               {cameraError && <p className="text-xs text-rose-flagged">{cameraError}</p>}
             </div>
           </CardContent>

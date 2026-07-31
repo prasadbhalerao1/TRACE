@@ -37,11 +37,11 @@ _INTENT_PARAMETERS = {
 }
 
 
-def classify_intent(raw_request: str) -> dict:
+async def classify_intent(raw_request: str) -> dict:
     from services.agents.prompts_loader import load_prompt
 
     prompt = load_prompt("supervisor", "classifier", query=raw_request)
-    return generate_structured(
+    return await generate_structured(
         schema_name="classified_intent",
         schema_description="Classify which platform module should handle this natural-language request.",
         parameters=_INTENT_PARAMETERS,
