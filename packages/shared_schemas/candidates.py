@@ -11,6 +11,8 @@ SUB_SCORE_NAMES = (
     "technical_consistency",
     "community_participation",
     "leadership",
+    "open_source_contributions",
+    "hackathon_performance",
 )
 
 
@@ -18,6 +20,26 @@ class SubScore(BaseModel):
     value: float | None  # 0-100, None when not yet computable (cold start)
     evidence: list[str] = []  # agent_run ids
     rationale: str | None = None
+
+
+class HackathonExperienceEntry(BaseModel):
+    """Self-reported hackathon experience for external hackathons."""
+
+    id: str | None = None  # generated on server
+    name: str
+    result: str  # winner | top5 | finalist | participant
+    weight: float  # 1-5 importance/prestige scaling
+    date: str  # ISO 8601 date
+    platform_hackathon_id: str | None = None  # null for external hackathons
+
+
+class HackathonExperienceRequest(BaseModel):
+    """Request to add/update hackathon experience."""
+
+    name: str
+    result: str  # winner | top5 | finalist | participant
+    weight: float
+    date: str
 
 
 class EvidenceConfidence(BaseModel):
@@ -47,6 +69,7 @@ class CandidateProfileResponse(BaseModel):
     experience: list[dict] | None
     education: list[dict] | None
     merged_conflicts: list[dict] | None
+    hackathon_experience: list[dict] | None = None
     username: str | None
     portfolio_published: bool
     github_stats: dict | None
@@ -185,6 +208,7 @@ class PublicPortfolioResponse(BaseModel):
     skills: list[dict] | None
     experience: list[dict] | None
     education: list[dict] | None
+    hackathon_experience: list[dict] | None = None
     projects: list[PublicPortfolioProject]
     badges: list[BadgeResponse]
     overall_score: float | None

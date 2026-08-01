@@ -36,8 +36,13 @@ class CandidateProfileState(TypedDict):
     commit_population: list[float]
     star_population: list[float]
     leadership_population: list[float]
+    contribution_population: list[float]
     assessment_score: Optional[float]
     assessment_population: list[float]
+
+    # Hackathon data (platform-run and self-reported)
+    hackathon_platform_results: Optional[list[dict]]
+    hackathon_self_reported: Optional[list[dict]]
 
     # Scoring output
     sub_scores: dict[str, SubScore]

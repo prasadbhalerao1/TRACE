@@ -21,6 +21,8 @@ from services.agents.candidate_intelligence.tools.judgment_scores import (
     innovation,
     project_quality,
 )
+from services.agents.candidate_intelligence.tools.open_source_score import open_source_contributions
+from services.agents.candidate_intelligence.tools.hackathon_score import hackathon_performance
 
 
 async def run(state: CandidateProfileState) -> dict:
@@ -67,6 +69,17 @@ async def run(state: CandidateProfileState) -> dict:
             await innovation(state["candidate_id"], analysis)
             if github_raw is not None
             else SubScore(value=None, rationale="No GitHub data ingested yet.")
+        ),
+        "open_source_contributions": (
+            open_source_contributions(
+                analysis, contribution_population=state.get("contribution_population") or []
+            )
+            if github_raw is not None
+            else SubScore(value=None, rationale="No GitHub data ingested yet.")
+        ),
+        "hackathon_performance": hackathon_performance(
+            platform_results=state.get("hackathon_platform_results"),
+            self_reported=state.get("hackathon_self_reported"),
         ),
     }
 

@@ -4,13 +4,15 @@ from packages.shared_schemas.candidates import EvidenceConfidence, SubScore
 from services.agents.common.scoring import weighted_renormalized_mean
 
 SUB_SCORE_WEIGHTS = {
-    "coding_ability": 0.20,
-    "problem_solving": 0.20,
-    "project_quality": 0.15,
-    "innovation": 0.15,
-    "technical_consistency": 0.10,
-    "community_participation": 0.10,
-    "leadership": 0.10,
+    "coding_ability": 0.16,
+    "problem_solving": 0.16,
+    "project_quality": 0.12,
+    "innovation": 0.12,
+    "technical_consistency": 0.08,
+    "community_participation": 0.08,
+    "leadership": 0.08,
+    "open_source_contributions": 0.10,
+    "hackathon_performance": 0.10,
 }
 
 

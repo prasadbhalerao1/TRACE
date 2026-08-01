@@ -38,6 +38,11 @@ class CandidateProfile(Base):
     experience: Mapped[list | None] = mapped_column(JSONB)
     education: Mapped[list | None] = mapped_column(JSONB)
     merged_conflicts: Mapped[list | None] = mapped_column(JSONB)
+    # Hackathon experience (self-reported) — list of external hackathons the candidate won/placed in.
+    # [{id, name, result, weight, date, platform_hackathon_id}], where result is one of
+    # winner|top5|finalist|participant, weight is 1-5 importance, platform_hackathon_id is null
+    # for external hackathons (platform-run ones are queried separately via HackathonRanking).
+    hackathon_experience: Mapped[list | None] = mapped_column(JSONB)
     # FR-5.2 public portfolio (`/[username]`) — neither doc set names a slug column, but
     # the SSR route can't exist without one. Nullable + unique: no username until the
     # candidate opts in via POST /candidates/me/portfolio/publish.
@@ -117,6 +122,8 @@ class TalentScore(Base):
     innovation: Mapped[float | None] = mapped_column(Float)
     community_participation: Mapped[float | None] = mapped_column(Float)
     technical_consistency: Mapped[float | None] = mapped_column(Float)
+    open_source_contributions: Mapped[float | None] = mapped_column(Float)
+    hackathon_performance: Mapped[float | None] = mapped_column(Float)
     overall: Mapped[float | None] = mapped_column(Float)
     # Which sub-scores were N/A and had their weight re-normalized away (doc 08 §1.1) —
     # part of the provenance trail, never a silent adjustment.

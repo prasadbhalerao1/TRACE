@@ -31,6 +31,8 @@ from packages.db.models import (
     File,
     GeneratedDocument,
     GithubSnapshot,
+    HackathonRanking,
+    HackathonTeamMember,
     TalentScore,
     User,
 )
@@ -44,6 +46,7 @@ from packages.shared_schemas.candidates import (
     EvidenceConfidence,
     GeneratedDocumentResponse,
     GithubSummary,
+    HackathonExperienceRequest,
     LeetcodeConnectRequest,
     PortfolioPublishRequest,
     ProfileUpdateRequest,
@@ -147,6 +150,67 @@ async def update_profile(
     return profile
 
 
+@router.post("/me/hackathon-experience", response_model=CandidateProfileResponse)
+async def add_hackathon_experience(
+    body: HackathonExperienceRequest,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> CandidateProfile:
+    """Add a hackathon experience entry (self-reported external hackathon) and trigger rescore."""
+    import uuid
+
+    profile = await _get_or_create_profile(db, user)
+
+    current_exp = profile.hackathon_experience or []
+    new_entry = {
+        "id": str(uuid.uuid4()),
+        "name": body.name,
+        "result": body.result,
+        "weight": body.weight,
+        "date": body.date,
+        "platform_hackathon_id": None,
+    }
+    current_exp.append(new_entry)
+    profile.hackathon_experience = current_exp
+    profile.ingestion_status = "processing"
+
+    await db.commit()
+    await db.refresh(profile)
+
+    # Trigger background rescore
+    background_tasks.add_task(_run_ingestion_background, str(profile.id), {})
+
+    return profile
+
+
+@router.delete("/me/hackathon-experience/{entry_id}", response_model=CandidateProfileResponse)
+async def remove_hackathon_experience(
+    entry_id: str,
+    user: User = Depends(require_role("candidate")),
+    db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> CandidateProfile:
+    """Remove a hackathon experience entry and trigger rescore."""
+    profile = await _get_or_create_profile(db, user)
+
+    current_exp = profile.hackathon_experience or []
+    updated_exp = [e for e in current_exp if e.get("id") != entry_id]
+
+    if len(updated_exp) == len(current_exp):
+        raise HTTPException(status_code=404, detail="Hackathon experience entry not found")
+
+    profile.hackathon_experience = updated_exp if updated_exp else None
+    profile.ingestion_status = "processing"
+
+    await db.commit()
+    await db.refresh(profile)
+
+    # Trigger background rescore
+    background_tasks.add_task(_run_ingestion_background, str(profile.id), {})
+
+    return profile
+
 
 async def _get_or_create_profile(db: AsyncSession, user: User) -> CandidateProfile:
     result = await db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id))
@@ -182,8 +246,31 @@ async def _run_ingestion_and_persist(
     commit_population = await commit_count_population(db)
     star_population = await latest_subscore_population(db, "community_participation")
     leadership_population = await latest_subscore_population(db, "leadership")
+    contribution_population = await latest_subscore_population(db, "open_source_contributions")
     assessment_score = await latest_assessment_score(db, profile.id)
     assessment_population = await assessment_score_population(db)
+
+    # Fetch hackathon data: platform-run results from HackathonRanking/HackathonTeamMember
+    # and self-reported from CandidateProfile.hackathon_experience
+    hackathon_platform_results = []
+    if profile.id:
+        team_members = await db.execute(
+            select(HackathonTeamMember).where(HackathonTeamMember.candidate_id == profile.id)
+        )
+        for member in team_members.scalars().all():
+            rankings = await db.execute(
+                select(HackathonRanking).where(
+                    (HackathonRanking.team_id == member.team_id)
+                )
+            )
+            for ranking in rankings.scalars().all():
+                hackathon_platform_results.append({
+                    "rank": ranking.rank,
+                    "composite_score": ranking.composite_score,
+                    "hackathon_id": str(ranking.hackathon_id),
+                })
+
+    hackathon_self_reported = profile.hackathon_experience or []
 
     initial_state: CandidateProfileState = {
         "candidate_id": str(profile.id),
@@ -209,8 +296,11 @@ async def _run_ingestion_and_persist(
         "commit_population": commit_population,
         "star_population": star_population,
         "leadership_population": leadership_population,
+        "contribution_population": contribution_population,
         "assessment_score": assessment_score,
         "assessment_population": assessment_population,
+        "hackathon_platform_results": hackathon_platform_results,
+        "hackathon_self_reported": hackathon_self_reported,
         "sub_scores": {},
         "overall_score": None,
         "renormalized_subscores": [],
@@ -291,6 +381,8 @@ async def _run_ingestion_and_persist(
             technical_consistency=sub_scores["technical_consistency"].value,
             community_participation=sub_scores["community_participation"].value,
             leadership=sub_scores["leadership"].value,
+            open_source_contributions=sub_scores["open_source_contributions"].value,
+            hackathon_performance=sub_scores["hackathon_performance"].value,
             overall=result_state["overall_score"],
             renormalized_subscores=result_state["renormalized_subscores"],
             confidence_available_signals=confidence.available_signals if confidence else None,
