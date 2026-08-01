@@ -17,6 +17,11 @@ FLAG_TYPE_PENALTIES: dict[str, float] = {
     "code_plagiarism": 35.0,
     "duplicate_profile": 40.0,
     "ai_generated_content": 15.0,
+    # Weaker signal than "fake_certificate" — this means the issuer isn't in the trusted
+    # registry yet, not that the credential was positively confirmed forged. Smaller
+    # penalty reflects that; still requires a human to move it to 'upheld' before it
+    # affects anything, same as every other flag type.
+    "unrecognized_issuer": 10.0,
 }
 
 

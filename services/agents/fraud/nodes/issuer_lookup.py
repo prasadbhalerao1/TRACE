@@ -4,7 +4,9 @@ from services.agents.fraud.tools.issuer_lookup import lookup_issuer
 
 async def run(state: FraudCheckState) -> dict:
     ctx = state["context"]
-    result = await lookup_issuer(ctx.get("issuer"), ctx.get("credential_id"))
+    result = await lookup_issuer(
+        ctx.get("issuer"), ctx.get("credential_id"), ctx.get("trusted_issuers") or []
+    )
     signal = {
         "signal_type": "issuer_lookup",
         "score": None,
