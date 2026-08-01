@@ -161,6 +161,9 @@ export default function CandidateInterviewPage() {
     };
     recognition.onend = () => {
       setListening(false);
+      if (interimTranscript.trim()) {
+        setInputText((prev) => prev + (prev.endsWith(" ") ? "" : " ") + interimTranscript.trim());
+      }
       setInterimTranscript("");
     };
     recognitionRef.current = recognition;
