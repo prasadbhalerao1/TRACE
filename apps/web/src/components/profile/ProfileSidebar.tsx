@@ -1,4 +1,4 @@
-import { useUser } from "@/components/AuthProvider";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { Braces, Building2, Code2, GraduationCap, Link2, Mail, MapPin, Pencil, RefreshCw, Copy, Check } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -42,7 +42,8 @@ export function ProfileSidebar({
   refreshBusy,
   refreshCooldownUntil,
 }: ProfileSidebarProps) {
-  const { user } = useUser();
+  const { me } = useCurrentUser();
+  const user = me?.profile;
   const countdown = useCountdown(refreshCooldownUntil);
   const education = profile.education?.[0] as { institution?: string; degree?: string } | undefined;
   const [copied, setCopied] = useState(false);
@@ -76,12 +77,12 @@ export function ProfileSidebar({
               transition={{ duration: 0.2 }}
               className="relative h-28 w-28 rounded-full ring-2 ring-indigo-500/10 group-hover:ring-indigo-500/30 transition-all duration-300 overflow-hidden"
             >
-              {user?.imageUrl ? (
+              {profile.github_username ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.imageUrl} alt={user.fullName ?? "avatar"} className="h-full w-full object-cover" />
+                <img src={`https://github.com/${profile.github_username}.png`} alt={profile.full_name ?? user?.full_name ?? "avatar"} className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-zinc-100 text-3xl font-semibold text-zinc-600">
-                  {(user?.fullName ?? profile.username ?? "?").slice(0, 1).toUpperCase()}
+                  {(profile.full_name ?? user?.full_name ?? profile.username ?? "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
             </motion.div>
@@ -97,7 +98,7 @@ export function ProfileSidebar({
           {/* User Name & Bio */}
           <div className="text-center space-y-1">
             <h2 className="font-heading text-lg font-bold text-zinc-800 leading-snug">
-              {profile.full_name ?? user?.fullName ?? "Candidate"}
+              {profile.full_name ?? user?.full_name ?? "Candidate"}
             </h2>
             {profile.username && (
               <p className="text-sm font-semibold bg-gradient-to-r from-emerald-600 to-teal-700 bg-clip-text text-transparent">
@@ -126,10 +127,10 @@ export function ProfileSidebar({
 
           {/* Social Links */}
           <div className="flex items-center justify-center gap-4">
-            {user?.primaryEmailAddress && (
+            {user?.email && (
               <motion.a
                 whileHover={{ y: -2 }}
-                href={`mailto:${user.primaryEmailAddress.emailAddress}`}
+                href={`mailto:${user.email}`}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-500 hover:text-zinc-900 transition"
                 title="Email"
               >

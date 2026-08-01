@@ -127,6 +127,7 @@ export interface CandidateProfileResponse {
   skills: { name: string; source?: string; confidence?: number }[] | null;
   experience: Record<string, unknown>[] | null;
   education: Record<string, unknown>[] | null;
+  hackathon_experience?: Record<string, unknown>[] | null;
   merged_conflicts: { description: string; resolved: boolean }[] | null;
   username: string | null;
   portfolio_published: boolean;
