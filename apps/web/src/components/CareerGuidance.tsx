@@ -37,7 +37,16 @@ export function CareerGuidance() {
       try {
         const token = await getToken();
         if (!token) throw new Error("No session token");
-        const result = await fetchCareerGuidance(token, { targetRole: role, refresh });
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Career guidance request timed out after 60 seconds. Please try again.")), 60000)
+        );
+
+        const result = await Promise.race([
+          fetchCareerGuidance(token, { targetRole: role, refresh }),
+          timeoutPromise
+        ]);
+
         setGuidance(result);
         setTargetRole(result.target_role ?? role);
       } catch (err) {
@@ -59,7 +68,16 @@ export function CareerGuidance() {
       try {
         const token = await getToken();
         if (!token) throw new Error("No session token");
-        const result = await fetchCareerGuidance(token, {});
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Career guidance request timed out after 60 seconds. Please try again.")), 60000)
+        );
+
+        const result = await Promise.race([
+          fetchCareerGuidance(token, {}),
+          timeoutPromise
+        ]);
+
         if (cancelled) return;
         setGuidance(result);
         setTargetRole(result.target_role ?? undefined);
@@ -106,7 +124,19 @@ export function CareerGuidance() {
             </Button>
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <div className="space-y-2">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => load(targetRole, false)}
+                disabled={loading}
+              >
+                Try Again
+              </Button>
+            </div>
+          )}
           {loading && !guidance && (
             <p className="text-sm text-muted-foreground">Analyzing your skill gaps…</p>
           )}

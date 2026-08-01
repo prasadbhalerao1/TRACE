@@ -107,6 +107,28 @@ async def _start_event_consumer() -> None:
     asyncio.create_task(run_polling_loop())
 
 
+@app.on_event("startup")
+async def _warm_embedder() -> None:
+    # Pre-load the sentence-transformer model so the first career-guidance request
+    # doesn't timeout waiting for model download/initialization (can take 30+ seconds
+    # depending on network speed). Loaded lazily in background; subsequent requests
+    # benefit from the cached model without blocking startup.
+    try:
+        from services.agents.recruitment.tools.embeddings import get_embedder
+        asyncio.create_task(_load_embedder_async())
+    except Exception:
+        pass
+
+
+async def _load_embedder_async() -> None:
+    try:
+        from services.agents.recruitment.tools.embeddings import get_embedder
+        get_embedder()
+        logger.info("Embedder model pre-loaded successfully")
+    except Exception as exc:
+        logger.warning("Failed to pre-load embedder model: %s", exc)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
