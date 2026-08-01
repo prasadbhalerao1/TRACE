@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { calculateATSScore, type ATSScoreDetail } from "@/lib/atsScoring";
 
 export type ResumeTemplateStyle = "apex" | "modern" | "creative" | "minimalist";
 
@@ -138,11 +139,49 @@ export function AtsResumeBuilder() {
   const [template, setTemplate] = useState<ResumeTemplateStyle>("apex");
   const [targetJd, setTargetJd] = useState("");
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [atsScore, setAtsScore] = useState(96);
+  const [aiOptimized, setAiOptimized] = useState(false);
   const [activeTab, setActiveTab] = useState<"contact" | "skills" | "experience" | "projects" | "education">("contact");
+  const [showAtsDetails, setShowAtsDetails] = useState(false);
 
-  const handlePrint = () => {
-    window.print();
+  const atsScoreDetail = useMemo<ATSScoreDetail>(() => {
+    const result = calculateATSScore(data);
+    return result;
+  }, [data]);
+
+  const handlePrint = async () => {
+    const element = document.getElementById("resume-document");
+    if (!element) return;
+
+    try {
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = html2pdfModule.default || (html2pdfModule as unknown as () => { set: (opt: object) => { from: (el: HTMLElement) => { save: () => void } } });
+      const options = {
+        margin: 0,
+        filename: `${data.fullName.replace(/\s+/g, "_")}_Resume.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+        },
+        jsPDF: {
+          orientation: "portrait",
+          unit: "mm",
+          format: "a4",
+          compress: true,
+        },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+      };
+
+      html2pdf()
+        .set(options)
+        .from(element)
+        .save();
+    } catch (error) {
+      console.error("PDF export failed:", error);
+      window.print();
+    }
   };
 
   const handleAiOptimize = () => {
@@ -153,11 +192,18 @@ export function AtsResumeBuilder() {
     setIsOptimizing(true);
     setTimeout(() => {
       setIsOptimizing(false);
-      setAtsScore(99);
-      // Elevate bullets with STAR metrics
+      setAiOptimized(true);
       setData((prev) => ({
         ...prev,
-        summary: `Results-driven ${prev.roleTitle} specializing in high-throughput software architectures. Highly aligned with job description criteria: ${targetJd.slice(0, 120)}...`,
+        summary: `Results-driven ${prev.roleTitle} with proven expertise in full-stack development. Specialized in building scalable systems and leading technical initiatives. Successfully delivered high-impact projects with measurable business outcomes.`,
+        experience: prev.experience.map((exp) => ({
+          ...exp,
+          bullets: exp.bullets.map((bullet) =>
+            bullet.includes("%") || bullet.match(/\d+[x]/)
+              ? bullet
+              : `${bullet} — demonstrated measurable impact aligned with JD requirements`
+          ),
+        })),
       }));
     }, 1200);
   };
@@ -211,15 +257,109 @@ export function AtsResumeBuilder() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 px-3 py-1.5 rounded-lg">
+          <button
+            onClick={() => setShowAtsDetails(!showAtsDetails)}
+            className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 px-3 py-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-950/60 transition-colors cursor-pointer"
+          >
             <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">ATS Readiness:</span>
-            <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">{atsScore}/100</span>
-          </div>
+            <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">{atsScoreDetail.score}/100</span>
+            <span className="text-xs text-emerald-700 dark:text-emerald-300">ⓘ</span>
+          </button>
           <Button onClick={handlePrint} className="cursor-pointer font-medium shadow-sm">
             Export 1-Page PDF
           </Button>
         </div>
       </div>
+
+      {/* ATS Score Details Panel */}
+      {showAtsDetails && (
+        <Card className="border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/20">
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold text-emerald-950 dark:text-emerald-300">ATS Score Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <div className="bg-white dark:bg-zinc-900 p-2.5 rounded border border-emerald-200 dark:border-emerald-800">
+                <div className="font-bold text-emerald-700 dark:text-emerald-400">{atsScoreDetail.breakdown.parsing.score}</div>
+                <div className="text-muted-foreground text-[11px]">Parsing</div>
+              </div>
+              <div className="bg-white dark:bg-zinc-900 p-2.5 rounded border border-emerald-200 dark:border-emerald-800">
+                <div className="font-bold text-emerald-700 dark:text-emerald-400">{atsScoreDetail.breakdown.contact.score}</div>
+                <div className="text-muted-foreground text-[11px]">Contact</div>
+              </div>
+              <div className="bg-white dark:bg-zinc-900 p-2.5 rounded border border-emerald-200 dark:border-emerald-800">
+                <div className="font-bold text-emerald-700 dark:text-emerald-400">{atsScoreDetail.breakdown.keywords.score}</div>
+                <div className="text-muted-foreground text-[11px]">Keywords</div>
+              </div>
+              <div className="bg-white dark:bg-zinc-900 p-2.5 rounded border border-emerald-200 dark:border-emerald-800">
+                <div className="font-bold text-emerald-700 dark:text-emerald-400">{atsScoreDetail.breakdown.formatting.score}</div>
+                <div className="text-muted-foreground text-[11px]">Format</div>
+              </div>
+              <div className="bg-white dark:bg-zinc-900 p-2.5 rounded border border-emerald-200 dark:border-emerald-800">
+                <div className="font-bold text-emerald-700 dark:text-emerald-400">{atsScoreDetail.breakdown.content.score}</div>
+                <div className="text-muted-foreground text-[11px]">Content</div>
+              </div>
+            </div>
+
+            <div className="space-y-2 bg-white dark:bg-zinc-900 p-2.5 rounded border border-emerald-200 dark:border-emerald-800">
+              <div className="font-semibold text-emerald-950 dark:text-emerald-300">Issues Found:</div>
+              {atsScoreDetail.breakdown.parsing.issues.length > 0 && (
+                <div>
+                  <div className="font-medium text-emerald-800 dark:text-emerald-400 mb-1">Parsing:</div>
+                  <ul className="space-y-0.5 text-muted-foreground list-disc pl-4">
+                    {atsScoreDetail.breakdown.parsing.issues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {atsScoreDetail.breakdown.contact.issues.length > 0 && (
+                <div>
+                  <div className="font-medium text-emerald-800 dark:text-emerald-400 mb-1">Contact Info:</div>
+                  <ul className="space-y-0.5 text-muted-foreground list-disc pl-4">
+                    {atsScoreDetail.breakdown.contact.issues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {atsScoreDetail.breakdown.keywords.issues.length > 0 && (
+                <div>
+                  <div className="font-medium text-emerald-800 dark:text-emerald-400 mb-1">Keywords:</div>
+                  <ul className="space-y-0.5 text-muted-foreground list-disc pl-4">
+                    {atsScoreDetail.breakdown.keywords.issues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {atsScoreDetail.breakdown.formatting.issues.length > 0 && (
+                <div>
+                  <div className="font-medium text-emerald-800 dark:text-emerald-400 mb-1">Formatting:</div>
+                  <ul className="space-y-0.5 text-muted-foreground list-disc pl-4">
+                    {atsScoreDetail.breakdown.formatting.issues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {atsScoreDetail.breakdown.content.issues.length > 0 && (
+                <div>
+                  <div className="font-medium text-emerald-800 dark:text-emerald-400 mb-1">Content:</div>
+                  <ul className="space-y-0.5 text-muted-foreground list-disc pl-4">
+                    {atsScoreDetail.breakdown.content.issues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {Object.values(atsScoreDetail.breakdown).every((b) => b.issues.length === 0) && (
+                <p className="text-emerald-700 dark:text-emerald-400">✓ No issues detected!</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Template Switcher Buttons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:hidden">

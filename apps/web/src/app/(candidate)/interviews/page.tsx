@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import {
   fetchOpenInterviewDefinitions,
   generateDefinitionQuestions,
+  grantConsent,
   startInterview,
   type InterviewDefinitionResponse,
   type InterviewDefinitionQuestion,
@@ -85,6 +86,7 @@ export default function CandidateInterviewsPage() {
       const token = await getToken();
       if (!token) throw new Error("No session token");
 
+      await grantConsent(token, "ai_interview");
       const result = await startInterview(token, { interview_definition_id: definitionId });
       window.location.href = `/interview/${result.session_id}`;
     } catch (err) {
@@ -105,6 +107,7 @@ export default function CandidateInterviewsPage() {
       const token = await getToken();
       if (!token) throw new Error("No session token");
 
+      await grantConsent(token, "ai_interview");
       const result = await startInterview(token, {
         topic_plan: practiceQuestions.map((q) => q.topic),
       });

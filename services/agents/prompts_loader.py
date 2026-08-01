@@ -47,7 +47,7 @@ def load_prompt(agent_name: str, prompt_name: str, **variables) -> str:
 
     # Interpolate variables using $variable or {variable} format
     try:
-        return template.safe_substitute(**variables)
+        return template.substitute(**variables)
     except KeyError as e:
         raise ValueError(f"Missing variable in prompt {prompt_name}: {e}") from e
 

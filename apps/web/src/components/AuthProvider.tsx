@@ -23,12 +23,13 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoaded, setIsLoaded] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     setIsSignedIn(!!token);
+    setIsLoaded(true);
   }, []);
 
   const getToken = async (): Promise<string | null> => {
