@@ -100,17 +100,18 @@ def candidate_project_relevance(
     similarities to the job vector (payload-filtered to just this candidate's points)."""
     if not client.collection_exists(CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION):
         return None
-    hits = client.search(
+    # Use query_points() (renamed from search() in qdrant-client >= 1.8)
+    response = client.query_points(
         CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION,
-        query_vector=job_vector,
+        query=job_vector,
         query_filter=qmodels.Filter(
             must=[qmodels.FieldCondition(key="candidate_id", match=qmodels.MatchValue(value=candidate_id))]
         ),
         limit=10,
     )
-    if not hits:
+    if not response.points:
         return None
-    avg_similarity = sum(max(0.0, h.score) for h in hits) / len(hits)
+    avg_similarity = sum(max(0.0, h.score) for h in response.points) / len(response.points)
     return round(100.0 * avg_similarity, 1)
 
 

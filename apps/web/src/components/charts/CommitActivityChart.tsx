@@ -21,9 +21,9 @@ interface CustomTooltipProps {
 const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border border-zinc-200 bg-white p-2.5 shadow-lg">
-        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Week {payload[0].payload.week}</p>
-        <p className="mt-0.5 text-xs font-extrabold text-emerald-600 font-mono">{payload[0].value} Commits</p>
+      <div className="rounded-lg border border-zinc-200 bg-white p-2.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+        <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Week {payload[0].payload.week}</p>
+        <p className="mt-0.5 text-xs font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">{payload[0].value} Commits</p>
       </div>
     );
   }
@@ -37,6 +37,9 @@ export function CommitActivityChart({ weeklyCounts }: { weeklyCounts: number[] |
     return <EmptyState message="Commit activity will appear here once GitHub data has synced." />;
   }
 
+  // Detect dark mode based on computed styles
+  const isDark = typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+
   return (
     <div className="h-48 w-full select-none pt-2">
       <ResponsiveContainer width="100%" height="100%">
@@ -49,12 +52,12 @@ export function CommitActivityChart({ weeklyCounts }: { weeklyCounts: number[] |
           </defs>
           <XAxis dataKey="week" tick={false} axisLine={false} />
           <YAxis
-            tick={{ fontSize: 10, fill: "#a1a1aa", fontFamily: "monospace" }}
+            tick={{ fontSize: 10, fill: isDark ? "#71717a" : "#a1a1aa", fontFamily: "monospace" }}
             axisLine={false}
             tickLine={false}
             allowDecimals={false}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.02)" }} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }} />
           <Bar dataKey="commits" fill="url(#commitGradient)" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>

@@ -49,11 +49,11 @@ export function SkillsSection({ projects }: { projects: GithubProjectSummary[] }
       {Object.entries(categories)
         .filter(([, set]) => set.size > 0)
         .map(([category, set]) => (
-          <div key={category} className="p-3.5 rounded-xl border border-zinc-200 bg-zinc-50/40 hover:border-zinc-300/80 transition-colors">
-            <p className="mb-3 text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono">{category}</p>
+          <div key={category} className="p-3.5 rounded-xl border border-zinc-200 bg-zinc-50/40 hover:border-zinc-300/80 transition-colors dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-zinc-600/80">
+            <p className="mb-3 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider font-mono">{category}</p>
             <div className="flex flex-wrap gap-2">
               {[...set].map((skill) => (
-                <Badge key={skill} variant="secondary" className="border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-900 transition-all text-xs font-semibold px-2.5 py-1 capitalize">
+                <Badge key={skill} variant="secondary" className="border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-900 transition-all text-xs font-semibold px-2.5 py-1 capitalize dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-zinc-100">
                   {skill}
                 </Badge>
               ))}

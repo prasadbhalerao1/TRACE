@@ -40,7 +40,7 @@ export function LanguageChart({ projects }: { projects: GithubProjectSummary[] }
   return (
     <div className="space-y-5">
       {/* Horizontal Stacked Bar */}
-      <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-zinc-100 p-[2px] border border-zinc-200/80">
+      <div className="flex h-3.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800 p-[2px] border border-zinc-200/80 dark:border-zinc-700/80">
         {languages.map((lang) => (
           <motion.div
             key={lang.name}
@@ -61,13 +61,13 @@ export function LanguageChart({ projects }: { projects: GithubProjectSummary[] }
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.05, duration: 0.2 }}
-            className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-50/50 border border-zinc-200/60 hover:border-zinc-200 hover:bg-zinc-50 transition-colors"
+            className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-50/50 border border-zinc-200/60 hover:border-zinc-200 hover:bg-zinc-50 transition-colors dark:bg-zinc-800/50 dark:border-zinc-700/60 dark:hover:border-zinc-700 dark:hover:bg-zinc-800"
           >
             <div className="flex items-center gap-2">
               <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", lang.color)} />
-              <span className="font-semibold text-zinc-700 text-xs">{lang.name}</span>
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300 text-xs">{lang.name}</span>
             </div>
-            <span className="font-mono text-xs text-zinc-400 font-medium">{lang.percent}%</span>
+            <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 font-medium">{lang.percent}%</span>
           </motion.div>
         ))}
       </div>

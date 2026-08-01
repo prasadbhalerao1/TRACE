@@ -25,11 +25,11 @@ export function Section({ title, subtitle, action, className, contentClassName, 
       transition={{ delay: index * 0.05, duration: 0.3 }}
       className={className}
     >
-      <Card className="h-full border-zinc-200/80 bg-white text-zinc-900 shadow-sm shadow-zinc-200/40">
-        <CardHeader className="flex-row items-center justify-between pb-3 border-b border-zinc-100">
+      <Card className="h-full border-zinc-200/80 bg-white text-zinc-900 shadow-sm shadow-zinc-200/40 dark:border-zinc-700/80 dark:bg-zinc-900 dark:text-zinc-50 dark:shadow-zinc-950/40">
+        <CardHeader className="flex-row items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
           <div className="space-y-1">
-            <CardTitle className="font-heading text-xs font-bold tracking-wider text-zinc-500 uppercase">{title}</CardTitle>
-            {subtitle && <p className="text-[10px] text-zinc-400 font-medium">{subtitle}</p>}
+            <CardTitle className="font-heading text-xs font-bold tracking-wider text-zinc-500 dark:text-zinc-400 uppercase">{title}</CardTitle>
+            {subtitle && <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">{subtitle}</p>}
           </div>
           {action}
         </CardHeader>

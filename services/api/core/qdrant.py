@@ -27,7 +27,14 @@ class QdrantUnavailable(RuntimeError):
 def get_qdrant_client(*, raise_on_unavailable: bool = True) -> QdrantClient | None:
     settings = get_settings()
     try:
-        client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None, timeout=5.0)
+        # Use prefer_grpc=False to force HTTP/REST client (has search() method).
+        # By default, QdrantClient tries gRPC first, which doesn't have search() in all versions.
+        client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key or None,
+            timeout=5.0,
+            prefer_grpc=False
+        )
         client.get_collections()
         return client
     except Exception as exc:

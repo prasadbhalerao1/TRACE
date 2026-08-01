@@ -109,9 +109,10 @@ def _pick_target_role(client: QdrantClient, model, candidate_skills: list[str]) 
 
     skill_vectors = np.array(model.encode(candidate_skills).tolist())
     centroid = skill_vectors.mean(axis=0).tolist()
-    hits = client.search(_COLLECTION, query_vector=centroid, limit=len(ROLE_SKILL_TAXONOMY) * 5)
+    # Use query_points() (renamed from search() in qdrant-client >= 1.8)
+    response = client.query_points(_COLLECTION, query=centroid, limit=len(ROLE_SKILL_TAXONOMY) * 5)
     role_scores: dict[str, list[float]] = {role: [] for role in ROLE_SKILL_TAXONOMY}
-    for hit in hits:
+    for hit in response.points:
         role_scores[hit.payload["role"]].append(hit.score)
 
     def avg(role: str) -> float:

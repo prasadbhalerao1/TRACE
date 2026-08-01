@@ -18,7 +18,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { AchievementsGrid } from "@/components/achievements/AchievementsGrid";
+import { AchievementsGridWrapper } from "@/components/achievements/AchievementsGridWrapper";
 import { CommitActivityChart } from "@/components/charts/CommitActivityChart";
 import { ContributionHeatmap } from "@/components/charts/ContributionHeatmap";
 import { LanguageChart } from "@/components/charts/LanguageChart";
@@ -26,9 +26,9 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Section } from "@/components/common/Section";
 import { ProblemSolvingStats } from "@/components/ProblemSolvingStats";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
-import { RepositoryGrid } from "@/components/repositories/RepositoryGrid";
-import { SkillsSection } from "@/components/skills/SkillsSection";
-import { GithubStatsCards } from "@/components/stats/GithubStatsCards";
+import { RepositoryGridWrapper } from "@/components/repositories/RepositoryGridWrapper";
+import { SkillsSectionWrapper } from "@/components/skills/SkillsSectionWrapper";
+import { GithubStatsCardsWrapper } from "@/components/stats/GithubStatsCardsWrapper";
 import { StatsGrid } from "@/components/stats/StatsGrid";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,7 +79,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
   } = portfolio;
 
   return (
-    <div className="dark mx-auto w-full max-w-5xl space-y-6 bg-background p-8 text-foreground">
+    <div className="mx-auto w-full max-w-5xl space-y-6 bg-white text-zinc-900 dark:bg-background dark:text-foreground p-8">
       <ProfileHeader username={portfolio.username} headline={headline} location={location} overallScore={overall_score} />
 
       {!github_username || !github_stats ? (
@@ -116,21 +116,13 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
             </Section>
           </div>
 
-          <Section title="GitHub Stats" index={3}>
-            <GithubStatsCards summary={github_summary} />
-          </Section>
+          <GithubStatsCardsWrapper summary={github_summary} />
 
-          <Section title="Repository Analytics" index={4}>
-            <RepositoryGrid projects={github_summary.projects} />
-          </Section>
+          <RepositoryGridWrapper projects={github_summary.projects} />
 
-          <Section title="Skills" index={5}>
-            <SkillsSection projects={github_summary.projects} />
-          </Section>
+          <SkillsSectionWrapper projects={github_summary.projects} />
 
-          <Section title="Achievements" index={6}>
-            <AchievementsGrid githubStats={github_stats} githubSummary={github_summary} projects={github_summary.projects} />
-          </Section>
+          <AchievementsGridWrapper githubStats={github_stats} githubSummary={github_summary} projects={github_summary.projects} />
         </>
       )}
 

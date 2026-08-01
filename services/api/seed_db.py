@@ -10,7 +10,7 @@ from sqlalchemy import select, func
 
 from packages.db.models.base import Base
 from packages.db.models.user import User
-from packages.db.models.candidate import CandidateProfile
+from packages.db.models.candidate import CandidateProfile, TalentScore
 from services.api.core.security import hash_password
 from services.api.core.config import get_settings
 
@@ -104,13 +104,45 @@ async def seed_db():
                     if role == "candidate" and user_data.get("username"):
                         profile_stmt = select(CandidateProfile).where(CandidateProfile.user_id == user_id)
                         p_res = await session.execute(profile_stmt)
-                        if not p_res.scalar_one_or_none():
+                        profile = p_res.scalar_one_or_none()
+                        if not profile:
                             profile = CandidateProfile(
                                 user_id=user_id,
                                 username=user_data["username"],
                                 portfolio_published=True,
+                                headline="Experienced Full-Stack Developer",
+                                location="San Francisco, CA",
+                                github_username=user_data["username"],
+                                skills=[
+                                    {"name": "Python"},
+                                    {"name": "JavaScript"},
+                                    {"name": "React"},
+                                    {"name": "FastAPI"},
+                                    {"name": "PostgreSQL"},
+                                ],
                             )
                             session.add(profile)
+                            await session.flush()
+
+                        # Add talent score if not exists
+                        score_stmt = select(TalentScore).where(TalentScore.candidate_id == profile.id)
+                        s_res = await session.execute(score_stmt)
+                        if not s_res.scalar_one_or_none():
+                            talent_score = TalentScore(
+                                candidate_id=profile.id,
+                                overall=75.0,
+                                coding_ability=80.0,
+                                problem_solving=75.0,
+                                project_quality=70.0,
+                                innovation=65.0,
+                                technical_consistency=80.0,
+                                community_participation=60.0,
+                                leadership=70.0,
+                                open_source_contributions=50.0,
+                                hackathon_performance=60.0,
+                                computed_at=datetime.now(timezone.utc),
+                            )
+                            session.add(talent_score)
 
                 users_created.append((label, email, user_data["password"], user_data["full_name"]))
 

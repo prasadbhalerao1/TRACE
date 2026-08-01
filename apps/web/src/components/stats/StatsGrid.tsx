@@ -1,3 +1,5 @@
+"use client";
+
 import { CalendarDays, Flame, FolderGit2, Trophy, UserCheck, Users, Zap } from "lucide-react";
 
 import { StatCard } from "@/components/stats/StatCard";

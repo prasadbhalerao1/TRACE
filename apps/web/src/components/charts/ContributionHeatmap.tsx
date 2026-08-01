@@ -9,11 +9,11 @@ interface ContributionHeatmapProps {
 }
 
 const LEVEL_CLASSNAMES = [
-  "bg-zinc-100 border border-zinc-200/40",
-  "bg-emerald-100/80 border border-emerald-200/20",
-  "bg-emerald-300/80 border border-emerald-450/20",
-  "bg-emerald-500 border border-emerald-550/20",
-  "bg-emerald-600 border border-emerald-700/20"
+  "bg-zinc-100 border border-zinc-200/40 dark:bg-zinc-700 dark:border-zinc-600/40",
+  "bg-emerald-100/80 border border-emerald-200/20 dark:bg-emerald-900/60 dark:border-emerald-800/20",
+  "bg-emerald-300/80 border border-emerald-450/20 dark:bg-emerald-700/80 dark:border-emerald-600/20",
+  "bg-emerald-500 border border-emerald-550/20 dark:bg-emerald-600 dark:border-emerald-500/20",
+  "bg-emerald-600 border border-emerald-700/20 dark:bg-emerald-500 dark:border-emerald-400/20"
 ];
 
 function levelFor(count: number, max: number): number {
@@ -69,10 +69,10 @@ export function ContributionHeatmap({ days }: ContributionHeatmapProps) {
   }, [days]);
 
   return (
-    <div className="w-full overflow-x-auto scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent">
+    <div className="w-full overflow-x-auto scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
       <div className="relative mb-2 h-4 select-none" style={{ width: weeks.length * 14 }}>
         {monthLabels.map(({ weekIndex, label }) => (
-          <span key={weekIndex} className="absolute text-[9px] font-bold text-zinc-400 uppercase tracking-wider font-mono" style={{ left: weekIndex * 14 }}>
+          <span key={weekIndex} className="absolute text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider font-mono" style={{ left: weekIndex * 14 }}>
             {label}
           </span>
         ))}
@@ -93,7 +93,7 @@ export function ContributionHeatmap({ days }: ContributionHeatmapProps) {
           </div>
         ))}
       </div>
-      <div className="mt-3 flex items-center justify-end gap-1.5 text-[9px] font-bold text-zinc-400 uppercase tracking-wider font-mono select-none">
+      <div className="mt-3 flex items-center justify-end gap-1.5 text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider font-mono select-none">
         <span>Less</span>
         {LEVEL_CLASSNAMES.map((cls, idx) => (
           <div key={idx} className={`h-[10px] w-[10px] rounded-[2px] ${cls}`} />

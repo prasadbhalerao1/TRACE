@@ -23,7 +23,7 @@ import {
 
 export function CareerGuidance() {
   const { getToken } = useAuth();
-  const [targetRole, setTargetRole] = useState<string | undefined>(undefined);
+  const [targetRole, setTargetRole] = useState("");
   const [guidance, setGuidance] = useState<CareerGuidanceResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export function CareerGuidance() {
         ]);
 
         setGuidance(result);
-        setTargetRole(result.target_role ?? role);
+        setTargetRole(result.target_role ?? role ?? "");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load career guidance");
       } finally {
@@ -80,7 +80,7 @@ export function CareerGuidance() {
 
         if (cancelled) return;
         setGuidance(result);
-        setTargetRole(result.target_role ?? undefined);
+        setTargetRole(result.target_role ?? "");
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load career guidance");
       } finally {
@@ -102,7 +102,7 @@ export function CareerGuidance() {
           <div className="flex flex-wrap items-center gap-3">
             <Select
               value={targetRole}
-              onValueChange={(value) => load(value ?? undefined, false)}
+              onValueChange={(value) => load(value || undefined, false)}
             >
               <SelectTrigger id="target-role" className="w-64">
                 <SelectValue placeholder="Auto-pick best-fit role" />

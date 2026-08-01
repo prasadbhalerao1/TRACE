@@ -31,10 +31,10 @@ const cardVariants = {
 function StatCard({ label, value, index }: { label: string; value: string | number; index: number }) {
   return (
     <motion.div variants={cardVariants} initial="hidden" animate="show" custom={index} whileHover={{ y: -2 }}>
-      <Card className="border-zinc-200 bg-zinc-50/50 text-zinc-900 shadow-sm transition-all duration-300 hover:border-zinc-300">
+      <Card className="border-zinc-200 bg-zinc-50/50 text-zinc-900 shadow-sm transition-all duration-300 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-50 dark:hover:border-zinc-600">
         <CardContent className="p-4 space-y-1">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p>
-          <p className="font-heading text-2xl font-extrabold text-zinc-800 tracking-tight">{value}</p>
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">{label}</p>
+          <p className="font-heading text-2xl font-extrabold text-zinc-800 dark:text-zinc-100 tracking-tight">{value}</p>
         </CardContent>
       </Card>
     </motion.div>
@@ -63,9 +63,9 @@ interface CustomLineTooltipProps {
 const CustomLineTooltip = ({ active, payload }: CustomLineTooltipProps) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border border-zinc-200 bg-white p-2.5 shadow-lg">
-        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider truncate max-w-[150px]">{payload[0].payload.contest}</p>
-        <p className="mt-0.5 text-xs font-extrabold text-indigo-600 font-mono">Rating: {payload[0].value}</p>
+      <div className="rounded-lg border border-zinc-200 bg-white p-2.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+        <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider truncate max-w-[150px]">{payload[0].payload.contest}</p>
+        <p className="mt-0.5 text-xs font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">Rating: {payload[0].value}</p>
       </div>
     );
   }
@@ -100,12 +100,12 @@ export function ProblemSolvingStats({ leetcodeUsername, leetcodeStats }: Problem
 
   if (!leetcodeUsername) {
     return (
-      <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-        <CardHeader className="pb-3 border-b border-zinc-100">
-          <CardTitle className="font-heading text-xs font-bold tracking-wider text-zinc-500 uppercase">Problem Solving Stats</CardTitle>
+      <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:shadow-zinc-950/40">
+        <CardHeader className="pb-3 border-b border-zinc-100 dark:border-zinc-800">
+          <CardTitle className="font-heading text-xs font-bold tracking-wider text-zinc-500 dark:text-zinc-400 uppercase">Problem Solving Stats</CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
-          <p className="text-xs text-zinc-500">Connect LeetCode to show your problem-solving activity here.</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Connect LeetCode to show your problem-solving activity here.</p>
         </CardContent>
       </Card>
     );
@@ -139,14 +139,14 @@ export function ProblemSolvingStats({ leetcodeUsername, leetcodeStats }: Problem
           <StatCard label="Current Streak" value={leetcodeStats.current_streak} index={2} />
           <StatCard
             label="Global Rank"
-            value={leetcodeStats.ranking !== null ? leetcodeStats.ranking.toLocaleString() : "—"}
+            value={leetcodeStats.ranking !== null ? leetcodeStats.ranking.toLocaleString("en-US") : "—"}
             index={3}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/30">
-            <p className="mb-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono">Question Distribution</p>
+          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/30 dark:border-zinc-700 dark:bg-zinc-800/30">
+            <p className="mb-2 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider font-mono">Question Distribution</p>
             <div className="h-44 w-full flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -162,8 +162,8 @@ export function ProblemSolvingStats({ leetcodeUsername, leetcodeStats }: Problem
           </div>
 
           {ratingData.length > 1 && (
-            <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/30">
-              <p className="mb-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono">Contest Rating</p>
+            <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/30 dark:border-zinc-700 dark:bg-zinc-800/30">
+              <p className="mb-2 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider font-mono">Contest Rating</p>
               <div className="h-44 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={ratingData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
@@ -179,7 +179,7 @@ export function ProblemSolvingStats({ leetcodeUsername, leetcodeStats }: Problem
         </div>
 
         {calendarDays.length > 0 && (
-          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/30">
+          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/30 dark:border-zinc-700 dark:bg-zinc-800/30">
             <p className="mb-3 text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono">Submission Activity</p>
             <ContributionHeatmap days={calendarDays} />
           </div>
