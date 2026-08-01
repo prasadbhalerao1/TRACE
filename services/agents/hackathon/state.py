@@ -16,6 +16,7 @@ class HackathonRankingState(TypedDict):
     """
 
     hackathon_id: str
+    scoring_config: Optional[dict]  # {judge_score_component: 0.40, pitch_score_component: 0.30, ...} from Hackathon.scoring_config, or None for defaults
     teams: list[dict]
     # Each team dict: {team_id, repo_url, presentation_id, judge_score,
     #                  pitch_score: float|None (pre-fetched), plagiarism_similarities: list[float] (pre-fetched)}

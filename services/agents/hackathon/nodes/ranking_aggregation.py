@@ -13,6 +13,7 @@ from services.agents.hackathon.tools.ranking import compute_composite_score
 async def run(state: HackathonRankingState) -> dict:
     repo_scores = state.get("repo_scores") or {}
     novelty_scores = state.get("novelty_scores") or {}
+    scoring_config = state.get("scoring_config")  # None -> uses _DEFAULT_WEIGHTS in compute_composite_score
 
     results = []
     for team in state["teams"]:
@@ -22,6 +23,7 @@ async def run(state: HackathonRankingState) -> dict:
             pitch_score=team.get("pitch_score"),
             repo_score=repo_scores.get(team_id),
             novelty_score=novelty_scores.get(team_id),
+            weights=scoring_config,
         )
         results.append({"team_id": team_id, "composite_score": composite, "score_breakdown": breakdown})
 
