@@ -114,13 +114,25 @@ export default function RecruiterCopilotPage() {
             <CardHeader>
               <CardTitle className="text-base font-semibold">Search Tips</CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>You can search by:
-                <br />• **Skills**: &quot;with Python and React&quot;
-                <br />• **Location**: &quot;based in Bangalore&quot;
-                <br />• **Quality bar**: &quot;top candidates&quot;
-                <br />• Follow up in the same conversation: &quot;now only remote ones&quot;
-              </p>
+            <CardContent className="text-xs text-slate space-y-3 leading-relaxed">
+              <div>
+                <p className="font-semibold mb-1">Try these searches:</p>
+                <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                  <li>• &quot;Find Python developers&quot;</li>
+                  <li>• &quot;Find React developers&quot;</li>
+                  <li>• &quot;Fullstack with Python and React&quot;</li>
+                  <li>• &quot;Show candidates in San Francisco&quot;</li>
+                  <li>• &quot;Find 75+ coding ability&quot;</li>
+                </ul>
+              </div>
+              <div className="border-t pt-2">
+                <p className="font-semibold mb-1">Refine results:</p>
+                <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                  <li>• &quot;Now show only San Francisco&quot;</li>
+                  <li>• &quot;Filter to 75+ scores&quot;</li>
+                  <li>• &quot;Who has best problem solving?&quot;</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -174,6 +174,11 @@ async def _run_matching_and_persist(
     db: AsyncSession, job: Job, *, use_pool_cache: bool = True
 ) -> list[MatchScore]:
     candidate_pool = await _build_candidate_pool(db, use_cache=use_pool_cache)
+
+    # Demo fallback: if no candidates in database, seed with hardcoded demo data
+    if not candidate_pool:
+        candidate_pool = _get_demo_candidate_pool()
+
     initial_state: MatchingState = {
         "job_id": str(job.id),
         "job_description": job.description,
@@ -590,6 +595,177 @@ async def update_application_stage(
     return application
 
 
+def _get_demo_candidate_pool() -> list[dict]:
+    """Hardcoded demo candidate pool for testing when database is empty."""
+    return [
+        {
+            "candidate_id": "demo-alice-chen",
+            "skills": [
+                {"name": "Python", "verified": True},
+                {"name": "TypeScript", "verified": True},
+                {"name": "React", "verified": True},
+                {"name": "FastAPI", "verified": True},
+                {"name": "PostgreSQL", "verified": True},
+                {"name": "Docker", "verified": True},
+                {"name": "Redis", "verified": False},
+            ],
+            "location": "San Francisco, CA",
+            "experience_years": 6.5,
+            "overall_talent_score": 82.0,
+            "sub_scores": {
+                "coding_ability": 88.0,
+                "problem_solving": 85.0,
+                "project_quality": 87.0,
+                "innovation": 84.0,
+                "technical_consistency": 89.0,
+                "community_participation": 78.0,
+                "leadership": 76.0,
+                "open_source_contributions": 72.0,
+                "hackathon_performance": 81.0,
+            },
+            "github_username": "alice-chen-dev",
+            "headline": "Senior Full-Stack Engineer with AI expertise",
+            "hackathon_experience": False,
+            "repo_summaries": [
+                "alice/ai-training: 450 stars, 1200 commits",
+                "alice/web-framework: 320 stars, 890 commits",
+            ],
+        },
+        {
+            "candidate_id": "demo-bob-wilson",
+            "skills": [
+                {"name": "Python", "verified": True},
+                {"name": "Go", "verified": True},
+                {"name": "PostgreSQL", "verified": True},
+                {"name": "Redis", "verified": True},
+                {"name": "Kubernetes", "verified": True},
+                {"name": "gRPC", "verified": False},
+                {"name": "Microservices", "verified": False},
+            ],
+            "location": "New York, NY",
+            "experience_years": 7.2,
+            "overall_talent_score": 85.0,
+            "sub_scores": {
+                "coding_ability": 90.0,
+                "problem_solving": 88.0,
+                "project_quality": 84.0,
+                "innovation": 79.0,
+                "technical_consistency": 92.0,
+                "community_participation": 81.0,
+                "leadership": 82.0,
+                "open_source_contributions": 75.0,
+                "hackathon_performance": 77.0,
+            },
+            "github_username": "bob-wilson-dev",
+            "headline": "Backend Systems Engineer focused on scalability",
+            "hackathon_experience": False,
+            "repo_summaries": [
+                "bob/distributed-db: 580 stars, 1500 commits",
+                "bob/cache-layer: 210 stars, 620 commits",
+            ],
+        },
+        {
+            "candidate_id": "demo-charlie-davis",
+            "skills": [
+                {"name": "TypeScript", "verified": True},
+                {"name": "React", "verified": True},
+                {"name": "Vue.js", "verified": True},
+                {"name": "CSS", "verified": True},
+                {"name": "Next.js", "verified": True},
+                {"name": "Tailwind", "verified": False},
+                {"name": "GraphQL", "verified": False},
+            ],
+            "location": "Austin, TX",
+            "experience_years": 5.1,
+            "overall_talent_score": 79.0,
+            "sub_scores": {
+                "coding_ability": 82.0,
+                "problem_solving": 78.0,
+                "project_quality": 85.0,
+                "innovation": 88.0,
+                "technical_consistency": 80.0,
+                "community_participation": 74.0,
+                "leadership": 68.0,
+                "open_source_contributions": 70.0,
+                "hackathon_performance": 83.0,
+            },
+            "github_username": "charlie-davis-dev",
+            "headline": "Frontend Specialist with design sensibility",
+            "hackathon_experience": False,
+            "repo_summaries": [
+                "charlie/design-system: 340 stars, 890 commits",
+                "charlie/ui-components: 420 stars, 1100 commits",
+            ],
+        },
+        {
+            "candidate_id": "demo-diana-patel",
+            "skills": [
+                {"name": "Python", "verified": True},
+                {"name": "PyTorch", "verified": True},
+                {"name": "TensorFlow", "verified": True},
+                {"name": "SQL", "verified": True},
+                {"name": "Pandas", "verified": True},
+                {"name": "Scikit-learn", "verified": False},
+                {"name": "FastAPI", "verified": False},
+            ],
+            "location": "San Francisco, CA",
+            "experience_years": 4.8,
+            "overall_talent_score": 84.0,
+            "sub_scores": {
+                "coding_ability": 89.0,
+                "problem_solving": 91.0,
+                "project_quality": 86.0,
+                "innovation": 89.0,
+                "technical_consistency": 87.0,
+                "community_participation": 79.0,
+                "leadership": 72.0,
+                "open_source_contributions": 80.0,
+                "hackathon_performance": 85.0,
+            },
+            "github_username": "diana-patel-dev",
+            "headline": "ML Engineer and data specialist",
+            "hackathon_experience": False,
+            "repo_summaries": [
+                "diana/ml-pipeline: 520 stars, 1300 commits",
+                "diana/data-toolkit: 280 stars, 750 commits",
+            ],
+        },
+        {
+            "candidate_id": "demo-evan-martinez",
+            "skills": [
+                {"name": "Kubernetes", "verified": True},
+                {"name": "Docker", "verified": True},
+                {"name": "Terraform", "verified": True},
+                {"name": "AWS", "verified": True},
+                {"name": "Python", "verified": True},
+                {"name": "Go", "verified": False},
+                {"name": "CI/CD", "verified": False},
+            ],
+            "location": "Remote",
+            "experience_years": 5.5,
+            "overall_talent_score": 81.0,
+            "sub_scores": {
+                "coding_ability": 85.0,
+                "problem_solving": 83.0,
+                "project_quality": 82.0,
+                "innovation": 80.0,
+                "technical_consistency": 88.0,
+                "community_participation": 76.0,
+                "leadership": 79.0,
+                "open_source_contributions": 74.0,
+                "hackathon_performance": 75.0,
+            },
+            "github_username": "evan-martinez-dev",
+            "headline": "DevOps and Infrastructure Engineer",
+            "hackathon_experience": False,
+            "repo_summaries": [
+                "evan/k8s-tools: 380 stars, 1000 commits",
+                "evan/terraform-modules: 290 stars, 820 commits",
+            ],
+        },
+    ]
+
+
 @router.post("/copilot/query", response_model=CopilotQueryResponse)
 async def copilot_query(
     body: CopilotQueryRequest,
@@ -616,6 +792,10 @@ async def copilot_query(
     location_aliases = {row.canonical_name: row.aliases or [] for row in alias_result.scalars().all()}
 
     candidate_pool = await _build_candidate_pool(db)
+
+    # Demo fallback: if no candidates in database, seed with hardcoded demo data
+    if not candidate_pool:
+        candidate_pool = _get_demo_candidate_pool()
 
     initial_state: CopilotState = {
         "recruiter_id": str(user.id),
