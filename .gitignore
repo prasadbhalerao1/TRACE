@@ -57,3 +57,9 @@ infra/qdrantdata/
 # Claude Code local/runtime state (not shared project config)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Scratch / local-only working directories
+TEMP/
+TEMP2/
+TEMP2_branches/
+.pytest_cache/

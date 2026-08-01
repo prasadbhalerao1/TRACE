@@ -1,8 +1,8 @@
-# Module 10 — Role-Wise Flows & Use Cases (Plain English)
+# Role Flows & Use Cases (Plain English)
 
 ---
 
-## 1. Candidate — Step-by-Step Flow
+## 1. Candidate — step-by-step flow
 
 1. Sign up, select "I'm a candidate."
 2. Land on an empty dashboard: *"Connect your evidence to get your Talent Score."*
@@ -23,7 +23,7 @@
     evidence.
 14. Candidate joins an in-platform hackathon, submits a project (repo + deck) directly.
 
-### Candidate — Use Cases (plain English)
+### Candidate — use cases (plain English)
 - I can connect my GitHub account and see my real coding activity summarized.
 - I can upload my resume and have it turned into a structured profile automatically.
 - I can import my own LinkedIn data without giving the platform my password or letting it scrape my profile.
@@ -41,7 +41,7 @@
 
 ---
 
-## 2. Recruiter — Step-by-Step Flow
+## 2. Recruiter — step-by-step flow
 
 1. Sign up as a recruiter, linked to their company.
 2. Post a job (title, required skills, location, experience level).
@@ -55,7 +55,7 @@
 10. If a candidate has a fraud flag, see that a flag exists (display-only) and decide accordingly — the
     platform never filters or auto-rejects for them.
 
-### Recruiter — Use Cases (plain English)
+### Recruiter — use cases (plain English)
 - I can post a job and immediately see who's a strong match, ranked, with the reasoning shown.
 - I can describe who I'm looking for in normal language instead of building a filter form.
 - I can refine my search conversationally ("now only show ones open to remote").
@@ -68,18 +68,18 @@
 
 ---
 
-## 3. Hackathon Organizer — Step-by-Step Flow
+## 3. Hackathon organizer — step-by-step flow
 
 1. Create a hackathon event (name, dates, tracks).
 2. Assign judges.
 3. Teams register and submit directly through the platform (repo link + deck).
 4. Judges score submissions against a rubric.
-5. Platform automatically scores the linked repo and deck (reusing the Verification and PPT Analyzer
-   modules) and combines it with judge scores into one ranking.
+5. Platform automatically scores the linked repo and deck (reusing the assessment and PPT
+   Analyzer modules) and combines it with judge scores into one ranking.
 6. Rankings finalize — a public leaderboard goes live, and matching recruiters are notified of top
    performers.
 
-### Organizer — Use Cases (plain English)
+### Organizer — use cases (plain English)
 - I can set up a hackathon and have teams submit their projects directly, instead of chasing spreadsheets.
 - I can assign judges and see their scores come in.
 - I get an automatic ranking that combines judge scores with an AI read on code quality and pitch quality — not just judge opinion alone.
@@ -88,21 +88,21 @@
 
 ---
 
-## 4. Judge — Step-by-Step Flow
+## 4. Judge — step-by-step flow
 
 1. Log in, see a queue of submissions assigned specifically to them.
 2. Open a submission — repo, deck, and an AI-generated summary of it.
 3. Score it against a fixed rubric.
 4. Submit — it becomes part of that team's composite ranking.
 
-### Judge — Use Cases (plain English)
+### Judge — use cases (plain English)
 - I only see the submissions assigned to me, not the whole event.
 - I get a short AI summary of the project so I don't have to read a full deck cold before scoring it.
 - I score against a consistent rubric, the same one every judge uses.
 
 ---
 
-## 5. Admin — Step-by-Step Flow
+## 5. Admin — step-by-step flow
 
 1. Log in, see the fraud review queue.
 2. Open a flagged item, see the exact evidence behind it (matched certificate page, similarity score,
@@ -111,7 +111,7 @@
 4. Manage user roles across the platform.
 5. Check the audit log for any action taken by any role.
 
-### Admin — Use Cases (plain English)
+### Admin — use cases (plain English)
 - I see every fraud flag with the actual evidence, not just an accusation.
 - I have to write a reason every time I uphold a flag — no silent adverse action.
 - I can see a candidate's own dispute alongside the original evidence before deciding.
@@ -120,9 +120,13 @@
 
 ---
 
-## 6. One Thread That Ties Every Role Together
+## 6. One thread that ties every role together
 
 Every score, flag, or recommendation a candidate, recruiter, judge, or admin sees traces back to an
-actual `agent_runs` record — the same Evidence Receipt component (doc 08) that appears on the candidate
+actual `agent_runs` record — the same Evidence Receipt component that appears on the candidate
 dashboard is what the admin sees in the fraud review queue and what the recruiter sees in a match
-breakdown. **Nobody in this platform is ever shown a bare number they can't ask "why?" about.**
+breakdown. Nobody on this platform is ever shown a bare number they can't ask "why?" about.
+
+See [09-trust-and-fraud-prevention.md](09-trust-and-fraud-prevention.md) and
+[02-candidate-intelligence-and-talent-score.md](02-candidate-intelligence-and-talent-score.md)
+for the mechanics behind that evidence trail.

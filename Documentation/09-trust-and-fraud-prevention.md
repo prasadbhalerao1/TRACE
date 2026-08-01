@@ -180,6 +180,21 @@ Being honest about this matters more here than anywhere else in the platform, be
 
 - **The review queue itself is a bottleneck and a single point of human error.** Every safeguard in this module ultimately routes through one gate: a human reviewer's judgment on `PATCH /flags/{id}/review`. The system is only as fair as that reviewer's diligence — a reviewer who rubber-stamps "upheld" without genuinely weighing the evidence defeats the entire design, and nothing in the code can detect or prevent that; the `review_notes` requirement raises the bar for a lazy uphold but can't guarantee genuine consideration.
 
+## Worked examples
+
+A few concrete end-to-end traces through the verdict logic above, condensed:
+
+| Scenario | Path | Result |
+|---|---|---|
+| AWS certificate, valid credential ID | `issuer_lookup` recognizes "AWS" → `auto_verify` GETs the issuer's verify URL → credential ID found on page | `verified=True`, `confirmed_genuine=True`, no flag; `unrecognized_issuer` check is suppressed |
+| AWS certificate, fabricated credential ID | Same route to `auto_verify` → issuer's page returns 200 but the ID isn't present | `verified=False` → immediate `fake_certificate` flag, high-confidence evidence: "credential ID does not appear on issuer's verification page" |
+| Certificate from an issuer not in the registry | `issuer_lookup` finds no match by name or alias → `visual_forensics` runs (rules + optional Haiku vision pass) → suspicion comes back "low" (metadata looks plausible) | Not flagged as fake, but `confirmed_genuine` stays `False` → `unrecognized_issuer` flag fires anyway (medium confidence) since nothing positively confirmed it |
+| Two candidate accounts with the same profile photo | `photo_hash` computes perceptual hash (pHash) for both, Hamming distance ≤ 4/64 bits | `duplicate_profile` flag, evidence cites the exact bit distance; escalates to "high" confidence if the text fingerprint also matches |
+
+Every one of these produces a `raised` flag (or no flag) — none of them touch
+`AuthenticityScore` until a human reviewer explicitly upholds it with written notes, per the
+core design principle above.
+
 ## Where this lives in the code
 
 | Component | Path |

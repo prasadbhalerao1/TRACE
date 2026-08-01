@@ -2,7 +2,15 @@
 
 ## What this infrastructure does
 
-The "AI plumbing" every feature builds on: Qdrant vector database for semantic search, SentenceTransformer embeddings, and a multi-provider LLM gateway abstracting OpenAI/Anthropic/Groq.
+The "AI plumbing" every feature builds on: Qdrant vector database for semantic search,
+`sentence-transformers` embeddings (`BAAI/bge-large-en-v1.5`), and a multi-provider LLM
+gateway abstracting Anthropic/OpenAI/Groq/Gemini/OpenAI-compatible endpoints behind one
+interface. The embedder is cached via a `functools.lru_cache` singleton in
+`services/agents/recruitment/tools/embeddings.py:46-54`; a second, separate embeddings
+module exists at `services/agents/ppt_analyzer/tools/embeddings.py` for pitch-deck slide
+text, since that module's embedding lifecycle (per-analysis, not persisted long-term) is
+different enough from the recruitment/candidate embeddings to warrant its own loader rather
+than sharing state with the recruitment singleton.
 
 ## The Qdrant vector database layer
 
@@ -47,23 +55,32 @@ Solution: Add one-sentence descriptions to each skill
 ## The multi-provider LLM gateway
 
 ```
-services/api/core/llm.py
+services/api/core/llm.py — get_llm_client()
 
 Provider Configuration (in .env):
-    LLM_PROVIDER=anthropic          # or openai, groq, gemini
-    LLM_MODEL_FAST=claude-opus-4    # Fast tier (low-latency responses)
-    LLM_MODEL_JUDGMENT=claude-opus-5 # Judgment tier (high-quality reasoning)
+    LLM_PROVIDER=anthropic                        # anthropic | openai | groq | gemini | openai_compatible
+    LLM_MODEL_FAST=claude-haiku-4-5-20251001       # Fast tier (low-latency responses)
+    LLM_MODEL_JUDGMENT=claude-sonnet-4-6           # Judgment tier (high-quality reasoning)
+```
 
-Example Usage:
-    from services.api.core.llm import call_llm
-    
-    result = call_llm(
-        prompt="Grade this code: ...",
-        model="judgment",            # Uses LLM_MODEL_JUDGMENT
-        temperature=0,
-        max_tokens=1000,
-        provider_override=None,      # Use default provider
-    )
+Anthropic is the default and production provider (`config.py:34`,
+`llm_provider: str = "anthropic"`). Groq is supported and used as a cheaper test-time
+provider for CI/local dev — the gateway's own docstring says so directly — not as the
+production intent; swapping providers is a config change, not a code change, because every
+provider is normalized behind the same `get_llm_client()` interface.
+
+Example usage (real model strings, not placeholders):
+
+```python
+from services.api.core.llm import get_llm_client
+
+client = get_llm_client()
+result = await client.generate_structured(
+    prompt="Grade this code: ...",
+    model=settings.llm_model_judgment,   # "claude-sonnet-4-6"
+    temperature=0,
+    max_tokens=1000,
+)
 ```
 
 **Why split fast/judgment tiers?**
@@ -117,6 +134,62 @@ Solution: One function, called by all 5
 
 Verified: numerically identical to pre-refactor implementations
 ```
+
+## Failure modes and graceful degradation
+
+Qdrant availability affects different callers differently, by design — some signals are
+load-bearing enough that a missing vector DB should fail loudly, others are one input among
+several and should just degrade:
+
+**Hard failures (raised as `QdrantUnavailable`, propagates to the caller as HTTP 503):**
+- Recruitment matching — without `semantic_similarity`, candidates can't be ranked at all,
+  so the endpoint fails explicitly rather than silently returning an unranked or
+  wrongly-ranked list.
+- Skill gap analysis — without the skill-taxonomy collection, there's nothing to compare a
+  candidate's skills against, so career guidance fails explicitly rather than guessing.
+
+**Soft failures (caught, degrade to `None`, cold-start-safe):**
+- Innovation novelty (Talent Score) — one signal among several; if Qdrant is unreachable the
+  sub-score falls back to whatever else is available (or `None`, dropped by
+  `weighted_renormalized_mean`) rather than blocking the whole scoring pipeline.
+- Plagiarism detection (PPT Analyzer / fraud) — one corroborating signal; falls back to
+  text-fingerprint-only comparison.
+- Project relevance (job matching sub-term) — returns `None` if a candidate has no seeded
+  project embeddings; renormalized away rather than scored as zero.
+
+The pattern in code: `get_qdrant_client(raise_on_unavailable=False)` returns `None` instead
+of raising for every soft-failure call site, so each caller decides its own failure
+posture instead of the client forcing one globally.
+
+## Performance characteristics
+
+| Operation | Typical latency | Notes |
+|---|---|---|
+| `embed_texts()` (1 item) | ~1ms | Cached model, CPU inference |
+| `search()` (1 query) | ~10ms | HNSW index, Qdrant Cloud round trip |
+| `search_batch()` (100 queries) | ~50ms | One round trip instead of 100 sequential ones |
+| `upsert()` (1 point) | ~20ms | Immediate index update |
+| Skill centroid (10 skills) | ~5ms | NumPy mean, no Qdrant call involved |
+
+The batching optimization matters concretely: scoring semantic relevance for 100 candidates
+one-by-one against a job posting is ~100 sequential ~10ms round trips (≈1s); batching the
+same 100 candidates into one `search_batch()` call is ≈50ms — a ~20x difference that matters
+when it's in the request path of a recruiter loading a matches page.
+
+## Qdrant configuration notes
+
+- Production Qdrant is a managed Qdrant Cloud cluster (region: AWS us-east-1, Virginia).
+  The actual cluster URL is a secret read from `QDRANT_URL`/`QDRANT_API_KEY` in `.env` — not
+  reproduced here.
+- Collections are auto-created on first upsert; vector size is inferred from the first point
+  written, and distance metric is COSINE across every collection (not L2/Manhattan).
+- Point IDs are deterministic (`uuid5(namespace, seed_string)`, e.g. `uuid5(..., f"job:{job_id}")`)
+  specifically so re-running a seed/backfill script is idempotent — re-seeding never
+  duplicates points.
+- Qdrant queries use server-side payload filters (e.g. filtering by `candidate_id`) rather
+  than fetching everything and filtering in Python — the HNSW index skips non-matching
+  points server-side, which is materially faster than a fetch-all-then-filter approach once
+  a collection has any real size.
 
 ## Key design decisions
 
