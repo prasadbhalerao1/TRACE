@@ -19,6 +19,7 @@ from packages.db.models import (
     File,
     FraudFlag,
     Submission,
+    TrustedIssuer,
     User,
     VerificationRecord,
 )
@@ -31,6 +32,9 @@ from packages.shared_schemas.fraud import (
     FraudFlagDetailResponse,
     FraudFlagResponse,
     FraudReviewQueueEntry,
+    TrustedIssuerCreateRequest,
+    TrustedIssuerResponse,
+    TrustedIssuerUpdateRequest,
     VerificationCheckResponse,
 )
 from services.agents.fraud.cert_graph import get_cert_graph
@@ -44,6 +48,7 @@ from services.agents.fraud.tools.dispute_review_llm import (
 )
 from services.agents.fraud.tools.photo_hash import compute_photo_hash
 from services.agents.fraud.tools.report_llm import generate_fraud_risk_report
+from services.api.core.audit import log_action
 from services.api.core.config import get_settings
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
@@ -69,6 +74,22 @@ async def _submission_or_404(db: AsyncSession, submission_id: uuid.UUID) -> Subm
     if submission is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="submission_not_found")
     return submission
+
+
+async def _fetch_trusted_issuers(db: AsyncSession) -> list[dict]:
+    """Nodes stay DB-free (this codebase's universal convention) — the router fetches
+    the full trusted-issuer registry once per certificate check and passes it into
+    `context` for `nodes/issuer_lookup.py` to compare against."""
+    result = await db.execute(select(TrustedIssuer))
+    return [
+        {
+            "name": row.name,
+            "aliases": row.aliases,
+            "verification_url_template": row.verification_url_template,
+            "trust_tier": row.trust_tier,
+        }
+        for row in result.scalars().all()
+    ]
 
 
 async def _candidate_profile_or_404(db: AsyncSession, candidate_id: uuid.UUID) -> CandidateProfile:
@@ -193,6 +214,8 @@ async def check_certificate(
         file_row = file_result.scalar_one_or_none()
         image_url = file_row.public_url if file_row else None
 
+    trusted_issuers = await _fetch_trusted_issuers(db)
+
     initial_state = {
         "subject_type": "certificate",
         "subject_id": str(certification_id),
@@ -202,6 +225,7 @@ async def check_certificate(
             "credential_id": cert.credential_id,
             "ocr_confidence": cert.ocr_confidence,
             "certificate_image_url": image_url,
+            "trusted_issuers": trusted_issuers,
         },
         "signals": [],
         "verdict": None,
@@ -581,4 +605,113 @@ async def review_flag(
     flag.reviewed_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(flag)
+    return flag
+
+
+# --- Trusted issuer registry (FR-1) — admin-only management of the known-issuer table
+# that `services/agents/fraud/tools/issuer_lookup.py` checks certificates against. ---
+
+
+async def _trusted_issuer_or_404(db: AsyncSession, issuer_id: uuid.UUID) -> TrustedIssuer:
+    result = await db.execute(select(TrustedIssuer).where(TrustedIssuer.id == issuer_id))
+    issuer = result.scalar_one_or_none()
+    if issuer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="trusted_issuer_not_found")
+    return issuer
+
+
+@router.get("/admin/trusted-issuers", response_model=list[TrustedIssuerResponse])
+async def list_trusted_issuers(
+    admin: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> list[TrustedIssuer]:
+    result = await db.execute(select(TrustedIssuer).order_by(TrustedIssuer.name))
+    return list(result.scalars().all())
+
+
+@router.post("/admin/trusted-issuers", response_model=TrustedIssuerResponse, status_code=status.HTTP_201_CREATED)
+async def create_trusted_issuer(
+    body: TrustedIssuerCreateRequest,
+    admin: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> TrustedIssuer:
+    if body.trust_tier not in ("platform", "university", "employer", "community"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_trust_tier")
+
+    existing = await db.execute(select(TrustedIssuer).where(TrustedIssuer.name == body.name))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="trusted_issuer_already_exists")
+
+    issuer = TrustedIssuer(
+        name=body.name,
+        aliases=body.aliases,
+        verification_url_template=body.verification_url_template,
+        trust_tier=body.trust_tier,
+        notes=body.notes,
+        added_by_user_id=admin.id,
+    )
+    db.add(issuer)
+    await log_action(
+        db,
+        actor_user_id=admin.id,
+        action="trusted_issuer_added",
+        target_type="trusted_issuer",
+        target_id=issuer.id,
+    )
+    await db.commit()
+    await db.refresh(issuer)
+    return issuer
+
+
+@router.patch("/admin/trusted-issuers/{issuer_id}", response_model=TrustedIssuerResponse)
+async def update_trusted_issuer(
+    issuer_id: uuid.UUID,
+    body: TrustedIssuerUpdateRequest,
+    admin: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> TrustedIssuer:
+    issuer = await _trusted_issuer_or_404(db, issuer_id)
+
+    if body.trust_tier is not None and body.trust_tier not in ("platform", "university", "employer", "community"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_trust_tier")
+
+    if body.name is not None:
+        issuer.name = body.name
+    if body.aliases is not None:
+        issuer.aliases = body.aliases
+    if body.verification_url_template is not None:
+        issuer.verification_url_template = body.verification_url_template
+    if body.trust_tier is not None:
+        issuer.trust_tier = body.trust_tier
+    if body.notes is not None:
+        issuer.notes = body.notes
+
+    await log_action(
+        db,
+        actor_user_id=admin.id,
+        action="trusted_issuer_updated",
+        target_type="trusted_issuer",
+        target_id=issuer.id,
+    )
+    await db.commit()
+    await db.refresh(issuer)
+    return issuer
+
+
+@router.delete("/admin/trusted-issuers/{issuer_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_trusted_issuer(
+    issuer_id: uuid.UUID,
+    admin: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    issuer = await _trusted_issuer_or_404(db, issuer_id)
+    await log_action(
+        db,
+        actor_user_id=admin.id,
+        action="trusted_issuer_removed",
+        target_type="trusted_issuer",
+        target_id=issuer.id,
+    )
+    await db.delete(issuer)
+    await db.commit()
     return flag

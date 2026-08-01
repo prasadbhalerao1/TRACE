@@ -411,6 +411,7 @@ async def finalize_rankings(
 
     initial_state: HackathonRankingState = {
         "hackathon_id": str(hackathon_id),
+        "scoring_config": hackathon.scoring_config,  # Now configurable per hackathon, defaults to None (uses hardcoded defaults)
         "teams": team_states,
         "repo_scores": {},
         "repo_verification_results": {},
