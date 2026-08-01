@@ -1754,6 +1754,77 @@ export function fetchAuditLog(token: string, limit = 100): Promise<AuditLogEntry
   return adminJson(`/admin/audit-log?limit=${limit}`, token);
 }
 
+// --- Admin: trusted issuer registry (Module 06 fraud engine) ---
+
+export type TrustTier = "platform" | "university" | "employer" | "community";
+
+export interface TrustedIssuerResponse {
+  id: string;
+  name: string;
+  aliases: string[] | null;
+  verification_url_template: string | null;
+  trust_tier: TrustTier;
+  notes: string | null;
+  added_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrustedIssuerCreateRequest {
+  name: string;
+  aliases?: string[] | null;
+  verification_url_template?: string | null;
+  trust_tier?: TrustTier;
+  notes?: string | null;
+}
+
+export interface TrustedIssuerUpdateRequest {
+  name?: string;
+  aliases?: string[] | null;
+  verification_url_template?: string | null;
+  trust_tier?: TrustTier;
+  notes?: string | null;
+}
+
+export function fetchTrustedIssuers(token: string): Promise<TrustedIssuerResponse[]> {
+  return adminJson(`/admin/trusted-issuers`, token);
+}
+
+export function createTrustedIssuer(
+  token: string,
+  body: TrustedIssuerCreateRequest,
+): Promise<TrustedIssuerResponse> {
+  return adminJson(`/admin/trusted-issuers`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateTrustedIssuer(
+  token: string,
+  issuerId: string,
+  body: TrustedIssuerUpdateRequest,
+): Promise<TrustedIssuerResponse> {
+  return adminJson(`/admin/trusted-issuers/${issuerId}`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteTrustedIssuer(token: string, issuerId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/admin/trusted-issuers/${issuerId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`DELETE /admin/trusted-issuers/${issuerId} failed: ${detail}`);
+  }
+}
+
 export interface ProfileUpdateRequest {
   full_name?: string | null;
   headline?: string | null;

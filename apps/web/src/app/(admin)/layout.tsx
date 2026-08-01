@@ -50,6 +50,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/dashboard" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Dashboard</Link>
             <Link href="/fraud-review" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Fraud Review Queue</Link>
             <Link href="/fraud-review/sample-flag" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Dispute Review</Link>
+            <Link href="/trusted-issuers" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Trusted Issuers</Link>
             <Link href="/users" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">User Roles</Link>
             <Link href="/audit-log" className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50">Audit Logs</Link>
           </nav>
