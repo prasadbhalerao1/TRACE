@@ -19,6 +19,8 @@ import {
   uploadResume,
   updateProfile,
   publishPortfolio,
+  addHackathonExperience,
+  removeHackathonExperience,
   type CandidateProfileResponse,
 } from "@/lib/api";
 
@@ -42,6 +44,12 @@ export default function ProfileEditPage() {
   const [location, setLocation] = useState("");
   const [college, setCollege] = useState("");
   const [degree, setDegree] = useState("");
+
+  const [hackathonName, setHackathonName] = useState("");
+  const [hackathonResult, setHackathonResult] = useState<"winner" | "top5" | "finalist" | "participant">("participant");
+  const [hackathonWeight, setHackathonWeight] = useState(3);
+  const [hackathonDate, setHackathonDate] = useState("");
+  const [showHackathonForm, setShowHackathonForm] = useState(false);
 
   const reload = useCallback(async () => {
     const token = await getToken();
@@ -251,6 +259,56 @@ export default function ProfileEditPage() {
     }
   }
 
+  async function handleAddHackathonExperience() {
+    if (!hackathonName.trim() || !hackathonDate) return;
+    setBusy("add_hackathon");
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      const updated = await addHackathonExperience(token, {
+        name: hackathonName.trim(),
+        result: hackathonResult,
+        weight: hackathonWeight,
+        date: hackathonDate,
+      });
+      setProfile(updated);
+      setNotice("Hackathon experience added — Talent Score updating in background.");
+      // Reset form
+      setHackathonName("");
+      setHackathonResult("participant");
+      setHackathonWeight(3);
+      setHackathonDate("");
+      setShowHackathonForm(false);
+      // Poll for rescore completion
+      await pollIngestionStatus(token);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add hackathon experience");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleRemoveHackathonExperience(entryId: string) {
+    setBusy(`remove_hackathon_${entryId}`);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      const updated = await removeHackathonExperience(token, entryId);
+      setProfile(updated);
+      setNotice("Hackathon experience removed — Talent Score updating in background.");
+      // Poll for rescore completion
+      await pollIngestionStatus(token);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove hackathon experience");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!profile) {
     return <div className="p-8 text-muted-foreground">Loading your profile…</div>;
   }
@@ -410,6 +468,138 @@ export default function ProfileEditPage() {
       </Card>
 
       <ConflictResolver profile={profile} />
+
+      {/* Hackathon Experience — self-reported external hackathon wins/placements */}
+      <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
+        <CardHeader className="pb-3 border-b border-zinc-100">
+          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-zinc-500 uppercase">Hackathon Experience</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-4">
+          <p className="text-xs text-zinc-600">
+            Add hackathon wins, top-5 finishes, and other achievements from external hackathons. These contribute to your Talent Score.
+          </p>
+
+          {/* List of existing hackathon entries */}
+          {profile.hackathon_experience && profile.hackathon_experience.length > 0 && (
+            <div className="space-y-2">
+              {profile.hackathon_experience.map((entry: any) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 bg-zinc-50/50 p-3"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-zinc-900">{entry.name}</p>
+                    <p className="text-xs text-zinc-600">
+                      {entry.result === "winner" && "🏆 Winner"}
+                      {entry.result === "top5" && "🥈 Top 5"}
+                      {entry.result === "finalist" && "🥉 Finalist"}
+                      {entry.result === "participant" && "👤 Participant"}
+                      {" • "}
+                      Importance: {entry.weight}/5 • {entry.date}
+                    </p>
+                    <p className="text-[11px] text-zinc-500 mt-1">self-reported</p>
+                  </div>
+                  <Button
+                    onClick={() => handleRemoveHackathonExperience(entry.id)}
+                    disabled={busy === `remove_hackathon_${entry.id}`}
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new hackathon entry form */}
+          {!showHackathonForm ? (
+            <Button
+              onClick={() => setShowHackathonForm(true)}
+              variant="outline"
+              className="w-full"
+            >
+              + Add Hackathon Experience
+            </Button>
+          ) : (
+            <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50/30 p-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Hackathon Name</label>
+                <Input
+                  value={hackathonName}
+                  onChange={(e) => setHackathonName(e.target.value)}
+                  placeholder="e.g. HackIndia 2025, Smart India Hackathon"
+                  className="border-zinc-200 bg-white focus-visible:ring-indigo-500/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Result</label>
+                  <select
+                    value={hackathonResult}
+                    onChange={(e) => setHackathonResult(e.target.value as any)}
+                    className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/30"
+                  >
+                    <option value="winner">🏆 Winner</option>
+                    <option value="top5">🥈 Top 5</option>
+                    <option value="finalist">🥉 Finalist</option>
+                    <option value="participant">👤 Participant</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Importance (1-5)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={hackathonWeight}
+                      onChange={(e) => setHackathonWeight(parseInt(e.target.value))}
+                      className="flex-1"
+                    />
+                    <span className="w-8 text-center text-sm font-medium text-zinc-700">{hackathonWeight}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Date</label>
+                <Input
+                  type="date"
+                  value={hackathonDate}
+                  onChange={(e) => setHackathonDate(e.target.value)}
+                  className="border-zinc-200 bg-white focus-visible:ring-indigo-500/20"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleAddHackathonExperience}
+                  disabled={busy === "add_hackathon" || !hackathonName.trim() || !hackathonDate}
+                  className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white font-medium"
+                >
+                  {busy === "add_hackathon" ? "Adding…" : "Add Experience"}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowHackathonForm(false);
+                    setHackathonName("");
+                    setHackathonResult("participant");
+                    setHackathonWeight(3);
+                    setHackathonDate("");
+                  }}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Portfolio Username — lets existing candidates set/change their URL slug */}
       <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">

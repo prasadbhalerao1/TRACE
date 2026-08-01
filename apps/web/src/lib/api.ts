@@ -70,6 +70,8 @@ export const SUB_SCORE_LABELS: Record<string, string> = {
   technical_consistency: "Technical Consistency",
   community_participation: "Community Participation",
   leadership: "Leadership",
+  open_source_contributions: "Open Source Contributions",
+  hackathon_performance: "Hackathon Performance",
 };
 
 export interface TalentScoreResponse {
@@ -1846,6 +1848,49 @@ export async function updateProfile(token: string, body: ProfileUpdateRequest): 
     const payload = await res.json().catch(() => null);
     const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
     throw new Error(`PATCH /candidates/me failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export interface HackathonExperienceRequest {
+  name: string;
+  result: "winner" | "top5" | "finalist" | "participant";
+  weight: number;
+  date: string;
+}
+
+export async function addHackathonExperience(
+  token: string,
+  body: HackathonExperienceRequest,
+): Promise<CandidateProfileResponse> {
+  const res = await fetch(`${API_URL}/candidates/me/hackathon-experience`, {
+    method: "POST",
+    headers: {
+      ...authHeaders(token),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`POST /candidates/me/hackathon-experience failed: ${detail}`);
+  }
+  return res.json();
+}
+
+export async function removeHackathonExperience(
+  token: string,
+  entryId: string,
+): Promise<CandidateProfileResponse> {
+  const res = await fetch(`${API_URL}/candidates/me/hackathon-experience/${entryId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    throw new Error(`DELETE /candidates/me/hackathon-experience failed: ${detail}`);
   }
   return res.json();
 }
