@@ -131,6 +131,9 @@ class InterviewReport(Base):
     response_confidence_signal: Mapped[float | None] = mapped_column(Float)
     technical_rating: Mapped[float | None] = mapped_column(Float)
     communication_rating: Mapped[float | None] = mapped_column(Float)
+    # Structured rubric scores: {competencies: [{name: str, score: float, feedback: str}]}
+    # Maps to InterviewDefinition.scoring_rubric for consistent evaluation
+    rubric_scores: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     hiring_recommendation: Mapped[str | None] = mapped_column(Text)
     generated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -153,6 +156,9 @@ class InterviewDefinition(Base):
     questions: Mapped[list] = mapped_column(JSONB, nullable=False)  # [{id: str, topic: str}, ...]
     question_count: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    # Structured scoring rubric: {competencies: [{name: str, description: str, weight: float}], scale: {min: 0, max: 100}}
+    # Enables consistent, structured evaluation instead of bare 0-100 scoring
+    scoring_rubric: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

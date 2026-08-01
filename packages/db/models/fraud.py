@@ -156,6 +156,37 @@ class TrustedIssuer(Base):
     )
 
 
+class FraudDetectionConfig(Base):
+    """Admin-configurable thresholds for fraud detection subgraphs. Instead of hardcoding
+    thresholds scattered across agent code (e.g. SIMILARITY_FLAG_THRESHOLD = 0.75 in
+    structural_similarity.py), store them in the database so admins can tune sensitivity
+    per organization without code changes. Singleton per organization (or global if org_id
+    is null for platform-wide defaults)."""
+
+    __tablename__ = "fraud_detection_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    # Plagiarism detection: flag if structural/AST similarity exceeds this (0-1 scale)
+    code_similarity_threshold: Mapped[float] = mapped_column(Float, nullable=False, server_default="0.75")
+    # Plagiarism: flag if text MinHash/Jaccard similarity exceeds this
+    text_similarity_threshold: Mapped[float] = mapped_column(Float, nullable=False, server_default="0.80")
+    # OCR confidence below which visual forensics escalates suspicion to medium/high
+    ocr_confidence_threshold: Mapped[float] = mapped_column(Float, nullable=False, server_default="0.55")
+    # Photo hash Hamming distance threshold for duplicate detection (0-64, lower = stricter)
+    photo_hash_max_distance: Mapped[int] = mapped_column(Float, nullable=False, server_default="4")
+    # AI-content heuristic perplexity threshold (lower = more AI-like, triggers flag)
+    ai_content_perplexity_threshold: Mapped[float] = mapped_column(Float, nullable=False, server_default="50")
+    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("code_similarity_threshold >= 0 AND code_similarity_threshold <= 1", name="ck_code_sim_range"),
+        CheckConstraint("text_similarity_threshold >= 0 AND text_similarity_threshold <= 1", name="ck_text_sim_range"),
+        CheckConstraint("ocr_confidence_threshold >= 0 AND ocr_confidence_threshold <= 1", name="ck_ocr_conf_range"),
+        Index("idx_fraud_detection_configs_org", "org_id"),
+    )
+
+
 class Dispute(Base):
     """FR-8 — candidate's context/evidence submitted against a flag raised on their own
     profile. Submitting a dispute moves the flag's status to `under_review` (router-side

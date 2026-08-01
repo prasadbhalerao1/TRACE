@@ -116,3 +116,40 @@ class AuthenticityScoreResponse(BaseModel):
     score: float
     components: dict | None
     computed_at: datetime
+
+
+# --- Trusted issuer registry (FR-1) ---
+
+TRUST_TIERS = ("platform", "university", "employer", "community")
+
+
+class TrustedIssuerResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    name: str
+    aliases: list[str] | None
+    verification_url_template: str | None
+    trust_tier: str
+    notes: str | None
+    added_by_user_id: UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TrustedIssuerCreateRequest(BaseModel):
+    name: str
+    aliases: list[str] | None = None
+    verification_url_template: str | None = None
+    trust_tier: str = "platform"
+    notes: str | None = None
+
+
+class TrustedIssuerUpdateRequest(BaseModel):
+    """All fields optional — PATCH semantics, only supplied fields are updated."""
+
+    name: str | None = None
+    aliases: list[str] | None = None
+    verification_url_template: str | None = None
+    trust_tier: str | None = None
+    notes: str | None = None

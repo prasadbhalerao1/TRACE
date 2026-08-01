@@ -50,6 +50,9 @@ class Hackathon(Base):
     # the doc's only implicit "finalized" signal, but the organizer dashboard needs to
     # render event state before any ranking exists at all.
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="draft")
+    # Configurable ranking weights (JSONB) — organizers can adjust how much each component contributes
+    # to the final ranking. Defaults to {judge: 0.40, pitch: 0.30, repo: 0.20, novelty: 0.10}
+    scoring_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
