@@ -405,9 +405,9 @@ async def start_interview(
     result = await db.execute(
         select(Consent).where(
             Consent.candidate_id == user.id, Consent.consent_type == "ai_interview", Consent.status == "granted"
-        )
+        ).order_by(Consent.granted_at.desc())
     )
-    consent = result.scalar_one_or_none()
+    consent = result.scalars().first()
     if consent is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="consent_required:ai_interview")
 
