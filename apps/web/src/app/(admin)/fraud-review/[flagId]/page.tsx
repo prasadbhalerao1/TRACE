@@ -10,7 +10,7 @@
 // (`.agents/decisions.md`'s Module 06 entry) — this is a UX nicety on top of a real
 // server-side guarantee, not a substitute for it.
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/components/AuthProvider";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 

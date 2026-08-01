@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class Role(str, Enum):
@@ -27,6 +27,25 @@ class UserProfile(BaseModel):
 class MeResponse(BaseModel):
     onboarding_required: bool
     profile: UserProfile | None = None
+
+
+class SignupRequest(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str | None = None
+    role: Role
+    username: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    profile: UserProfile
 
 
 class OnboardingRequest(BaseModel):

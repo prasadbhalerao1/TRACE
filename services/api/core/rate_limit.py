@@ -30,13 +30,13 @@ _EXEMPT_PATHS = {"/health"}
 
 
 def _decode_user_id_best_effort(authorization: str | None) -> str | None:
-    """Pull the Clerk subject claim out of a bearer JWT without verifying it.
+    """Pull the subject claim out of a custom bearer JWT without verifying it.
 
     This is a rate-limit *bucket key*, not an authorization decision — using the
     unverified subject claim just means two different rate-limit buckets in the
     pathological case of a forged token, never a security gap, since `rbac.py`'s real
     verified `get_current_user` dependency still runs afterwards and still rejects a
-    forged/expired token as normal. Avoids re-running full JWKS verification twice per
+    forged/expired token as normal. Avoids re-running full JWT verification twice per
     request purely to pick a bucket key.
     """
     if not authorization or not authorization.lower().startswith("bearer "):

@@ -1,15 +1,9 @@
-import {
-  ClerkProvider,
-  Show,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-} from "@clerk/nextjs";
-import { shadcn } from "@clerk/ui/themes";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Space_Grotesk, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/components/AuthProvider";
+import { AuthHeaderControls } from "@/components/AuthHeaderControls";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
 import "./globals.css";
 
@@ -48,7 +42,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900" suppressHydrationWarning>
-        <ClerkProvider appearance={{ theme: shadcn }}>
+        <AuthProvider>
           <header className="flex items-center justify-between border-b border-zinc-200/80 px-6 py-3 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
             <div className="flex items-center gap-6">
               <Link href="/" className="font-heading text-lg font-bold text-zinc-900 tracking-tight flex items-center gap-2">
@@ -64,21 +58,13 @@ export default function RootLayout({
                 <Link href="/users" className="px-2.5 py-1 rounded hover:bg-zinc-100 hover:text-zinc-900 transition">Admin</Link>
               </nav>
             </div>
-            <div className="flex items-center gap-3">
-              <Show when="signed-out">
-                <SignInButton />
-                <SignUpButton />
-              </Show>
-              <Show when="signed-in">
-                <UserButton />
-              </Show>
-            </div>
+            <AuthHeaderControls />
           </header>
           <CurrentUserProvider>
             <div className="flex flex-1 flex-col">{children}</div>
           </CurrentUserProvider>
           <Toaster />
-        </ClerkProvider>
+        </AuthProvider>
       </body>
     </html>
   );

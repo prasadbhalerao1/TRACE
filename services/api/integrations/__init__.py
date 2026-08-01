@@ -1,8 +1,8 @@
 """
 Third-Party Integrations Package.
-Modular wrappers for Clerk, Storage (Cloudinary/S3), Qdrant, and Redis.
+Modular wrappers for Auth, Storage (Cloudinary/S3), Qdrant, and Redis.
 """
-from services.api.integrations.clerk.clerk_auth import get_current_user, require_role
+from services.api.core.rbac import get_current_user, require_role
 from services.api.integrations.qdrant.qdrant_client import QdrantUnavailable, get_qdrant_client
 from services.api.integrations.storage.cloudinary_adapter import StorageUnavailable, upload_file
 

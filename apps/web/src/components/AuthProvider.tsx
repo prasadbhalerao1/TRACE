@@ -1,0 +1,94 @@
+"use client";
+
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+
+export interface SignupInput {
+  email: string;
+  password: string;
+  full_name?: string;
+  role: string;
+  username?: string;
+}
+
+interface AuthContextValue {
+  isLoaded: boolean;
+  isSignedIn: boolean;
+  getToken: () => Promise<string | null>;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (input: SignupInput) => Promise<void>;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [isLoaded, setIsLoaded] = useState(true);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    setIsSignedIn(!!token);
+  }, []);
+
+  const getToken = async (): Promise<string | null> => {
+    return localStorage.getItem("access_token");
+  };
+
+  const login = async (email: string, password: string): Promise<void> => {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Login failed");
+    }
+
+    const data = await response.json();
+    localStorage.setItem("access_token", data.access_token);
+    setIsSignedIn(true);
+  };
+
+  const signup = async (input: SignupInput): Promise<void> => {
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Signup failed");
+    }
+
+    const data = await response.json();
+    localStorage.setItem("access_token", data.access_token);
+    setIsSignedIn(true);
+  };
+
+  const logout = (): void => {
+    localStorage.removeItem("access_token");
+    setIsSignedIn(false);
+  };
+
+  const value: AuthContextValue = {
+    isLoaded,
+    isSignedIn,
+    getToken,
+    login,
+    signup,
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
+}

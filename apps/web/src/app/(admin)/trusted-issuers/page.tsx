@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";

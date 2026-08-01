@@ -26,9 +26,9 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
 
-    clerk_secret_key: str
-    clerk_jwks_url: str
-    clerk_issuer: str
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    jwt_expiry_seconds: int = 604800
 
     # Module 1 (Candidate Intelligence) & Multi-Provider LLM Gateway — see doc/SRS/01 §9.
     llm_provider: str = "anthropic"  # "anthropic" | "openai" | "grok" | "gemini" | "openai_compatible"

@@ -1,9 +1,8 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
-
+import { useAuth, type SignupInput } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { completeOnboarding, type Role } from "@/lib/api";
+import type { Role } from "@/lib/api";
 
 const ROLES: { value: Role; label: string }[] = [
   { value: "candidate", label: "Candidate" },
@@ -25,19 +24,16 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "admin", label: "Admin" },
 ];
 
-export default function OnboardingPage() {
+export default function SignUpPage() {
   const router = useRouter();
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { signup } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<Role | "">("");
   const [username, setUsername] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.replace("/sign-in");
-    }
-  }, [isLoaded, isSignedIn, router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -45,16 +41,18 @@ export default function OnboardingPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error("No session token");
-      await completeOnboarding(token, {
+      const input: SignupInput = {
+        email,
+        password,
+        full_name: fullName || undefined,
         role,
-        // Only pass username when signing up as candidate and they filled it in.
-        ...(role === "candidate" && username.trim() ? { username: username.trim() } : {}),
-      });
+        username:
+          role === "candidate" && username.trim() ? username.trim() : undefined,
+      };
+      await signup(input);
       router.replace("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : "Sign up failed");
       setSubmitting(false);
     }
   }
@@ -63,7 +61,7 @@ export default function OnboardingPage() {
     <div className="mx-auto flex min-h-[60vh] w-full max-w-md items-center p-8">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="font-heading">Choose your role</CardTitle>
+          <CardTitle className="font-heading">Create Account</CardTitle>
           {role === "candidate" && (
             <CardDescription>
               Claim your unique portfolio link now — you can always change it later in Profile settings.
@@ -72,6 +70,41 @@ export default function OnboardingPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="full-name">Full Name</Label>
+              <Input
+                id="full-name"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Your Name"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="role">I am a…</Label>
               <Select value={role} onValueChange={(v) => setRole(v as Role)}>
@@ -88,7 +121,6 @@ export default function OnboardingPage() {
               </Select>
             </div>
 
-            {/* Candidate-only: claim unique portfolio URL slug at signup */}
             {role === "candidate" && (
               <div className="space-y-2">
                 <Label htmlFor="username">
@@ -112,8 +144,15 @@ export default function OnboardingPage() {
 
             {error && <p className="text-sm text-rose-600">{error}</p>}
             <Button type="submit" disabled={!role || submitting} className="w-full">
-              {submitting ? "Setting up…" : "Continue"}
+              {submitting ? "Creating account…" : "Sign Up"}
             </Button>
+
+            <p className="text-center text-sm text-zinc-600">
+              Already have an account?{" "}
+              <a href="/sign-in" className="font-semibold hover:underline">
+                Sign in
+              </a>
+            </p>
           </form>
         </CardContent>
       </Card>

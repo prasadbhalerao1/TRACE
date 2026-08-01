@@ -1,4 +1,4 @@
-import { useUser } from "@clerk/nextjs";
+import { useUser } from "@/components/AuthProvider";
 import { Braces, Building2, Code2, GraduationCap, Link2, Mail, MapPin, Pencil, RefreshCw, Copy, Check } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/components/AuthProvider";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KanbanBoard } from "@/components/KanbanBoard";

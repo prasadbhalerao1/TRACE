@@ -7,7 +7,7 @@
 // strength," doc 06 §5), matching the stub's own "Flags do not auto-reject candidates"
 // copy, which is now backed by a real backend guarantee rather than mock text.
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/components/AuthProvider";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";

@@ -5,7 +5,7 @@
 // .agents/decisions.md's Module 06 entry). Only `raised`/`under_review` flags show up
 // here — once a human resolves one, it leaves this queue.
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 

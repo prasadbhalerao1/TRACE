@@ -1,6 +1,7 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 import {
   createContext,
   useCallback,
@@ -29,7 +30,8 @@ const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
 // shared via context, so layouts only need to read the result and apply their own role
 // check/redirect.
 export function CurrentUserProvider({ children }: { children: React.ReactNode }) {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const router = useRouter();
+  const { isLoaded, isSignedIn, getToken, logout } = useAuth();
   const [me, setMe] = useState<MeResponse | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const tick = useRef(0);
@@ -56,9 +58,15 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
         if (cancelled) return;
         setMe(result);
       } catch (err) {
-        // fetchMe no longer silently falls back to a demo profile — surface the failure
-        // via context instead of leaving every layout stuck on "Loading…" forever.
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load account");
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "Failed to load account";
+        // Check for 401 in error message (token expired/invalid)
+        if (message.includes("401")) {
+          logout();
+          router.replace("/sign-in");
+          return;
+        }
+        setError(message);
       }
     })();
 
@@ -66,7 +74,7 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, isSignedIn, getToken, tick.current]);
+  }, [isLoaded, isSignedIn, getToken, logout, router, tick.current]);
 
   return (
     <CurrentUserContext.Provider value={{ me, isLoaded, isSignedIn, error, reload }}>
