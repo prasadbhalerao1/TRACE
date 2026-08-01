@@ -22,8 +22,18 @@ def _build_explanation(candidate: dict, core: dict, project_relevance: float | N
         parts.append(f"matches {len(matched)}/{len(required_skills)} required skills ({', '.join(matched)})")
     if project_relevance is not None:
         parts.append(f"project relevance {project_relevance:.0f}/100")
-    if candidate.get("overall_talent_score") is not None:
-        parts.append(f"Talent Score {candidate['overall_talent_score']:.0f}")
+
+    talent_score = core.get("talent_score_alignment")
+    base_talent_score = candidate.get("overall_talent_score")
+    talent_metadata = core.get("talent_score_metadata", {})
+
+    if talent_score is not None:
+        if base_talent_score is not None and talent_metadata.get("reason") == "contextual_adjustment":
+            adjustment_factor = talent_metadata.get("adjustment_factor", 1.0)
+            parts.append(f"Talent Score {talent_score:.0f} (base {base_talent_score:.0f}, adjusted {adjustment_factor:.1f}x for job fit)")
+        else:
+            parts.append(f"Talent Score {talent_score:.0f}")
+
     if candidate.get("hackathon_experience"):
         parts.append("hackathon experience")
     return "; ".join(parts) if parts else "Limited overlapping evidence with this job's requirements."
@@ -45,18 +55,19 @@ async def run(state: MatchingState) -> dict:
             core["talent_score_alignment"],
         )
         candidate = pool_by_id.get(candidate_id, {})
-        results.append(
-            {
-                "candidate_id": candidate_id,
-                "match_percentage": match_percentage,
-                "skill_similarity": core["skill_similarity"],
-                "semantic_similarity": core["semantic_similarity"],
-                "experience_match": core["experience_match"],
-                "talent_score_alignment": core["talent_score_alignment"],
-                "project_relevance": project_relevance,
-                "explanation": _build_explanation(candidate, core, project_relevance, required_skills),
-            }
-        )
+        result = {
+            "candidate_id": candidate_id,
+            "match_percentage": match_percentage,
+            "skill_similarity": core["skill_similarity"],
+            "semantic_similarity": core["semantic_similarity"],
+            "experience_match": core["experience_match"],
+            "talent_score_alignment": core["talent_score_alignment"],
+            "project_relevance": project_relevance,
+            "explanation": _build_explanation(candidate, core, project_relevance, required_skills),
+        }
+        if "talent_score_metadata" in core:
+            result["talent_score_adjustment"] = core["talent_score_metadata"]
+        results.append(result)
 
     results.sort(key=lambda r: r["match_percentage"], reverse=True)
     return {"match_results": results}

@@ -15,8 +15,8 @@ class CopilotState(TypedDict):
     # Router-fetched, read-only inputs (nodes never touch the DB — same convention as
     # candidate_intelligence).
     candidate_pool: list[dict]  # [{candidate_id, skills:[{name,verified}], location,
-    #                              experience_years, overall_talent_score, github_username,
-    #                              headline, hackathon_experience, repo_summaries:[str]}]
+    #                              experience_years, overall_talent_score, sub_scores:{...},
+    #                              github_username, headline, hackathon_experience, repo_summaries:[str]}]
     skill_synonyms: dict[str, list[str]]
     location_aliases: dict[str, list[str]]
 
@@ -44,7 +44,7 @@ class MatchingState(TypedDict):
     job_is_remote: bool
 
     # Router-fetched, read-only input.
-    candidate_pool: list[dict]  # same shape as CopilotState.candidate_pool
+    candidate_pool: list[dict]  # same shape as CopilotState.candidate_pool (includes sub_scores)
 
     # job_embed output
     job_embedding: Optional[list[float]]

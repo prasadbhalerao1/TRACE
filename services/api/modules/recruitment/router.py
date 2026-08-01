@@ -100,9 +100,21 @@ async def _build_candidate_pool(db: AsyncSession, *, use_cache: bool = True) -> 
         .order_by(TalentScore.candidate_id, TalentScore.computed_at.desc())
     )
     latest_score_by_candidate: dict[uuid.UUID, float | None] = {}
+    latest_sub_scores_by_candidate: dict[uuid.UUID, dict[str, float | None]] = {}
     for s in scores_result.scalars().all():
         if s.candidate_id not in latest_score_by_candidate:
             latest_score_by_candidate[s.candidate_id] = s.overall
+            latest_sub_scores_by_candidate[s.candidate_id] = {
+                "coding_ability": s.coding_ability,
+                "problem_solving": s.problem_solving,
+                "project_quality": s.project_quality,
+                "innovation": s.innovation,
+                "technical_consistency": s.technical_consistency,
+                "community_participation": s.community_participation,
+                "leadership": s.leadership,
+                "open_source_contributions": s.open_source_contributions,
+                "hackathon_performance": s.hackathon_performance,
+            }
 
     badges_result = await db.execute(select(Badge).where(Badge.candidate_id.in_(candidate_ids)))
     verified_skills_by_candidate: dict[uuid.UUID, set[str]] = defaultdict(set)
@@ -135,6 +147,7 @@ async def _build_candidate_pool(db: AsyncSession, *, use_cache: bool = True) -> 
                 "location": p.location,
                 "experience_years": _estimate_experience_years(p.experience),
                 "overall_talent_score": latest_score_by_candidate.get(p.id),
+                "sub_scores": latest_sub_scores_by_candidate.get(p.id, {}),
                 "github_username": p.github_username,
                 "headline": p.headline,
                 "hackathon_experience": False,

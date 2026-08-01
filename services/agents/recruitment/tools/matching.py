@@ -81,13 +81,88 @@ def experience_match(candidate_years: float | None, min_experience_years: int | 
     return round(100.0 * min(ratio, 1.0), 1)
 
 
-def talent_score_alignment(candidate_overall_talent_score: float | None) -> float | None:
-    """0-100, a direct passthrough of the candidate's own Module 01 Talent Score — `None`
-    (cold start, no fabricated number) when the candidate has none yet, same convention
-    as every Module 01 sub-score."""
+def talent_score_alignment(
+    candidate_overall_talent_score: float | None,
+    candidate_sub_scores: dict[str, float | None] | None = None,
+    candidate_skills: list[CandidateSkillSignal] | None = None,
+    required_skills: list[str] | None = None,
+) -> tuple[float | None, dict]:
+    """Job-contextual Talent Score (0-100). Adjusts the candidate's base Talent Score based on
+    how well their demonstrated skills match this specific job's requirements.
+
+    Returns (adjusted_score, metadata) where metadata includes adjustment_factor and reasoning.
+    When candidate has no sub-scores or required_skills is empty/None, returns the base score
+    unadjusted (backward-compatible).
+
+    Algorithm:
+    1. Compute skill overlap ratio (how many job-required skills the candidate has)
+    2. Adjust coding_ability and problem_solving by this ratio (job-critical dimensions)
+    3. Adjust project_quality and innovation by ratio × 0.8 (related but not primary)
+    4. Recompute overall score with adjusted sub-scores, using original weights
+    """
     if candidate_overall_talent_score is None:
-        return None
-    return round(max(0.0, min(100.0, candidate_overall_talent_score)), 1)
+        return None, {"adjustment_factor": 1.0, "reason": "no_base_score"}
+
+    # Backward compat: if sub-scores/skills/requirements missing, passthrough
+    if not candidate_sub_scores or not required_skills or not candidate_skills:
+        return (
+            round(max(0.0, min(100.0, candidate_overall_talent_score)), 1),
+            {"adjustment_factor": 1.0, "reason": "insufficient_context"},
+        )
+
+    # Compute skill overlap ratio: what fraction of job-required skills does candidate have?
+    candidate_by_name = {s.name.lower(): s for s in candidate_skills}
+    matched_skills = 0
+    for required in required_skills:
+        if required.lower() in candidate_by_name:
+            matched_skills += 1
+        else:
+            candidate_names = [s.name for s in candidate_skills]
+            _, similarity = best_skill_similarity(candidate_names, required)
+            if similarity >= SKILL_SIMILARITY_THRESHOLD:
+                matched_skills += similarity
+
+    skill_overlap_ratio = matched_skills / len(required_skills) if required_skills else 0.0
+    skill_overlap_ratio = min(1.0, max(0.0, skill_overlap_ratio))
+
+    # Adjust specific sub-scores based on skill match
+    from services.agents.candidate_intelligence.tools.aggregate import SUB_SCORE_WEIGHTS
+
+    adjusted_sub_scores = {}
+    for name, value in candidate_sub_scores.items():
+        if value is None:
+            adjusted_sub_scores[name] = None
+        elif name in ("coding_ability", "problem_solving"):
+            adjusted_sub_scores[name] = value * skill_overlap_ratio
+        elif name in ("project_quality", "innovation"):
+            adjusted_sub_scores[name] = value * (skill_overlap_ratio * 0.8)
+        else:
+            adjusted_sub_scores[name] = value
+
+    # Recompute overall score with adjusted sub-scores, using original weights
+    available = {name: s for name, s in adjusted_sub_scores.items() if s is not None}
+    if not available:
+        return (
+            round(max(0.0, min(100.0, candidate_overall_talent_score)), 1),
+            {"adjustment_factor": 1.0, "reason": "no_available_sub_scores_after_adjustment"},
+        )
+
+    adjusted_overall = weighted_renormalized_mean(
+        [(SUB_SCORE_WEIGHTS.get(name, 0.0), s) for name, s in available.items()]
+    )
+
+    if adjusted_overall is None:
+        adjusted_overall = candidate_overall_talent_score
+
+    adjusted_overall = round(max(0.0, min(100.0, adjusted_overall)), 1)
+    adjustment_factor = adjusted_overall / candidate_overall_talent_score if candidate_overall_talent_score else 1.0
+
+    return adjusted_overall, {
+        "adjustment_factor": round(adjustment_factor, 2),
+        "skill_overlap_ratio": round(skill_overlap_ratio, 2),
+        "reason": "contextual_adjustment",
+        "adjusted_sub_scores": {k: round(v, 1) if v is not None else None for k, v in adjusted_sub_scores.items()},
+    }
 
 
 def filter_match_ratio(
