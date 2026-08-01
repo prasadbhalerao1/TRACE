@@ -2,7 +2,7 @@
 // guards routes itself; components call FastAPI directly with the Clerk token they
 // already have client-side. No Server Actions, no app/api/* proxying.
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type Role = "candidate" | "recruiter" | "organizer" | "judge" | "admin";
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { API_URL } from "@/lib/api";
 
 export interface SignupInput {
   email: string;
@@ -35,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string): Promise<void> => {
-    const response = await fetch("/api/auth/login", {
+    const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signup = async (input: SignupInput): Promise<void> => {
-    const response = await fetch("/api/auth/signup", {
+    const response = await fetch(`${API_URL}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),

@@ -60,6 +60,8 @@ async def seed_relational_database(session: AsyncSession):
     ]
 
     users_map = {}
+    from services.api.core.security import hash_password
+
     for clerk_id, email, role, full_name in user_data:
         user_stmt = select(User).where(User.email == email)
         u_res = await session.execute(user_stmt)
@@ -67,7 +69,7 @@ async def seed_relational_database(session: AsyncSession):
         if not user:
             user = User(
                 id=uuid.uuid4(),
-                auth_provider_id=clerk_id,
+                password_hash=hash_password("password123"),
                 email=email,
                 role=role,
                 full_name=full_name,

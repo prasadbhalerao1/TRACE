@@ -1,17 +1,20 @@
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
+import bcrypt
 from jose import jwt
 from typing import Any
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(password: str) -> str:
-    return _pwd_context.hash(password)
+    pwd_bytes = password.encode("utf-8")
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return _pwd_context.verify(password, password_hash)
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def create_access_token(user_id: str, settings: Any) -> str:
@@ -19,3 +22,4 @@ def create_access_token(user_id: str, settings: Any) -> str:
     expire = now + timedelta(seconds=settings.jwt_expiry_seconds)
     claims = {"sub": user_id, "exp": expire, "iat": now}
     return jwt.encode(claims, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
