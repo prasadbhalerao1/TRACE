@@ -2,6 +2,7 @@
 Trust & Fraud Prevention Controller.
 Handles Certificate Verification, Plagiarism Checking, Duplicate Profile Detection, Authenticity Scores, Flag Reviews, and Dispute Flow.
 """
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -362,23 +363,35 @@ async def check_profile_duplicate(
             try:
                 async with httpx.AsyncClient(timeout=8.0) as client:
                     resp = await client.get(photo_file.public_url)
-                target_photo_hash = compute_photo_hash(resp.content) if resp.status_code == 200 else None
+                # PIL decode + imagehash.phash is CPU-bound — keep it off the event loop.
+                target_photo_hash = (
+                    await asyncio.to_thread(compute_photo_hash, resp.content)
+                    if resp.status_code == 200
+                    else None
+                )
             except httpx.HTTPError:
                 target_photo_hash = None
 
         if target_photo_hash:
-            for other in other_profiles:
-                other_photo = await _latest_photo_file(db, other.user_id)
-                if not other_photo or not other_photo.public_url:
-                    continue
-                try:
-                    async with httpx.AsyncClient(timeout=8.0) as client:
+            # One client for the whole corpus (connection reuse) instead of a fresh
+            # AsyncClient per candidate; hashing is threaded so the CPU-bound PIL decode
+            # doesn't stall the event loop once per corpus entry.
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                for other in other_profiles:
+                    other_photo = await _latest_photo_file(db, other.user_id)
+                    if not other_photo or not other_photo.public_url:
+                        continue
+                    try:
                         other_resp = await client.get(other_photo.public_url)
-                    other_hash = compute_photo_hash(other_resp.content) if other_resp.status_code == 200 else None
-                except httpx.HTTPError:
-                    other_hash = None
-                if other_hash:
-                    photo_corpus.append((str(other.id), other_hash))
+                        other_hash = (
+                            await asyncio.to_thread(compute_photo_hash, other_resp.content)
+                            if other_resp.status_code == 200
+                            else None
+                        )
+                    except httpx.HTTPError:
+                        other_hash = None
+                    if other_hash:
+                        photo_corpus.append((str(other.id), other_hash))
 
     dup_state = {
         "subject_type": "profile",
@@ -714,4 +727,3 @@ async def delete_trusted_issuer(
     )
     await db.delete(issuer)
     await db.commit()
-    return flag

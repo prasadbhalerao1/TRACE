@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { APPLICATION_STAGE_LABELS, fetchMyApplications } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function CandidateApplicationsPage() {
   const { getToken } = useAuth();
@@ -32,7 +33,7 @@ export default function CandidateApplicationsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {error && <p className="text-sm text-rose-flagged">{error}</p>}
-            {!error && applications === null && <p className="text-sm text-slate">Loading…</p>}
+            {!error && applications === null && <CardListSkeleton />}
             {applications !== null && applications.length === 0 && (
               <p className="text-sm text-slate">
                 No applications yet —{" "}

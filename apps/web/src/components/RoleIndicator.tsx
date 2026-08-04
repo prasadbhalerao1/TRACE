@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@/components/AuthProvider";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { useEffect, useState } from "react";
 
 const ROLE_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -12,16 +12,18 @@ const ROLE_COLORS: Record<string, { bg: string; text: string; label: string }> =
 };
 
 export function RoleIndicator() {
-  const { user } = useAuth();
+  // Previously read `useAuth().user` — a field AuthContextValue does not define, so this
+  // was a type error that always rendered nothing. The role lives on the /me payload.
+  const { me } = useCurrentUser();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted || !user) return null;
+  if (!mounted || !me?.profile) return null;
 
-  const role = user.role || "candidate";
+  const role = me.profile.role || "candidate";
   const colors = ROLE_COLORS[role] || ROLE_COLORS.candidate;
 
   return (

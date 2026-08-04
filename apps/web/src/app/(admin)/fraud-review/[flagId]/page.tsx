@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchFraudFlagDetail, FraudFlagDetailResponse, reviewFraudFlag } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function AdminFlagAuditPage() {
   const params = useParams<{ flagId: string }>();
@@ -82,7 +83,7 @@ export default function AdminFlagAuditPage() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {loading && <p className="text-sm text-slate">Loading…</p>}
+      {loading && <CardListSkeleton />}
 
       {detail && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

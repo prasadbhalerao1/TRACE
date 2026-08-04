@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchFraudReviewQueue, FraudReviewQueueEntry } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 const CONFIDENCE_VARIANT: Record<string, "destructive" | "secondary" | "outline"> = {
   high: "destructive",
@@ -49,7 +50,7 @@ export default function AdminFraudQueuePage() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {loading && <p className="text-sm text-slate">Loading…</p>}
+      {loading && <CardListSkeleton />}
       {!loading && entries.length === 0 && <p className="text-sm text-slate">No flags currently awaiting review.</p>}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

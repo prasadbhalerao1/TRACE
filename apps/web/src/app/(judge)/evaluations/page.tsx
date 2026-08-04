@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { fetchJudgingQueue, type JudgeQueueEntry } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function JudgeEvaluationsQueuePage() {
   const { getToken } = useAuth();
@@ -41,7 +42,7 @@ export default function JudgeEvaluationsQueuePage() {
             <CardDescription>Select a team project submission to evaluate.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {loading && <p className="text-sm text-slate">Loading…</p>}
+            {loading && <CardListSkeleton />}
             {error && <p className="text-sm text-rose-flagged">{error}</p>}
             {!loading && queue.length === 0 && <p className="text-sm text-slate">No submissions yet.</p>}
             {queue.map((sub) => (

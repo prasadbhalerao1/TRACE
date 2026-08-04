@@ -9,8 +9,14 @@ Usage:
 
 import asyncio
 import logging
+import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+
+# Repo root on sys.path so `packages`/`services` import when this is run directly as
+# `python scripts/seed_db.py`, without needing PYTHONPATH to be set by the caller.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

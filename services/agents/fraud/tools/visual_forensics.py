@@ -11,10 +11,19 @@ rules baseline, never the only path" pattern (e.g. `ppt_analyzer/tools/plagiaris
 one of low/medium/high suspicion, per the hard constraint in doc 06 §4/§8.
 """
 
+import asyncio
+from functools import lru_cache
+
 import anthropic
 
 from services.api.core.config import get_settings
 from services.api.core.tracing import start_llm_generation
+
+
+@lru_cache(maxsize=1)
+def _vision_client(api_key: str) -> anthropic.Anthropic:
+    """Cached client — rebuilding the SDK client per certificate is pure overhead."""
+    return anthropic.Anthropic(api_key=api_key)
 
 # Below this OCR confidence, the extracted cert fields themselves are unreliable — that's
 # a data-quality signal worth surfacing, not proof of forgery, so it only pushes suspicion
@@ -52,20 +61,28 @@ def _rules_based_suspicion(issuer: str | None, title: str | None, credential_id:
     return {"suspicion_label": label, "reasons": reasons}
 
 
-def _vision_pass(public_url: str, issuer: str | None, title: str | None) -> dict | None:
+async def _vision_pass(public_url: str, issuer: str | None, title: str | None) -> dict | None:
     """Best-effort Haiku vision call. Returns None (not an error) if unavailable — the
-    rules-based signal above always stands on its own."""
+    rules-based signal above always stands on its own.
+
+    The Anthropic SDK is synchronous, so the network call runs via `asyncio.to_thread`
+    to keep it off the event loop. Kept on its own client rather than the
+    `services.api.core.llm` gateway: that gateway is provider-agnostic with no
+    vision/image content-block support, and this path is gated on `ANTHROPIC_API_KEY`
+    independently of `LLM_PROVIDER`.
+    """
     settings = get_settings()
     if not settings.anthropic_api_key or not public_url:
         return None
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        client = _vision_client(settings.anthropic_api_key)
         with start_llm_generation(
             name="fraud.visual_forensics",
             model=settings.llm_model_fast,
             input_data={"issuer": issuer, "title": title, "image_url": public_url},
         ) as generation:
-            response = client.messages.create(
+            response = await asyncio.to_thread(
+                client.messages.create,
                 model=settings.llm_model_fast,
                 max_tokens=400,
                 tools=[
@@ -112,7 +129,7 @@ def _vision_pass(public_url: str, issuer: str | None, title: str | None) -> dict
     return None
 
 
-def assess_visual_forensics(
+async def assess_visual_forensics(
     issuer: str | None,
     title: str | None,
     credential_id: str | None,
@@ -124,7 +141,7 @@ def assess_visual_forensics(
     requirement, extended to this agent too) — this heuristic is not forensic-grade
     (doc 06 §8)."""
     rules = _rules_based_suspicion(issuer, title, credential_id, ocr_confidence)
-    vision = _vision_pass(public_url, issuer, title) if public_url else None
+    vision = await _vision_pass(public_url, issuer, title) if public_url else None
 
     if vision is not None:
         # Escalate to the higher of the two suspicion labels rather than average —

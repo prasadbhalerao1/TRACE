@@ -2,6 +2,8 @@
 User Controller & Authentication Endpoints.
 Handles authentication (signup/login) and user profile retrieval.
 """
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,9 +37,12 @@ async def signup(
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email_taken")
 
+    # bcrypt is deliberately CPU-slow; thread it so it doesn't stall the event loop.
+    password_hash = await asyncio.to_thread(hash_password, payload.password)
+
     user = User(
         email=payload.email,
-        password_hash=hash_password(payload.password),
+        password_hash=password_hash,
         full_name=payload.full_name,
         role=payload.role.value,
         is_active=True,
@@ -77,7 +82,10 @@ async def login(
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
-    if user is None or not verify_password(payload.password, user.password_hash):
+    password_ok = user is not None and await asyncio.to_thread(
+        verify_password, payload.password, user.password_hash
+    )
+    if not password_ok:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_credentials")
 
     if not user.is_active:

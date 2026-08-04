@@ -3,6 +3,7 @@
 Returns only the keys it changes — see resume_parser.py's note on why (parallel fan-out).
 """
 
+import asyncio
 from dataclasses import asdict
 
 from services.agents.candidate_intelligence.state import CandidateProfileState
@@ -13,7 +14,8 @@ async def run(state: CandidateProfileState) -> dict:
     if not state.get("certificate_file_bytes"):
         return {}
 
-    extraction = extract_certificate(state["certificate_file_bytes"])
+    # Tesseract is blocking/CPU-bound — keep it off the event loop.
+    extraction = await asyncio.to_thread(extract_certificate, state["certificate_file_bytes"])
     result: dict = {"certificate_extracted": asdict(extraction)}
     if extraction.ocr_confidence < 0.5:
         result["conflicts"] = ["certificate_low_ocr_confidence: flagged for manual review"]

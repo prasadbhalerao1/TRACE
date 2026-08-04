@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { fetchJobs } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function RecruiterJobsListPage() {
   const { getToken } = useAuth();
@@ -36,7 +37,7 @@ export default function RecruiterJobsListPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {error && <p className="text-sm text-rose-flagged">{error}</p>}
-          {!error && jobs === null && <p className="text-sm text-slate">Loading…</p>}
+          {!error && jobs === null && <CardListSkeleton />}
           {jobs !== null && jobs.length === 0 && (
             <p className="text-sm text-slate">No jobs posted yet — publish one to start matching candidates.</p>
           )}

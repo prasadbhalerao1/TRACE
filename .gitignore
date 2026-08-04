@@ -28,6 +28,9 @@ services/api/.venv/
 .env
 .env.local
 .env.*.local
+# Real credentials for the managed cloud services, kept so `.env` can be switched
+# back from the local-Docker default. Never commit.
+.env.cloud
 apps/web/.env.test
 
 # Playwright E2E (apps/web/e2e) — local run artifacts, never committed

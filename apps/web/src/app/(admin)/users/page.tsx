@@ -11,6 +11,7 @@ import {
   type AdminUserResponse,
   type Role,
 } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 const ASSIGNABLE_ROLES: Role[] = ["candidate", "recruiter", "organizer", "judge", "admin"];
 
@@ -82,7 +83,7 @@ export default function AdminUsersPage() {
             <CardDescription>Review role classifications for active platform users.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {users === null && !error && <p className="text-sm text-slate">Loading…</p>}
+            {users === null && !error && <CardListSkeleton />}
             {users !== null && users.length === 0 && (
               <p className="text-sm text-slate">No users found.</p>
             )}

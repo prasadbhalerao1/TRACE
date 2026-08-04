@@ -2,7 +2,7 @@
 
 ## What it does
 
-A candidate connects GitHub, uploads a resume, and optionally uploads a certificate. The system pulls those three sources together into one profile, cross-checks them against each other, and computes a "Talent Score" — seven sub-scores (coding ability, problem solving, project quality, innovation, technical consistency, community participation, leadership) plus a single overall number — from real evidence rather than from what the candidate typed into a form. The score comes with a confidence rating so a recruiter can tell "this candidate scored low" apart from "this candidate hasn't given us enough to score yet."
+A candidate connects GitHub, uploads a resume, and optionally uploads a certificate. The system pulls those three sources together into one profile, cross-checks them against each other, and computes a "Talent Score" — nine sub-scores (coding ability, problem solving, project quality, innovation, technical consistency, community participation, leadership, open-source contributions, hackathon performance) plus a single overall number — from real evidence rather than from what the candidate typed into a form. The score comes with a confidence rating so a recruiter can tell "this candidate scored low" apart from "this candidate hasn't given us enough to score yet."
 
 ## The problem it solves
 
@@ -51,9 +51,12 @@ The first three nodes fan out from `START` in parallel (same superstep) because 
 - **project_quality** (`tools/judgment_scores.py::project_quality`) — a mechanical component (`sample_complexity`: pulls up to 3 Python repos, runs `radon`'s cyclomatic-complexity analyzer on a sampled source file, applies a penalty curve — flat 100 up to complexity 5, linear decay to complexity 15, steeper decay beyond that) blended 0.6/0.4 with an LLM judgment call (Sonnet rates README/architecture quality from repo summaries, via `generate_structured`). If either component is unavailable, the other one is used alone; if both are unavailable, the sub-score is `None`.
 - **innovation** (`judgment_scores.py::innovation`) — a novelty score from vector similarity: the candidate's repo descriptions get embedded (shared `SentenceTransformer` singleton with the recruitment matching code) and compared against a Qdrant collection of other candidates' project embeddings (`CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION`) — lower average cosine similarity to the existing corpus scores higher (calculated as `100 * (1 - avg_similarity)`). This is blended 50/50 with an LLM judgment call, then the whole thing is multiplied by a recency-decay factor (365-day half-life on the most recently pushed repo) so an idea that was novel two years ago but has been abandoned since doesn't outscore active work. The candidate's own repos also get upserted into the same Qdrant collection afterward, so the corpus grows as more candidates get scored — an explicit cold-start/bootstrapping mechanism.
 
-Two of the seven sub-scores route to an LLM (project_quality, innovation) because the doc's own model-routing table classifies them as genuinely subjective judgment calls; the other five are pure rules. This split is enforced in code, not just convention — `mechanical_scores.py`'s module docstring says outright "rules only, no LLM."
+- **open_source_contributions** — merged PRs into repos the candidate doesn't own, counted and percentile-ranked against the population, with a bonus for spread across multiple distinct projects rather than all activity concentrated on one repo (a candidate with 6 merged PRs across 4 different projects scores higher than 6 merged PRs on a single one).
+- **hackathon_performance** — a blend of verified results (hackathons run on this platform: win / top-5 / finalist / participant, each a fixed weight) and self-reported external hackathons (included but weighted lower than verified results, since they're unverifiable claims).
 
-`compute_overall` (`tools/aggregate.py`) then combines the seven sub-scores using fixed weights (coding_ability 0.20, problem_solving 0.20, project_quality 0.15, innovation 0.15, technical_consistency 0.10, community_participation 0.10, leadership 0.10) via `weighted_renormalized_mean` (`services/agents/common/scoring.py`) — explained in the design-decisions section below. `compute_confidence` computes an Evidence Confidence Score: `available_signals / expected_signals`, i.e. what fraction of the 7 sub-scores actually resolved to a number rather than `None`.
+Two of the nine sub-scores route to an LLM (project_quality, innovation) because the doc's own model-routing table classifies them as genuinely subjective judgment calls; the other seven are pure rules. This split is enforced in code, not just convention — `mechanical_scores.py`'s module docstring says outright "rules only, no LLM."
+
+`compute_overall` (`tools/aggregate.py`) then combines the nine sub-scores using fixed weights (coding_ability 0.16, problem_solving 0.16, project_quality 0.12, innovation 0.12, technical_consistency 0.08, community_participation 0.08, leadership 0.08, open_source_contributions 0.10, hackathon_performance 0.10) via `weighted_renormalized_mean` (`services/agents/common/scoring.py`) — explained in the design-decisions section below. `compute_confidence` computes an Evidence Confidence Score: `available_signals / expected_signals`, i.e. what fraction of the 9 sub-scores actually resolved to a number rather than `None`.
 
 **`badge_assignment`** (`nodes/badge_assignment.py`) — rules only. A skill claimed on the resume gets a corroborated badge only if the same skill/language also shows up in the candidate's actual GitHub repo languages. This is small but tells the same story as the rest of the system: self-reported claims alone earn nothing; they need a second, independently-sourced signal.
 
@@ -94,6 +97,78 @@ Back in the router (`_run_ingestion_and_persist`), the merged profile overwrites
 **Ingestion runs as an unmanaged background task, not a durable job queue.** `_run_ingestion_background` is a FastAPI `BackgroundTask`, which lives only as long as the server process. If the process restarts mid-ingestion, the candidate's `ingestion_status` is stuck at `"processing"` indefinitely with no automatic retry or timeout — the frontend would poll forever.
 
 **No re-scoring cadence beyond manual re-connect.** The module docstring for `graph.py` itself notes that a weekly automatic refresh is a "Phase-1 follow-up" — today, a Talent Score only updates when the candidate re-uploads a resume, reconnects GitHub, or uploads a new certificate. A candidate who was scored once and never returns has a score that silently goes stale.
+
+## Open-source contributions and hackathon performance (the two newer sub-scores)
+
+The original seven-dimension score under-weighted two signals the platform itself is well
+positioned to observe: activity a candidate contributes to *other* people's projects, and
+track record in the platform's own hackathon events. Two sub-scores were added to close
+that gap, and all nine weights were rebalanced so the total still sums to 1.0:
+
+| Sub-score | Weight (old → new) |
+|---|---|
+| coding_ability | 0.20 → 0.16 |
+| problem_solving | 0.20 → 0.16 |
+| project_quality | 0.15 → 0.12 |
+| innovation | 0.15 → 0.12 |
+| technical_consistency | 0.10 → 0.08 |
+| community_participation | 0.10 → 0.08 |
+| leadership | 0.10 → 0.08 |
+| open_source_contributions | — → 0.10 (new) |
+| hackathon_performance | — → 0.10 (new) |
+
+**Open Source Contributions** measures how active a candidate is in the wider open-source
+community, not just on their own repos — merged pull requests into projects they don't own,
+counted and percentile-ranked against the population, with a diversity bonus for spreading
+that activity across multiple projects instead of drive-by-contributing to just one. This is
+a distinct signal from `community_participation`'s external-PR term (which measures *raw
+count*, capped) and from `leadership` (which measures *reviewing* others' PRs, not
+*submitting* them) — this sub-score is specifically about a candidate showing up and
+contributing to code they don't control.
+
+**Hackathon Performance** measures track record in time-pressured, judged competition —
+something GitHub commit history alone can't capture (a strong hackathon performer under a
+48-hour deadline and public judging is a meaningfully different signal than steady solo
+commit cadence). It blends two tiers of evidence: **verified** results from hackathons run
+on this platform (win / top-5 / finalist / participant — each has a fixed, ordered weight,
+since a platform-run hackathon's outcome is data the system trusts directly), and
+**self-reported** external hackathons the candidate lists themselves, included but weighted
+lower precisely because they're an unverified claim, consistent with the rest of the
+platform's "don't trust unverifiable self-reports at face value" posture.
+
+Both new sub-scores follow the same cold-start rule as the original seven: no signal means
+`None`, not `0`, and `weighted_renormalized_mean` drops it and rebalances the remaining
+weights rather than penalizing a candidate for not having hackathon history.
+
+## Job-contextual score adjustment
+
+The Talent Score described above is a *general* score — "how strong is this candidate,
+overall." But a 77/100 general score means something different for a backend Python role
+than for a frontend React role, and the platform makes that adjustment explicit rather than
+showing recruiters one undifferentiated number for every job.
+
+When a candidate is matched against a specific job, the system computes a **skill overlap
+ratio** — what fraction of the job's required skills the candidate actually has, using the
+same embedding-based skill similarity used elsewhere (see
+[11-vector-search-and-llm-gateway.md](11-vector-search-and-llm-gateway.md)), so a candidate
+doesn't get zero credit for "PostgreSQL" against a job that asked for "SQL." A job needing
+Python, SQL, and Docker where the candidate has verified Python, embedding-similar
+PostgreSQL, and no Docker produces roughly a 51% overlap ratio (`1.0 + 0.54 + 0.0` averaged
+over 3 required skills).
+
+That ratio then scales the *technical* sub-scores — coding_ability, problem_solving,
+project_quality, and innovation — down toward the candidate's actual fit for this specific
+stack (project_quality and innovation are scaled slightly more conservatively, at
+`overlap × 0.8`, since they're less stack-specific to begin with). The *non-technical*
+sub-scores — leadership, community_participation — are left unchanged, on the reasoning that
+being a good collaborator or maintainer is valuable regardless of which tech stack a
+specific job happens to need. The adjusted sub-scores are then re-combined with the same
+weighted-renormalized-mean helper to produce a job-specific score, shown to recruiters
+alongside (not instead of) the candidate's general score, with the skill-overlap ratio and
+which sub-scores were adjusted shown explicitly — so a recruiter sees *why* a strong general
+candidate might show a lower number for this particular req, rather than a single opaque
+figure. This mechanism is documented in full, judge-facing form in
+`docs/TALENT_SCORE_EXPLAINED_FOR_JUDGES.md`.
 
 ## Where this lives in the code
 

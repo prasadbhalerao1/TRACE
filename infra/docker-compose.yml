@@ -1,20 +1,20 @@
-# DataAxle — Local Infrastructure Services
-# Note: Production & Active Dev use Cloud Providers configured in .env:
-# - PostgreSQL: Managed Neon Cloud Postgres (DATABASE_URL)
-# - Vector DB: Managed Qdrant Cloud (QDRANT_URL)
-# - Redis: Local Docker Container (port 6379)
+# DataAxle — Local Infrastructure
+#
+# Everything the app depends on for data/state runs locally in Docker: Postgres,
+# Qdrant, and Redis. There is no cloud dependency in the default development setup.
+#
+# Previously Postgres and Qdrant sat behind a `profiles: ["offline"]` opt-in while
+# `.env` pointed at managed Neon (AWS us-east-2) and Qdrant Cloud (AWS us-east-1), so
+# every query on every page paid a cross-region public-internet round trip. They are
+# now first-class services that come up with a plain:
+#
+#   docker compose -f infra/docker-compose.yml up -d
+#
+# Healthchecks make it possible to wait for readiness (`docker compose ps`) before
+# running `alembic upgrade head` against a Postgres still starting up.
 
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: dataaxle_redis
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-
-  # Optional local fallback services for offline development
   postgres:
-    profiles: ["offline"]
     image: postgres:16-alpine
     container_name: dataaxle_postgres
     environment:
@@ -25,15 +25,34 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d talent_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   qdrant:
-    profiles: ["offline"]
     image: qdrant/qdrant
     container_name: dataaxle_qdrant
     ports:
-      - "6333:6333"
+      - "6333:6333"  # REST / HTTP
+      - "6334:6334"  # gRPC
     volumes:
       - qdrantdata:/qdrant/storage
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: dataaxle_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   pgdata:

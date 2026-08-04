@@ -7,8 +7,10 @@ raising and aborting the whole graph run — OCR is best-effort augmentation her
 the Anthropic/Cloudinary integrations the task calls out as needing a hard typed error.
 """
 
+import asyncio
 import base64
 import io
+from functools import lru_cache
 
 import anthropic
 import pytesseract
@@ -16,6 +18,12 @@ from PIL import Image
 
 from services.api.core.config import get_settings
 from services.api.core.tracing import start_llm_generation
+
+
+@lru_cache(maxsize=1)
+def _vision_client(api_key: str) -> anthropic.Anthropic:
+    """Cached client — rebuilding the SDK client per slide is pure overhead."""
+    return anthropic.Anthropic(api_key=api_key)
 
 _VISION_DIAGRAM_SCHEMA = {
     "name": "diagram_understanding",
@@ -31,6 +39,7 @@ _VISION_DIAGRAM_SCHEMA = {
 
 
 def ocr_image(image_bytes: bytes) -> str | None:
+    """Synchronous/CPU-bound — call via `ocr_image_async` from async code."""
     try:
         image = Image.open(io.BytesIO(image_bytes))
         text = pytesseract.image_to_string(image).strip()
@@ -41,18 +50,33 @@ def ocr_image(image_bytes: bytes) -> str | None:
         return None
 
 
-def vision_diagram_summary(image_bytes: bytes) -> str | None:
+async def ocr_image_async(image_bytes: bytes) -> str | None:
+    """Threaded wrapper so Tesseract doesn't block the event loop."""
+    return await asyncio.to_thread(ocr_image, image_bytes)
+
+
+async def vision_diagram_summary(image_bytes: bytes) -> str | None:
+    """Claude-vision diagram understanding. Best-effort: returns None on any failure.
+
+    The provider SDK is synchronous, so the network call runs via `asyncio.to_thread`
+    to keep it off the event loop. This deliberately keeps its own Anthropic client
+    rather than routing through `services.api.core.llm`: that gateway is
+    provider-agnostic and has no vision/image content-block support, and this path is
+    gated on `ANTHROPIC_API_KEY` independently of `LLM_PROVIDER` (which is often set to
+    a text-only provider like Groq) so diagram understanding still works there.
+    """
     settings = get_settings()
     if not settings.anthropic_api_key:
         return None
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = _vision_client(settings.anthropic_api_key)
     try:
         with start_llm_generation(
             name="ppt_analyzer.ocr.vision_diagram_summary",
             model=settings.llm_model_fast,
             input_data={"note": "slide image, diagram/chart/architecture understanding"},
         ) as generation:
-            response = client.messages.create(
+            response = await asyncio.to_thread(
+                client.messages.create,
                 model=settings.llm_model_fast,
                 max_tokens=256,
                 tools=[_VISION_DIAGRAM_SCHEMA],

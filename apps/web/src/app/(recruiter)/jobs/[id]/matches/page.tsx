@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
-import { fetchJobMatches } from "@/lib/api";
+import { fetchJobMatches, fetchMatchingStatus, type MatchingStatusResponse } from "@/lib/api";
 
 function ScoreRow({ label, value }: { label: string; value: number | null }) {
   return (
@@ -29,7 +29,47 @@ export default function RecruiterMatchesPage() {
     if (!token) throw new Error("No session token");
     return fetchJobMatches(token, params.id);
   }, [getToken, params.id]);
-  const { data: matches, error } = useAsyncResource(fetcher, `job-matches:${params.id}`);
+  const { data: matches, error, retry } = useAsyncResource(fetcher, `job-matches:${params.id}`);
+
+  // Without this the page showed a permanent "no candidates yet" message while matching
+  // was still running in the background (or had failed outright). Poll the job's matching
+  // status and re-fetch the match list once it finishes.
+  const [matchingStatus, setMatchingStatus] = useState<MatchingStatusResponse | null>(null);
+  const retryRef = useRef(retry);
+  retryRef.current = retry;
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let wasProcessing = false;
+
+    const poll = async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const status = await fetchMatchingStatus(token, params.id);
+        if (cancelled) return;
+        setMatchingStatus(status);
+        if (status.status === "processing") {
+          wasProcessing = true;
+          timer = setTimeout(poll, 3000);
+        } else if (wasProcessing) {
+          // Matching just finished — pull the newly persisted rows in.
+          retryRef.current();
+        }
+      } catch {
+        // Status is supplementary: a failure here must not blank out the match list.
+      }
+    };
+
+    poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [getToken, params.id]);
+
+  const isProcessing = matchingStatus?.status === "processing";
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -52,7 +92,20 @@ export default function RecruiterMatchesPage() {
           <CardContent className="space-y-4">
             {error && <p className="text-sm text-rose-flagged">{error}</p>}
             {!error && matches === null && <CardListSkeleton />}
-            {matches !== null && matches.length === 0 && (
+            {matches !== null && matches.length === 0 && isProcessing && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate">
+                  Matching candidates against this role… this can take a moment.
+                </p>
+                <CardListSkeleton />
+              </div>
+            )}
+            {matches !== null && matches.length === 0 && matchingStatus?.status === "failed" && (
+              <p className="text-sm text-rose-flagged">
+                Matching failed{matchingStatus.error ? `: ${matchingStatus.error}` : "."} Try recomputing from the job page.
+              </p>
+            )}
+            {matches !== null && matches.length === 0 && !isProcessing && matchingStatus?.status !== "failed" && (
               <p className="text-sm text-slate">No candidates in the pool yet — matches will populate as candidates onboard.</p>
             )}
             {matches?.map((match) => (

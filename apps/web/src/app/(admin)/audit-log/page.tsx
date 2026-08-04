@@ -5,6 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchAuditLog, type AuditLogEntry } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 function formatTimestamp(ts: string): string {
   const date = new Date(ts);
@@ -58,7 +59,7 @@ export default function AdminAuditLogsPage() {
             <CardDescription>Most recent platform actions, newest first.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {logs === null && !error && <p className="text-sm text-slate">Loading…</p>}
+            {logs === null && !error && <CardListSkeleton />}
             {logs !== null && logs.length === 0 && (
               <p className="text-sm text-slate">No audit log entries yet.</p>
             )}

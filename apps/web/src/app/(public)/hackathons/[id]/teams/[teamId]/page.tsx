@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchPublicHackathonTeamDetail, type TeamDetailResponse } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function PublicTeamPage() {
   const params = useParams<{ id: string; teamId: string }>();
@@ -32,7 +33,7 @@ export default function PublicTeamPage() {
         <p className="text-sm text-slate">Hackathon: {params.id}</p>
       </div>
 
-      {loading && <p className="text-sm text-slate">Loading…</p>}
+      {loading && <CardListSkeleton />}
       {error && <p className="text-sm text-rose-flagged">{error}</p>}
 
       {detail && (

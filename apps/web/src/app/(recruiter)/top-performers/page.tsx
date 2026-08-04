@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fetchTopPerformersFeed, type TopPerformerEntry } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function RecruiterTopPerformersPage() {
   const { getToken } = useAuth();
@@ -41,7 +42,7 @@ export default function RecruiterTopPerformersPage() {
             <CardDescription>Top-3 finishers across all finalized hackathons.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {loading && <p className="text-sm text-slate">Loading…</p>}
+            {loading && <CardListSkeleton />}
             {error && <p className="text-sm text-rose-flagged">{error}</p>}
             {!loading && entries.length === 0 && (
               <p className="text-sm text-slate">No finalized hackathon rankings yet.</p>

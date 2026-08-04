@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FunnelChart } from "@/components/FunnelChart";
 import { TimeToHireHistogram } from "@/components/TimeToHireHistogram";
 import {
@@ -95,7 +96,7 @@ export default function RecruiterAnalyticsPage() {
             <CardDescription>Conversion from sourced through hired, across all your job postings.</CardDescription>
           </CardHeader>
           <CardContent>
-            {funnel ? <FunnelChart funnel={funnel} /> : <p className="text-sm text-slate">Loading…</p>}
+            {funnel ? <FunnelChart funnel={funnel} /> : <Skeleton className="h-56 w-full" />}
           </CardContent>
         </Card>
 
@@ -105,7 +106,7 @@ export default function RecruiterAnalyticsPage() {
             <CardDescription>Days from application to the &quot;Hired&quot; stage.</CardDescription>
           </CardHeader>
           <CardContent>
-            {timeToHire ? <TimeToHireHistogram timeToHire={timeToHire} /> : <p className="text-sm text-slate">Loading…</p>}
+            {timeToHire ? <TimeToHireHistogram timeToHire={timeToHire} /> : <Skeleton className="h-56 w-full" />}
           </CardContent>
         </Card>
       </div>

@@ -17,6 +17,7 @@ import {
   type TrustedIssuerResponse,
   type TrustTier,
 } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 const TRUST_TIERS: TrustTier[] = ["platform", "university", "employer", "community"];
 
@@ -213,7 +214,7 @@ export default function TrustedIssuersPage() {
           <CardDescription>{issuers?.length ?? 0} issuer(s) in the trusted registry.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {loading && !issuers && <p className="text-sm text-slate">Loading…</p>}
+          {loading && !issuers && <CardListSkeleton />}
           {issuers !== null && issuers?.length === 0 && (
             <p className="text-sm text-slate">
               No trusted issuers registered yet — every certificate will be treated as unrecognized until you add some.

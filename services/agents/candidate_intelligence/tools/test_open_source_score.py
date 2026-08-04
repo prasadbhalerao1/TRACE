@@ -1,6 +1,6 @@
 """Unit tests for open_source_contributions scoring."""
 
-from services.agents.candidate_intelligence.tools.github import GithubAnalysis, GithubRepo
+from services.agents.candidate_intelligence.tools.github import GithubAnalysis, RepoSnapshot
 from services.agents.candidate_intelligence.tools.open_source_score import open_source_contributions
 
 
@@ -12,7 +12,6 @@ def test_cold_start_no_external_contributions():
         external_contributions=0,
         pr_review_count=0,
         total_stars=0,
-        total_forks=0,
         commit_activity_weekly=[],
         commit_activity_weekly_dated=[],
     )
@@ -27,7 +26,7 @@ def test_single_external_pr():
     """One external PR → score based on breadth and PR count."""
     analysis = GithubAnalysis(
         repos=[
-            GithubRepo(
+            RepoSnapshot(
                 repo_full_name="other/repo",
                 stars=10,
                 forks=2,
@@ -45,7 +44,6 @@ def test_single_external_pr():
         external_contributions=1,
         pr_review_count=0,
         total_stars=10,
-        total_forks=2,
         commit_activity_weekly=[],
         commit_activity_weekly_dated=[],
     )
@@ -60,7 +58,7 @@ def test_single_external_pr():
 def test_high_contribution_activity():
     """Multiple external PRs across diverse repos and languages → higher score."""
     repos = [
-        GithubRepo(
+        RepoSnapshot(
             repo_full_name="org1/repo1",
             stars=20,
             forks=5,
@@ -73,7 +71,7 @@ def test_high_contribution_activity():
             pushed_at=None,
             description="",
         ),
-        GithubRepo(
+        RepoSnapshot(
             repo_full_name="org2/repo2",
             stars=15,
             forks=3,
@@ -94,7 +92,6 @@ def test_high_contribution_activity():
         external_contributions=5,
         pr_review_count=2,
         total_stars=35,
-        total_forks=8,
         commit_activity_weekly=[],
         commit_activity_weekly_dated=[],
     )

@@ -17,4 +17,6 @@ async def run(state: FraudCheckState) -> dict:
         "confidence_label": "medium" if result["matches"] else "low",
         "evidence": result["evidence"],
     }
-    return {"signals": [signal], "context": {**ctx, "github_crosscheck_result": result}}
+    # Return only this node's own context key — `merge_context` folds it into the shared
+    # dict, so returning `{**ctx, ...}` would clobber a parallel node's contribution.
+    return {"signals": [signal], "context": {"github_crosscheck_result": result}}

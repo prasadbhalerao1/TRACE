@@ -7,6 +7,8 @@ run — they are never persisted to the `slides` table (only a `has_image` flag 
 resulting OCR text are).
 """
 
+import asyncio
+
 from services.agents.ppt_analyzer.state import PitchAnalysisState
 from services.agents.ppt_analyzer.tools.extraction import (
     UnsupportedDeckFormat,
@@ -24,9 +26,10 @@ async def run(state: PitchAnalysisState) -> dict:
     if not file_bytes:
         return {"extraction_error": "No file bytes provided.", "slides": []}
 
+    # python-pptx / PyMuPDF parsing is blocking CPU work — keep it off the event loop.
     normalized = state.get("normalized_pptx_bytes")
     if normalized:
-        extracted = extract_slides_from_pptx(normalized)
+        extracted = await asyncio.to_thread(extract_slides_from_pptx, normalized)
     else:
         try:
             fmt = detect_format(state.get("file_name"), state.get("file_content_type"))
@@ -35,9 +38,9 @@ async def run(state: PitchAnalysisState) -> dict:
 
         try:
             if fmt == "pptx":
-                extracted = extract_slides_from_pptx(file_bytes)
+                extracted = await asyncio.to_thread(extract_slides_from_pptx, file_bytes)
             elif fmt == "pdf":
-                extracted = extract_slides_from_pdf(file_bytes)
+                extracted = await asyncio.to_thread(extract_slides_from_pdf, file_bytes)
             else:
                 return {"extraction_error": f"Unhandled format at extraction time: {fmt}", "slides": []}
         except Exception as exc:  # malformed/corrupt file — degrade, don't crash the graph

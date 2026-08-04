@@ -21,6 +21,7 @@ import {
   FraudFlagResponse,
   submitFlagDispute,
 } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 const STATUS_LABEL: Record<string, string> = {
   raised: "Pending Review",
@@ -90,7 +91,7 @@ export default function CandidateFlagsPage() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {loading && <p className="text-sm text-slate">Loading…</p>}
+      {loading && <CardListSkeleton />}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">

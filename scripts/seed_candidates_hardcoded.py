@@ -15,7 +15,16 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 
 import sys
-sys.path.insert(0, str(__file__).rsplit('scripts', 1)[0])
+from pathlib import Path
+
+# Repo root on sys.path so `packages`/`services` import when this is run directly as
+# `python scripts/seed_candidates_hardcoded.py` from anywhere.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# This script prints check marks/bullets; the Windows console defaults to cp1252, which
+# can't encode them and would crash the run *after* the rows were already committed.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from packages.db.models.base import Base
 from packages.db.models.user import User

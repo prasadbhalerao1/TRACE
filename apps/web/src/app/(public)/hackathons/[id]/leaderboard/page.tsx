@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { fetchPublicHackathon, fetchPublicHackathonRankings, type HackathonResponse, type RankingResponse } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function PublicLeaderboardPage() {
   const params = useParams<{ id: string }>();
@@ -44,7 +45,7 @@ export default function PublicLeaderboardPage() {
             <CardDescription>Standings calculated from combined judge and system scoring.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {loading && <p className="text-sm text-slate">Loading…</p>}
+            {loading && <CardListSkeleton />}
             {error && <p className="text-sm text-rose-flagged">{error}</p>}
             {!loading && rankings.length === 0 && (
               <p className="text-sm text-slate">Rankings haven&apos;t been finalized yet.</p>

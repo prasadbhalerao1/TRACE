@@ -20,6 +20,7 @@ from services.agents.candidate_intelligence.tools.judgment_scores import (
     code_quality_score,
     innovation,
     project_quality,
+    sample_complexity,
 )
 from services.agents.candidate_intelligence.tools.open_source_score import open_source_contributions
 from services.agents.candidate_intelligence.tools.hackathon_score import hackathon_performance
@@ -33,16 +34,31 @@ async def run(state: CandidateProfileState) -> dict:
     assessment_score = state.get("assessment_score")
     assessment_population = state.get("assessment_population") or []
 
-    # code_quality_score samples source files via blocking PyGithub calls — same
-    # rationale as github_analysis.py's node: run off-thread so it doesn't stall the
-    # event loop for every other in-flight request.
-    quality_score, _ = (
-        await asyncio.to_thread(
-            code_quality_score, state["github_username"], state.get("github_access_token"), analysis
+    # Sample repo complexity exactly once and share the result with both consumers
+    # (code_quality_score and project_quality) — each used to run its own sampling pass,
+    # duplicating every blocking PyGithub round trip. Threaded for the same reason as
+    # github_analysis.py's node: it must not stall the event loop.
+    if github_raw is not None:
+        sampled = await asyncio.to_thread(
+            sample_complexity, state["github_username"], state.get("github_access_token"), analysis
         )
-        if github_raw is not None
-        else (None, [])
-    )
+        quality_score, _ = code_quality_score(
+            state["github_username"], state.get("github_access_token"), analysis, sampled=sampled
+        )
+        # project_quality and innovation write disjoint keys and share no data
+        # dependency — run their LLM/embedding round trips concurrently instead of
+        # back-to-back.
+        project_quality_score, innovation_score = await asyncio.gather(
+            project_quality(
+                state["github_username"], state.get("github_access_token"), analysis, sampled=sampled
+            ),
+            innovation(state["candidate_id"], analysis),
+        )
+    else:
+        quality_score = None
+        no_github = "No GitHub data ingested yet."
+        project_quality_score = SubScore(value=None, rationale=no_github)
+        innovation_score = SubScore(value=None, rationale=no_github)
 
     sub_scores = {
         "coding_ability": mechanical_scores.coding_ability(
@@ -60,16 +76,8 @@ async def run(state: CandidateProfileState) -> dict:
         "leadership": mechanical_scores.leadership(
             analysis, leadership_population=state.get("leadership_population") or []
         ),
-        "project_quality": (
-            await project_quality(state["github_username"], state.get("github_access_token"), analysis)
-            if github_raw is not None
-            else SubScore(value=None, rationale="No GitHub data ingested yet.")
-        ),
-        "innovation": (
-            await innovation(state["candidate_id"], analysis)
-            if github_raw is not None
-            else SubScore(value=None, rationale="No GitHub data ingested yet.")
-        ),
+        "project_quality": project_quality_score,
+        "innovation": innovation_score,
         "open_source_contributions": (
             open_source_contributions(
                 analysis, contribution_population=state.get("contribution_population") or []

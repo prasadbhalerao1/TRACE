@@ -1,5 +1,7 @@
 """Unit tests for hackathon_performance scoring."""
 
+import pytest
+
 from services.agents.candidate_intelligence.tools.hackathon_score import (
     hackathon_performance,
     normalize_weight,
@@ -36,10 +38,12 @@ def test_single_self_reported_winner():
 
 def test_weight_normalization():
     """1-5 weight scale normalizes to 0.2-1.0 range."""
-    assert normalize_weight(1) == 0.2
-    assert normalize_weight(3) == 0.6  # middle of range
-    assert normalize_weight(5) == 1.0
-    assert normalize_weight(None) == 1.0  # default platform weight
+    # approx(): these are binary-float divisions (3/5 == 0.6000000000000001), so exact
+    # equality fails on a correct implementation.
+    assert normalize_weight(1) == pytest.approx(0.2)
+    assert normalize_weight(3) == pytest.approx(0.6)  # middle of range
+    assert normalize_weight(5) == pytest.approx(1.0)
+    assert normalize_weight(None) == pytest.approx(1.0)  # default platform weight
 
 
 def test_multiple_hackathons_capped():

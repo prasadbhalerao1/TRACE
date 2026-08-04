@@ -23,9 +23,24 @@ import operator
 from typing import Annotated, Optional, TypedDict
 
 
+def merge_context(left: dict, right: dict) -> dict:
+    """Shallow-merge reducer for `context`.
+
+    Without a reducer, two nodes fanning out in the same superstep and each returning
+    `{**ctx, "their_key": ...}` collide — LangGraph raises, or (worse) one node's added
+    key is silently lost because both wrote the whole dict. Merging lets independent
+    nodes each contribute their own keys in parallel; later writes win on conflict,
+    which is safe here since nodes write disjoint result keys onto a shared
+    router-prefetched base.
+    """
+    return {**(left or {}), **(right or {})}
+
+
 class FraudCheckState(TypedDict):
     subject_type: str  # 'certificate' | 'submission' | 'profile' | 'resume'
     subject_id: str
-    context: dict  # router-prefetched data the detection tools need (see graph docstrings)
+    # Router-prefetched data the detection tools need (see graph docstrings), plus
+    # per-node results merged in. Reducer allows parallel fan-out — see `merge_context`.
+    context: Annotated[dict, merge_context]
     signals: Annotated[list[dict], operator.add]  # [{signal_type, score, confidence_label, evidence}]
     verdict: Optional[dict]  # {flag_type, should_flag, confidence_label, evidence} set by the final node

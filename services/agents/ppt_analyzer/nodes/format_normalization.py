@@ -7,6 +7,8 @@ LibreOffice isn't available — the graph still runs to completion with an empty
 extraction rather than a hard failure on the whole upload.
 """
 
+import asyncio
+
 from services.agents.ppt_analyzer.state import PitchAnalysisState
 from services.agents.ppt_analyzer.tools.extraction import (
     LegacyPptConversionUnavailable,
@@ -33,7 +35,10 @@ async def run(state: PitchAnalysisState) -> dict:
 
     settings = get_settings()
     try:
-        converted = convert_ppt_to_pptx(file_bytes, settings.libreoffice_binary)
+        # Spawns headless LibreOffice (up to a 60s subprocess) — keep it off the event loop.
+        converted = await asyncio.to_thread(
+            convert_ppt_to_pptx, file_bytes, settings.libreoffice_binary
+        )
         return {"normalized_pptx_bytes": converted}
     except LegacyPptConversionUnavailable as exc:
         return {"normalization_error": str(exc)}

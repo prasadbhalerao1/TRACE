@@ -1,5 +1,7 @@
 """Slide Embedding Agent — doc 04 §4. Node contract: constraints.md §2.3."""
 
+import asyncio
+
 from services.agents.ppt_analyzer.state import PitchAnalysisState
 from services.agents.ppt_analyzer.tools.embeddings import embed_texts
 
@@ -14,4 +16,5 @@ async def run(state: PitchAnalysisState) -> dict:
         return {"slide_embeddings": None}
 
     texts = [_slide_text(s) for s in slides]
-    return {"slide_embeddings": embed_texts(texts)}
+    # model.encode() is CPU-bound — keep it off the event loop.
+    return {"slide_embeddings": await asyncio.to_thread(embed_texts, texts)}

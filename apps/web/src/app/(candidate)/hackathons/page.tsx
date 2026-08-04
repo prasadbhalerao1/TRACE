@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchOpenHackathons, type HackathonResponse } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 // QA finding (Track 2): candidates had no way to discover a hackathon to submit a
 // project to — `submitHackathonProject()` existed in lib/api.ts but no page called it,
@@ -47,7 +48,7 @@ export default function CandidateHackathonsPage() {
       </div>
 
       {error && <p className="text-sm text-rose-flagged">{error}</p>}
-      {!error && hackathons === null && <p className="text-sm text-slate">Loading…</p>}
+      {!error && hackathons === null && <CardListSkeleton />}
       {hackathons !== null && hackathons.length === 0 && (
         <p className="text-sm text-slate">No open hackathons right now — check back later.</p>
       )}

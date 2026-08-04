@@ -2,6 +2,7 @@
 Presentation & Pitch Deck Controller.
 Handles Deck Uploads, Multi-Agent Rubric Scoring, Plagiarism Checking, and Presentation Reports.
 """
+import asyncio
 import logging
 import uuid
 
@@ -40,6 +41,26 @@ async def _get_presentation_or_404(db: AsyncSession, presentation_id: uuid.UUID)
     if presentation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="presentation_not_found")
     return presentation
+
+
+# Roles that legitimately review decks they don't own — hackathon judging/organizing and
+# recruiter evaluation. Everyone else may only read their own upload.
+_DECK_REVIEWER_ROLES = frozenset({"judge", "organizer", "recruiter", "admin"})
+
+
+async def _get_owned_presentation_or_404(
+    db: AsyncSession, presentation_id: uuid.UUID, user: User
+) -> Presentation:
+    """Fetch a presentation, enforcing read access.
+
+    Without this, any authenticated user could read any other candidate's deck, scores,
+    and plagiarism matches by guessing a UUID. 404 rather than 403 for non-owners so the
+    endpoint doesn't confirm that someone else's presentation ID exists.
+    """
+    presentation = await _get_presentation_or_404(db, presentation_id)
+    if presentation.owner_user_id == user.id or user.role in _DECK_REVIEWER_ROLES:
+        return presentation
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="presentation_not_found")
 
 
 def _log_agent_run(
@@ -140,8 +161,13 @@ async def _analyze_presentation(
 
         status_detail: str | None = None
         try:
-            public_url, storage_key = upload_file(
-                file_bytes, public_id=f"presentations/{presentation.id}", resource_type="raw"
+            # cloudinary.uploader.upload is a blocking network call, and BackgroundTasks
+            # share the request event loop — keep it off the loop.
+            public_url, storage_key = await asyncio.to_thread(
+                upload_file,
+                file_bytes,
+                public_id=f"presentations/{presentation.id}",
+                resource_type="raw",
             )
             db.add(
                 File(
@@ -319,20 +345,20 @@ async def _run_and_persist_analysis(
 @router.get("/{presentation_id}/status", response_model=PresentationStatusResponse)
 async def get_status(
     presentation_id: uuid.UUID,
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PresentationStatusResponse:
-    presentation = await _get_presentation_or_404(db, presentation_id)
+    presentation = await _get_owned_presentation_or_404(db, presentation_id, user)
     return PresentationStatusResponse(presentation_id=presentation.id, status=presentation.status)
 
 
 @router.get("/{presentation_id}/report", response_model=PresentationReportResponse)
 async def get_report(
     presentation_id: uuid.UUID,
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PresentationReportResponse:
-    presentation = await _get_presentation_or_404(db, presentation_id)
+    presentation = await _get_owned_presentation_or_404(db, presentation_id, user)
 
     slides_result = await db.execute(
         select(Slide).where(Slide.presentation_id == presentation_id).order_by(Slide.slide_index)
@@ -395,9 +421,9 @@ async def get_report(
 @router.get("/{presentation_id}/plagiarism-matches", response_model=list[PlagiarismMatchOut])
 async def get_plagiarism_matches(
     presentation_id: uuid.UUID,
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[PlagiarismMatchOut]:
-    await _get_presentation_or_404(db, presentation_id)
+    await _get_owned_presentation_or_404(db, presentation_id, user)
     result = await db.execute(select(PlagiarismMatch).where(PlagiarismMatch.presentation_id == presentation_id))
     return [PlagiarismMatchOut.model_validate(m) for m in result.scalars().all()]

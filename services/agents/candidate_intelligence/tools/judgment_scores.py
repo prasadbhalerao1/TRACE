@@ -100,27 +100,44 @@ async def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple
 
 
 def code_quality_score(
-    github_username: str, access_token: str | None, analysis: GithubAnalysis
+    github_username: str,
+    access_token: str | None,
+    analysis: GithubAnalysis,
+    sampled: tuple[float | None, list[str]] | None = None,
 ) -> tuple[float | None, list[str]]:
     """Public wrapper around the complexity sample + penalty curve — shared between
     project_quality's mechanical component and coding_ability's quality_score term
     (proposal's `coding_ability = 0.25 language + 0.35 quality + 0.40 assessment`) so
-    the same static-analysis pass isn't run twice per candidate per scoring cycle."""
-    avg_complexity, sampled_files = sample_complexity(github_username, access_token, analysis)
+    the same static-analysis pass isn't run twice per candidate per scoring cycle.
+
+    Pass `sampled` (an existing `sample_complexity` result) to reuse a sampling pass
+    the caller already ran — see `project_quality`'s identical parameter."""
+    avg_complexity, sampled_files = (
+        sampled if sampled is not None else sample_complexity(github_username, access_token, analysis)
+    )
     if avg_complexity is None:
         return None, sampled_files
     return _penalty_curve(avg_complexity), sampled_files
 
 
 async def project_quality(
-    github_username: str, access_token: str | None, analysis: GithubAnalysis
+    github_username: str,
+    access_token: str | None,
+    analysis: GithubAnalysis,
+    sampled: tuple[float | None, list[str]] | None = None,
 ) -> SubScore:
+    """`sampled` is an already-computed `sample_complexity` result, as returned by
+    `code_quality_score`. Callers that have run the sampling pass should pass it in:
+    it's a set of blocking PyGithub round trips, and re-running it here duplicated
+    every one of those network calls per scoring cycle."""
     settings = get_settings()
-    # Blocking PyGithub calls (repo contents fetch) — run off-thread so this async node
-    # doesn't stall the event loop, same pattern as github_analysis.py's node.
-    avg_complexity, sampled_files = await asyncio.to_thread(
-        sample_complexity, github_username, access_token, analysis
-    )
+    if sampled is None:
+        # Blocking PyGithub calls (repo contents fetch) — run off-thread so this async
+        # node doesn't stall the event loop, same pattern as github_analysis.py's node.
+        sampled = await asyncio.to_thread(
+            sample_complexity, github_username, access_token, analysis
+        )
+    avg_complexity, sampled_files = sampled
     mechanical = _penalty_curve(avg_complexity) if avg_complexity is not None else None
 
     summaries = [f"{r.repo_full_name}: {r.stars} stars, languages {list(r.languages)}" for r in analysis.repos[:5]]
@@ -154,16 +171,9 @@ def _embed(texts: list[str]) -> list[list[float]] | None:
         return None
 
 
-async def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
-    settings = get_settings()
-    # Already sorted most-recently-pushed-first (fetch_github_analysis) — recency-decay
-    # the novelty score itself so a project that was innovative years ago and has since
-    # been abandoned doesn't score as highly as one that's actively developed.
-    candidate_repos = analysis.repos[:5]
-    descriptions = [f"{r.repo_full_name}: {list(r.languages)}" for r in candidate_repos]
-    most_recent_push = max((r.pushed_at for r in candidate_repos if r.pushed_at), default=None)
-    decay = recency_weight(most_recent_push, half_life_days=365.0) if most_recent_push else 1.0
-
+def _novelty_score(candidate_id: str, descriptions: list[str]) -> float | None:
+    """Blocking: SentenceTransformer encode + Qdrant round trips. Call via
+    `asyncio.to_thread` — never directly from an async context."""
     novelty_score: float | None = None
     qdrant = _get_qdrant() if descriptions else None
     embeddings = _embed(descriptions) if qdrant else None
@@ -193,9 +203,27 @@ async def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
                 ],
             )
         except Exception:
-            novelty_score = novelty_score  # keep whatever was computed before the failure
+            pass  # keep whatever was computed before the failure
 
-    llm_score, llm_rationale = await _llm_quality_judgment(descriptions, settings)  # reuse judgment shape
+    return novelty_score
+
+
+async def innovation(candidate_id: str, analysis: GithubAnalysis) -> SubScore:
+    settings = get_settings()
+    # Already sorted most-recently-pushed-first (fetch_github_analysis) — recency-decay
+    # the novelty score itself so a project that was innovative years ago and has since
+    # been abandoned doesn't score as highly as one that's actively developed.
+    candidate_repos = analysis.repos[:5]
+    descriptions = [f"{r.repo_full_name}: {list(r.languages)}" for r in candidate_repos]
+    most_recent_push = max((r.pushed_at for r in candidate_repos if r.pushed_at), default=None)
+    decay = recency_weight(most_recent_push, half_life_days=365.0) if most_recent_push else 1.0
+
+    # Embedding/Qdrant work is blocking and independent of the LLM judgment — thread the
+    # former and run both concurrently instead of serially on the event loop.
+    novelty_score, (llm_score, llm_rationale) = await asyncio.gather(
+        asyncio.to_thread(_novelty_score, candidate_id, descriptions),
+        _llm_quality_judgment(descriptions, settings),  # reuse judgment shape
+    )
 
     if novelty_score is None and llm_score is None:
         return SubScore(

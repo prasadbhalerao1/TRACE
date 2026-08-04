@@ -4,7 +4,7 @@ from services.agents.fraud.tools.visual_forensics import assess_visual_forensics
 
 async def run(state: FraudCheckState) -> dict:
     ctx = state["context"]
-    result = assess_visual_forensics(
+    result = await assess_visual_forensics(
         ctx.get("issuer"),
         ctx.get("title"),
         ctx.get("credential_id"),
@@ -17,4 +17,5 @@ async def run(state: FraudCheckState) -> dict:
         "confidence_label": result["confidence_label"],
         "evidence": result["evidence"],
     }
-    return {"signals": [signal], "context": {**ctx, "visual_forensics_result": result}}
+    # Only this node's own key — `merge_context` folds it into the shared dict.
+    return {"signals": [signal], "context": {"visual_forensics_result": result}}

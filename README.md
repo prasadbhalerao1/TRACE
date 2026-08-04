@@ -63,33 +63,52 @@ DataAxle/
 ### Prerequisites
 * Python 3.12+
 * Node.js 20+
+* Docker (for Postgres, Qdrant, and Redis)
 
-### Environment Configuration
-Copy `.env.example` to `.env` in the root:
+### 1. Infrastructure — all local, no cloud accounts
+
+Postgres, Qdrant, and Redis all run as local containers. Nothing here needs an API key.
+
 ```bash
-DATABASE_URL="postgresql+asyncpg://..."
-DATABASE_SSL_REQUIRED=true
-
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
-CLERK_SECRET_KEY="sk_test_..."
-
-# Optional API Keys (System uses deterministic fallbacks when unconfigured):
-ANTHROPIC_API_KEY=""
-QDRANT_HOST=""
-CLOUDINARY_URL=""
-SENTRY_DSN=""
+docker compose -f infra/docker-compose.yml up -d
 ```
 
-### Backend (FastAPI)
-```bash
-# Run database migrations
-python -m alembic upgrade head
+### 2. Environment configuration
 
-# Start FastAPI server
+Copy `.env.example` to `.env`. Its defaults already point at the containers above:
+
+```bash
+DATABASE_URL=postgresql+asyncpg://dev:dev@localhost:5432/talent_platform
+DATABASE_SSL_REQUIRED=false
+QDRANT_URL=http://localhost:6333
+REDIS_URL=redis://localhost:6379
+
+# External services — only an LLM provider is needed to exercise the AI features.
+# Agents degrade gracefully to deterministic fallbacks when these are unset.
+LLM_PROVIDER=anthropic          # or: openai | grok | groq | gemini
+ANTHROPIC_API_KEY=""
+CLOUDINARY_URL=""               # optional: file uploads
+SENTRY_DSN=""                   # optional: error reporting
+```
+
+See [Documentation/15-local-development-setup.md](Documentation/15-local-development-setup.md)
+for how to obtain each optional key.
+
+### 3. Backend (FastAPI)
+
+```bash
+# Create the schema, then load demo data
+python -m alembic upgrade head
+python scripts/seed_db.py
+python scripts/seed_candidates_hardcoded.py   # optional: richer candidate set
+
 uvicorn services.api.main:app --reload --port 8000
 ```
 
-### Frontend (Next.js)
+Seed logins: `alice@example.com` … `evan@example.com`, password `password123`.
+
+### 4. Frontend (Next.js)
+
 ```bash
 cd apps/web
 npm install

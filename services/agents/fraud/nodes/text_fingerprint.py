@@ -15,4 +15,6 @@ async def run(state: FraudCheckState) -> dict:
         "confidence_label": "high" if top and top["similarity"] >= SIMILARITY_FLAG_THRESHOLD else "low",
         "evidence": top["evidence"] if top else "No comparable profile text in the corpus.",
     }
-    return {"signals": [signal], "context": {**ctx, "text_fingerprint_results": results}}
+    # Only this node's own key — `merge_context` folds it into the shared dict. Critical
+    # here: this node fans out in parallel with `photo_hash` in `duplicate_graph`.
+    return {"signals": [signal], "context": {"text_fingerprint_results": results}}

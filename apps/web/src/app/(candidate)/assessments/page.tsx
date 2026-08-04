@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fetchMyAssessments, type AssessmentResponse } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 const ASSESSMENT_TYPE_LABELS: Record<AssessmentResponse["type"], string> = {
   coding: "Coding Challenge",
@@ -49,7 +50,7 @@ export default function CandidateAssessmentsInboxPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <p className="text-sm text-rose-flagged">{error}</p>}
-          {!error && assessments === null && <p className="text-sm text-slate">Loading…</p>}
+          {!error && assessments === null && <CardListSkeleton />}
           {assessments !== null && assessments.length === 0 && (
             <p className="text-sm text-slate">No assessments assigned yet — check back after a recruiter assigns you one.</p>
           )}

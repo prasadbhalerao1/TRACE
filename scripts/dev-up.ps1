@@ -1,7 +1,11 @@
-# Starts everything needed for local development: Docker infra (redis), the FastAPI
-# backend, and the Next.js frontend. Postgres and Qdrant are both managed/remote
-# (Neon, Qdrant Cloud) - no local containers for either. Run from anywhere; paths
-# are resolved relative to this script's location.
+# Starts everything needed for local development: Docker infra (Postgres, Qdrant, Redis),
+# the FastAPI backend, and the Next.js frontend. All data services run locally in
+# containers - there is no cloud dependency. Run from anywhere; paths are resolved
+# relative to this script's location.
+#
+# First-time setup also needs (once the containers are up):
+#   python -m alembic upgrade head
+#   python scripts\seed_db.py
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1
 
@@ -32,7 +36,7 @@ foreach ($port in 3000, 8000) {
     }
 }
 
-# --- 1. Docker Desktop + redis -----------------------------------------
+# --- 1. Docker Desktop + infra containers ------------------------------
 function Test-DockerRunning {
     try {
         docker info *>$null
@@ -62,10 +66,10 @@ if (-not $dockerOk) {
 }
 
 if ($dockerOk) {
-    Write-Host "Starting redis container..." -ForegroundColor Green
-    docker compose -f "$root\infra\docker-compose.yml" up -d redis
+    Write-Host "Starting postgres, qdrant and redis containers..." -ForegroundColor Green
+    docker compose -f "$root\infra\docker-compose.yml" up -d
 } else {
-    Write-Host "Skipping redis - Docker not available." -ForegroundColor Red
+    Write-Host "Skipping infra containers - Docker not available. The API cannot reach Postgres/Qdrant without them." -ForegroundColor Red
 }
 
 # --- 2. FastAPI backend --------------------------------------------------------

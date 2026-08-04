@@ -12,4 +12,5 @@ async def run(state: FraudCheckState) -> dict:
         "confidence_label": result["confidence_label"],
         "evidence": result["evidence"],
     }
-    return {"signals": [signal], "context": {**ctx, "auto_verify_result": result}}
+    # Only this node's own key — `merge_context` folds it into the shared dict.
+    return {"signals": [signal], "context": {"auto_verify_result": result}}

@@ -2,6 +2,7 @@
 Assessment Controller.
 Handles Skill Verification Assessments, Live AI Interviewer Sessions & Reports, and Team Contribution Analytics.
 """
+import asyncio
 import base64
 import uuid
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ from packages.db.models import (
     InterviewReport,
     InterviewSession,
     InterviewTranscriptTurn,
+    Job,
     Submission,
     User,
 )
@@ -127,6 +129,16 @@ async def get_assessment(
     assessment = result.scalar_one_or_none()
     if assessment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="assessment_not_found")
+
+    # `spec` carries hidden test cases in full — without this check any candidate could
+    # read another candidate's assessment (and its answers) by guessing a UUID.
+    # `candidate_id` is nullable for not-yet-assigned reusable templates, which stay
+    # readable; a 404 (not 403) avoids confirming that someone else's ID exists.
+    if assessment.candidate_id is not None:
+        profile = await _get_or_create_profile(db, user)
+        if assessment.candidate_id != profile.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="assessment_not_found")
+
     return assessment
 
 
@@ -148,7 +160,12 @@ async def submit_assessment(
     code_or_answers = dict(body.code_or_answers)
     if assessment.type == "project_analysis":
         repo_full_name = code_or_answers.get("repo_full_name", "")
-        code_or_answers["code"] = _fetch_repo_sample_source(repo_full_name) if repo_full_name else ""
+        # Synchronous PyGithub network call — keep it off the event loop.
+        code_or_answers["code"] = (
+            await asyncio.to_thread(_fetch_repo_sample_source, repo_full_name)
+            if repo_full_name
+            else ""
+        )
 
     initial_state: VerificationState = {
         "assessment_type": assessment.type,
@@ -206,6 +223,30 @@ async def submit_assessment(
     return submission
 
 
+async def _require_submission_access(db: AsyncSession, submission: Submission, user: User) -> None:
+    """Recruiter may read a submission only if they own the job it was assessed for.
+
+    Ownership mirrors `recruitment/router.py:_job_owned_by` — same organization, or the
+    recruiter who posted the job. Assessments with no `job_id` (standalone/template
+    assessments not tied to a posting) have no owning recruiter to check against, so
+    they stay readable rather than becoming unreachable for everyone.
+    """
+    assessment = (
+        await db.execute(select(Assessment).where(Assessment.id == submission.assessment_id))
+    ).scalar_one_or_none()
+    if assessment is None or assessment.job_id is None:
+        return
+
+    job = (await db.execute(select(Job).where(Job.id == assessment.job_id))).scalar_one_or_none()
+    if job is None:
+        return
+    if user.organization_id and job.organization_id == user.organization_id:
+        return
+    if job.posted_by_user_id == user.id:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_job_posting")
+
+
 @router.get("/submissions/{submission_id}", response_model=SubmissionResponse)
 async def get_submission(
     submission_id: uuid.UUID,
@@ -216,6 +257,11 @@ async def get_submission(
     submission = result.scalar_one_or_none()
     if submission is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="submission_not_found")
+
+    # Submissions contain a candidate's full code/answers — scope them to the recruiter
+    # who owns the underlying job posting (org membership or direct ownership), the same
+    # rule `recruitment/router.py:_job_owned_by` applies everywhere else.
+    await _require_submission_access(db, submission, user)
     return submission
 
 

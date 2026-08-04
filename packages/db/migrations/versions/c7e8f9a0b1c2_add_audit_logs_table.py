@@ -23,6 +23,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # `audit_logs` is already created by the base revision 14fb3de7e078
+    # (shared_core_tables), so this migration is a no-op on any database built from
+    # scratch — without this guard `alembic upgrade head` fails with DuplicateTable on
+    # a fresh DB, making first-time setup impossible. It is kept (rather than deleted)
+    # because existing databases have this revision recorded as applied, and it stays
+    # non-empty for any legacy DB whose base predates the table.
+    if sa.inspect(op.get_bind()).has_table('audit_logs'):
+        return
+
     op.create_table(
         'audit_logs',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
@@ -42,4 +51,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table('audit_logs')
+    # Intentionally a no-op: `audit_logs` is owned by the base revision
+    # 14fb3de7e078, which drops it in its own downgrade. Dropping it here would
+    # destroy a table this migration did not create.
+    pass

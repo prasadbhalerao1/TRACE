@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { applyToJob, fetchOpenJobs, fetchMyApplications, type JobResponse } from "@/lib/api";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 // QA_FINDINGS_20260729 Candidate #3: "Apply to jobs" was unreachable — applyToJob()
 // existed in lib/api.ts but no page called it, and the only listing endpoint
@@ -79,7 +80,7 @@ export default function CandidateJobsPage() {
 
       {error && <p className="text-sm text-rose-flagged">{error}</p>}
 
-      {!error && jobs === null && <p className="text-sm text-slate">Loading…</p>}
+      {!error && jobs === null && <CardListSkeleton />}
       {jobs !== null && jobs.length === 0 && (
         <p className="text-sm text-slate">No open jobs right now — check back later.</p>
       )}

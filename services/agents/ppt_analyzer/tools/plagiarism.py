@@ -50,16 +50,26 @@ def find_and_record_matches(
                 vectors_config=qmodels.VectorParams(size=len(embeddings[0]), distance=qmodels.Distance.COSINE),
             )
 
+        # One `search_batch` round trip for the whole deck instead of a sequential
+        # `.search()` per slide — same batching fix as
+        # `recruitment/tools/embeddings.py:batch_candidate_project_relevance`.
+        exclude_self = qmodels.Filter(
+            must_not=[
+                qmodels.FieldCondition(
+                    key="presentation_id", match=qmodels.MatchValue(value=presentation_id)
+                )
+            ]
+        )
+        batch_results = client.search_batch(
+            _QDRANT_COLLECTION,
+            requests=[
+                qmodels.SearchRequest(vector=vector, filter=exclude_self, limit=3, with_payload=True)
+                for vector in embeddings
+            ],
+        )
+
         matches: list[dict] = []
-        for slide, vector in zip(slides, embeddings):
-            hits = client.search(
-                _QDRANT_COLLECTION,
-                query_vector=vector,
-                limit=3,
-                query_filter=qmodels.Filter(
-                    must_not=[qmodels.FieldCondition(key="presentation_id", match=qmodels.MatchValue(value=presentation_id))]
-                ),
-            )
+        for slide, hits in zip(slides, batch_results):
             for hit in hits:
                 if hit.score >= SIMILARITY_THRESHOLD:
                     matches.append(

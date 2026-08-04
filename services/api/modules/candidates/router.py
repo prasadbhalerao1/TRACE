@@ -915,13 +915,18 @@ async def generate_resume(
         ) from exc
 
     try:
-        pdf_bytes = render_resume_pdf(doc_row.content)
+        # WeasyPrint is CPU-heavy native rendering — keep it off the event loop.
+        pdf_bytes = await asyncio.to_thread(render_resume_pdf, doc_row.content)
     except PdfGenerationUnavailable as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     try:
-        public_url, storage_key = upload_file(
-            pdf_bytes, public_id=f"resumes/{profile.id}/{doc_row.id}", resource_type="raw"
+        # cloudinary.uploader.upload is a blocking network call — keep it off the event loop.
+        public_url, storage_key = await asyncio.to_thread(
+            upload_file,
+            pdf_bytes,
+            public_id=f"resumes/{profile.id}/{doc_row.id}",
+            resource_type="raw",
         )
     except StorageUnavailable as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc

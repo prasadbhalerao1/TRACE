@@ -18,4 +18,5 @@ async def run(state: FraudCheckState) -> dict:
     # branch ran) — merged back into context rather than a top-level key, since context
     # isn't reduced/appended like signals (LangGraph's default "last write wins" is fine
     # here, only one node ever writes `context`).
-    return {"signals": [signal], "context": {**ctx, "issuer_lookup_result": result}}
+    # Only this node's own key — `merge_context` folds it into the shared dict.
+    return {"signals": [signal], "context": {"issuer_lookup_result": result}}
