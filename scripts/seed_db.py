@@ -220,18 +220,28 @@ async def seed_vector_database():
 
         from services.api.core.config import get_settings
 
+        from scripts.ensure_qdrant_indexes import COLLECTION_PAYLOAD_INDEXES
+        from services.api.core.qdrant import ensure_payload_indexes
+
         settings = get_settings()
         client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
 
-        collections = ["slide_embeddings", "candidate_skill_vectors"]
-        for col in collections:
-            exists = client.collection_exists(col)
-            if not exists:
+        # Names taken from `COLLECTION_PAYLOAD_INDEXES`, which mirrors what the app
+        # actually reads and writes. This list previously named `slide_embeddings` and
+        # `candidate_skill_vectors` — neither of which any code path uses. The real
+        # collections (`presentation_slide_embeddings`, `candidate_project_embeddings`,
+        # `job_description_embeddings`) were absent, so seeding created two empty
+        # collections nothing queried and pre-created none of the ones that matter.
+        for col, payload_fields in COLLECTION_PAYLOAD_INDEXES.items():
+            if not client.collection_exists(col):
                 client.create_collection(
                     collection_name=col,
                     vectors_config=models.VectorParams(size=1024, distance=models.Distance.COSINE),
                 )
                 logger.info("Created Qdrant vector collection: %s", col)
+            # Indexes the filtered fields up front so the first real search is already
+            # fast, and repairs collections created before payload indexing existed.
+            ensure_payload_indexes(client, col, payload_fields)
 
         logger.info("Qdrant vector database seeding completed successfully!")
     except Exception as e:

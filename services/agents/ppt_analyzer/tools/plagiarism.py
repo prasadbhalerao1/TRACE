@@ -15,6 +15,7 @@ import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
+from services.api.core.qdrant import ensure_payload_indexes
 from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
 
 _QDRANT_COLLECTION = "presentation_slide_embeddings"
@@ -49,10 +50,19 @@ def find_and_record_matches(
                 collection_name=_QDRANT_COLLECTION,
                 vectors_config=qmodels.VectorParams(size=len(embeddings[0]), distance=qmodels.Distance.COSINE),
             )
+            # Every slide's search filters `presentation_id` (must_not, to exclude this
+            # deck's own slides), and this collection grows without bound as decks are
+            # uploaded — the worst combination for an unindexed payload filter.
+            ensure_payload_indexes(client, _QDRANT_COLLECTION, {"presentation_id": "keyword"})
 
-        # One `search_batch` round trip for the whole deck instead of a sequential
-        # `.search()` per slide — same batching fix as
+        # One batched round trip for the whole deck instead of a sequential search per
+        # slide — same batching fix as
         # `recruitment/tools/embeddings.py:batch_candidate_project_relevance`.
+        #
+        # `query_batch_points`, not the removed-in-1.18 `search_batch`: the old call
+        # raised `AttributeError`, which this function's `except Exception: return []`
+        # swallowed — so plagiarism checking reported "no matches" for every deck rather
+        # than surfacing the breakage.
         exclude_self = qmodels.Filter(
             must_not=[
                 qmodels.FieldCondition(
@@ -60,17 +70,17 @@ def find_and_record_matches(
                 )
             ]
         )
-        batch_results = client.search_batch(
+        batch_results = client.query_batch_points(
             _QDRANT_COLLECTION,
             requests=[
-                qmodels.SearchRequest(vector=vector, filter=exclude_self, limit=3, with_payload=True)
+                qmodels.QueryRequest(query=vector, filter=exclude_self, limit=3, with_payload=True)
                 for vector in embeddings
             ],
         )
 
         matches: list[dict] = []
-        for slide, hits in zip(slides, batch_results):
-            for hit in hits:
+        for slide, response in zip(slides, batch_results):
+            for hit in response.points:
                 if hit.score >= SIMILARITY_THRESHOLD:
                     matches.append(
                         {

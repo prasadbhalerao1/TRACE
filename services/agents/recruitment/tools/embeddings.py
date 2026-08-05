@@ -24,7 +24,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from services.api.core.config import get_settings
-from services.api.core.qdrant import QdrantUnavailable
+from services.api.core.qdrant import QdrantUnavailable, ensure_payload_indexes
 from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
 
 JOB_EMBEDDINGS_COLLECTION = "job_description_embeddings"
@@ -61,6 +61,48 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return model.encode(texts).tolist()
 
 
+# Skill vectors are the hottest embedding in the codebase: matching compares every
+# candidate's skill list against every required skill, and the same handful of skill
+# strings ("Python", "React", ...) recur across the entire candidate pool. Without a
+# cache, `skill_overlap` and `talent_score_alignment` each re-encoded a candidate's whole
+# skill list once per required skill, making a single matching run O(candidates x
+# required_skills x skills) encodes of a set that is only ever O(distinct skills) large.
+#
+# Keyed by the *described* text (post-`describe_skill`) so two aliases resolving to the
+# same curated description share one entry. Bounded rather than unbounded: skill names
+# come from user-editable profile/job fields, so an unbounded dict here would be a slow
+# memory leak.
+_MAX_CACHED_SKILL_VECTORS = 4096
+_skill_vector_cache: dict[str, list[float]] = {}
+
+
+def embed_skills(skill_names: list[str]) -> list[list[float]]:
+    """Embeddings for `skill_names`, in order, via each skill's curated description.
+
+    Cache-aware and batched: only the skills not already cached are encoded, and those
+    go through the embedder in a single `encode()` call rather than one call per skill
+    (SentenceTransformer batches internally, so one call over N texts is dramatically
+    faster than N calls over one text each).
+    """
+    from services.agents.recruitment.tools.skill_descriptions import describe_skill
+
+    described = [describe_skill(name) for name in skill_names]
+
+    missing = [text for text in dict.fromkeys(described) if text not in _skill_vector_cache]
+    if missing:
+        for text, vector in zip(missing, embed_texts(missing)):
+            if len(_skill_vector_cache) >= _MAX_CACHED_SKILL_VECTORS:
+                break
+            _skill_vector_cache[text] = vector
+
+    # Any skill dropped by the size cap still needs a vector — encode the stragglers
+    # directly rather than returning a short/misaligned list.
+    uncached = [text for text in described if text not in _skill_vector_cache]
+    fallback = dict(zip(dict.fromkeys(uncached), embed_texts(list(dict.fromkeys(uncached))))) if uncached else {}
+
+    return [_skill_vector_cache.get(text) or fallback[text] for text in described]
+
+
 def upsert_job_embedding(
     client: QdrantClient,
     job_id: str,
@@ -73,6 +115,15 @@ def upsert_job_embedding(
         client.create_collection(
             collection_name=JOB_EMBEDDINGS_COLLECTION,
             vectors_config=qmodels.VectorParams(size=len(job_vector), distance=qmodels.Distance.COSINE),
+        )
+        # Indexed at creation, when the collection is empty and indexing is free. These
+        # are exactly the payload fields doc 02 §6 filters on for combined
+        # payload-filter + vector queries.
+        ensure_payload_indexes(
+            client,
+            JOB_EMBEDDINGS_COLLECTION,
+            {"job_id": "keyword", "location": "keyword", "remote_ok": "bool",
+             "required_skill_tags": "keyword"},
         )
     client.upsert(
         JOB_EMBEDDINGS_COLLECTION,
@@ -118,17 +169,24 @@ def candidate_project_relevance(
 def batch_candidate_project_relevance(
     client: QdrantClient, candidate_ids: list[str], job_vector: list[float]
 ) -> dict[str, float | None]:
-    """Same scoring as `candidate_project_relevance`, but issues one `search_batch` round-trip
-    to Qdrant for the whole candidate pool instead of one sequential `.search()` call per
-    candidate — matching latency no longer scales linearly with candidate-pool size."""
+    """Same scoring as `candidate_project_relevance`, but issues one batched round-trip to
+    Qdrant for the whole candidate pool instead of one sequential search per candidate —
+    matching latency no longer scales linearly with candidate-pool size.
+
+    Uses `query_batch_points`, not the older `search_batch`: qdrant-client 1.18 (the
+    pinned version) **removed** `search_batch`/`search` entirely. Calling them raised
+    `AttributeError`, which `project_relevance`'s except-block caught and turned into a
+    `None` score for every candidate — so this signal was silently absent from match
+    results rather than visibly broken.
+    """
     if not candidate_ids:
         return {}
     if not client.collection_exists(CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION):
         return dict.fromkeys(candidate_ids)
 
     requests = [
-        qmodels.SearchRequest(
-            vector=job_vector,
+        qmodels.QueryRequest(
+            query=job_vector,
             filter=qmodels.Filter(
                 must=[qmodels.FieldCondition(key="candidate_id", match=qmodels.MatchValue(value=cid))]
             ),
@@ -137,10 +195,13 @@ def batch_candidate_project_relevance(
         )
         for cid in candidate_ids
     ]
-    batch_results = client.search_batch(CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION, requests=requests)
+    batch_results = client.query_batch_points(
+        CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION, requests=requests
+    )
 
     scores: dict[str, float | None] = {}
-    for cid, hits in zip(candidate_ids, batch_results):
+    for cid, response in zip(candidate_ids, batch_results):
+        hits = response.points
         if not hits:
             scores[cid] = None
             continue
@@ -156,7 +217,7 @@ def candidate_skill_centroid(candidate_skill_names: list[str]) -> list[float] | 
     search and matching, instead of hard-failing to `None` every time."""
     if not candidate_skill_names:
         return None
-    vectors = np.array(embed_texts(candidate_skill_names))
+    vectors = np.array(embed_skills(candidate_skill_names))
     return vectors.mean(axis=0).tolist()
 
 
@@ -189,10 +250,12 @@ def best_skill_similarity(candidate_skill_names: list[str], required_skill: str)
     bare skill names directly — see SKILL_SIMILARITY_THRESHOLD's docstring for why."""
     if not candidate_skill_names:
         return None, 0.0
-    from services.agents.recruitment.tools.skill_descriptions import describe_skill
 
-    required_vector = embed_texts([describe_skill(required_skill)])[0]
-    candidate_vectors = embed_texts([describe_skill(name) for name in candidate_skill_names])
+    # Both sides go through `embed_skills`' process-level cache: this function is called
+    # once per (candidate, unmatched required skill) pair during matching, and previously
+    # re-encoded the candidate's entire skill list on every one of those calls.
+    required_vector = embed_skills([required_skill])[0]
+    candidate_vectors = embed_skills(candidate_skill_names)
     best_name, best_score = None, 0.0
     for name, vector in zip(candidate_skill_names, candidate_vectors):
         score = cosine_similarity(required_vector, vector)

@@ -24,6 +24,7 @@ from services.agents.recruitment.tools.embeddings import get_embedder
 from services.api.core.config import get_settings
 from services.api.core.llm import LLMUnavailable, generate_structured
 from services.agents.recruitment.tools.embeddings import CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION
+from services.api.core.qdrant import ensure_payload_indexes
 from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
 
 _JUDGMENT_PARAMETERS = {
@@ -186,9 +187,21 @@ def _novelty_score(candidate_id: str, descriptions: list[str]) -> float | None:
                         size=len(embeddings[0]), distance=qmodels.Distance.COSINE
                     ),
                 )
+                # `candidate_id` is the single hottest payload filter in the codebase:
+                # recruitment's `batch_candidate_project_relevance` issues one
+                # candidate_id-filtered search *per candidate in the pool* on every
+                # matching run. Unindexed, each of those degrades toward scanning the
+                # whole collection, so matching cost grew with total corpus size rather
+                # than with pool size.
+                ensure_payload_indexes(qdrant, _QDRANT_COLLECTION, {"candidate_id": "keyword"})
             corpus_count = qdrant.count(_QDRANT_COLLECTION).count
             if corpus_count > 0:
-                hits = qdrant.search(_QDRANT_COLLECTION, query_vector=embeddings[0], limit=5)
+                # `query_points`, not the removed-in-1.18 `.search()` — that call raised
+                # `AttributeError` straight into the `except Exception: pass` below, so
+                # innovation-novelty silently stayed `None` on every Talent Score run.
+                hits = qdrant.query_points(
+                    _QDRANT_COLLECTION, query=embeddings[0], limit=5
+                ).points
                 avg_similarity = sum(h.score for h in hits) / len(hits) if hits else 0.0
                 novelty_score = max(0.0, min(100.0, 100.0 * (1 - avg_similarity)))
             qdrant.upsert(
