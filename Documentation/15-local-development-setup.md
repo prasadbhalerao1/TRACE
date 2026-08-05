@@ -23,13 +23,36 @@ python scripts/seed_db.py
 python scripts/seed_candidates_hardcoded.py    # richer candidate set, optional
 ```
 
-Then start the app servers (or run `scripts/dev-up.ps1` on Windows to open both in
+If you have a Qdrant volume from before payload indexing existed, backfill the indexes
+once (idempotent, safe to re-run — `seed_db.py` already does this for fresh volumes):
+
+```bash
+python scripts/ensure_qdrant_indexes.py
+```
+
+Without them, every filtered vector search — job matching's per-candidate project
+relevance, deck plagiarism — scans the whole collection instead of just the matching
+subset, so search time grows with total corpus size rather than result size.
+
+Then start the app servers (or run `scripts/dev-up.ps1` on Windows to open all three in
 separate PowerShell windows, launching Docker Desktop first if needed):
 
 ```bash
 uvicorn services.api.main:app --reload --port 8000   # from the repo root
+python -m services.workers.runner                    # background job worker
 cd apps/web && npm run dev                           # http://localhost:3000
 ```
+
+The **worker** consumes the Redis job queue that long AI pipelines are dispatched to —
+candidate ingestion, job matching, assessment grading, pitch-deck analysis, and hackathon
+ranking finalization.
+
+Running it is optional. Before queueing, the API checks whether a worker is actually
+alive (arq publishes a TTL'd health key) and runs the job in-process when none is — so
+`uvicorn` on its own still works, it just loses durability across restarts and retries on
+transient failures. Previously, Redis being up with no worker meant jobs were accepted
+and then never executed: the row sat at `"processing"` forever with no error anywhere.
+See §"Background job queue" below.
 
 Seed logins are `alice@example.com` … `evan@example.com`, password `password123`.
 
@@ -117,8 +140,36 @@ services (an LLM provider, and optionally GitHub OAuth / Cloudinary / Langfuse).
 
 ### 3. Redis
 
-- **Variable**: none required beyond the default — Redis runs as a local Docker container
-  (`localhost:6379`) in every setup, not a cloud service. No API key needed.
+- **Variable**: `REDIS_URL` (default `redis://localhost:6379`). Redis runs as a local
+  Docker container in every setup, not a cloud service. No API key needed.
+- **Used for**: the background job queue (arq). See below.
+
+#### Background job queue
+
+Long AI pipelines are dispatched to a Redis-backed [arq](https://arq-docs.helpmanual.io/)
+queue and executed by `python -m services.workers.runner`, a process separate from the
+API. Previously these ran as FastAPI `BackgroundTasks` inside the API process, which meant
+they shared its event loop (one recruiter's matching run stalled every other request),
+were lost silently on restart (rows stuck at `"processing"` with no way to retry), and
+never retried a transient GitHub/LLM/Qdrant failure.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `QUEUE_ENABLED` | `true` | Set `false` to force the in-process fallback. |
+| `QUEUE_JOB_TIMEOUT_SECONDS` | `900` | Per-job ceiling; must exceed the slowest pipeline. |
+| `QUEUE_MAX_TRIES` | `3` | Total attempts, including the first. |
+| `QUEUE_RETRY_BASE_DELAY_SECONDS` | `5` | Backoff base; doubles each attempt. |
+| `QUEUE_RESULT_TTL_SECONDS` | `3600` | How long finished job results stay inspectable. |
+
+Only *transient* failures are retried (timeouts, connection errors, rate limits, upstream
+5xx). Permanent ones — bad input, a missing row, an unsupported file — are recorded on the
+subject row immediately rather than burning the retry budget and delaying the user's error
+message. Enqueues are idempotent per subject (`match:{job_id}`, `ingest:{profile_id}`, …),
+so a double-clicked button coalesces into a single run.
+
+Redis is also the store for the API rate limiter (`RATE_LIMIT_PER_MINUTE`), so the limit
+holds across every API process instead of being multiplied by the worker count. If Redis
+is unreachable the limiter degrades to a bounded per-process counter.
 
 ### 4. Qdrant vector database
 
