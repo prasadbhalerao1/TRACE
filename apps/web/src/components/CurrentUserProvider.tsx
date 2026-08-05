@@ -7,7 +7,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
 
@@ -32,22 +31,29 @@ const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
 export function CurrentUserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isLoaded, isSignedIn, getToken, logout } = useAuth();
-  const [me, setMe] = useState<MeResponse | null | undefined>(undefined);
+  // Holds only what must be fetched. The signed-out value is *derived* below rather than
+  // written by an effect — being signed out is not new information that needs storing,
+  // it's already known from `isSignedIn`, and setting it in an effect meant one extra
+  // render on every sign-out.
+  const [fetchedMe, setFetchedMe] = useState<MeResponse | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const tick = useRef(0);
+  // State, not a ref: a ref mutation doesn't re-render, so listing `tick.current` in the
+  // dependency array below never actually re-ran the effect — React compares the value
+  // captured at the *previous* render, which the mutation had already changed in place.
+  // `reload()` therefore only refetched by accident, when some other dependency happened
+  // to change too. Incrementing state makes the refetch deterministic.
+  const [reloadCount, setReloadCount] = useState(0);
 
   const reload = useCallback(() => {
-    tick.current += 1;
-    setMe(undefined);
+    setReloadCount((n) => n + 1);
+    setFetchedMe(undefined);
     setError(null);
   }, []);
 
   useEffect(() => {
-    if (!isLoaded) return;
-    if (!isSignedIn) {
-      setMe(null);
-      return;
-    }
+    // Signed out: nothing to fetch, and nothing to store — `me` below already resolves
+    // to null from `isSignedIn` alone.
+    if (!isLoaded || !isSignedIn) return;
 
     let cancelled = false;
     (async () => {
@@ -56,7 +62,7 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
         if (!token || cancelled) return;
         const result = await fetchMe(token);
         if (cancelled) return;
-        setMe(result);
+        setFetchedMe(result);
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : "Failed to load account";
@@ -73,8 +79,11 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, isSignedIn, getToken, logout, router, tick.current]);
+  }, [isLoaded, isSignedIn, getToken, logout, router, reloadCount]);
+
+  // undefined = still settling, null = definitively signed out, MeResponse = loaded.
+  const me: MeResponse | null | undefined =
+    isLoaded && !isSignedIn ? null : fetchedMe;
 
   return (
     <CurrentUserContext.Provider value={{ me, isLoaded, isSignedIn, error, reload }}>

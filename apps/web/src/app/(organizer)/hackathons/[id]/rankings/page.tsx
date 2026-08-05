@@ -5,7 +5,12 @@ import { useAuth } from "@/components/AuthProvider";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { finalizeHackathonRankings, fetchHackathonRankings, type RankingResponse } from "@/lib/api";
+import {
+  finalizeHackathonRankings,
+  fetchHackathonRankings,
+  pollRankingStatus,
+  type RankingResponse,
+} from "@/lib/api";
 
 export default function OrganizerRankingsPage() {
   const params = useParams<{ id: string }>();
@@ -50,7 +55,7 @@ export default function OrganizerRankingsPage() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      const result = await finalizeHackathonRankings(token, params.id, {
+      await finalizeHackathonRankings(token, params.id, {
         custom_weights: {
           judge_weight: judgeWeight,
           pitch_weight: pitchWeight,
@@ -58,7 +63,17 @@ export default function OrganizerRankingsPage() {
           novelty_weight: noveltyWeight,
         },
       });
-      setRankings(result.rankings);
+      // Finalization runs in the background now: the POST returns immediately and its
+      // `rankings` are the previous run's, so poll for completion before re-fetching.
+      const status = await pollRankingStatus(token, params.id);
+      if (status.status === "failed") {
+        setError(status.error ?? "Ranking finalization failed");
+      } else if (status.status === "processing") {
+        setError("Still finalizing — this is taking longer than expected. Refresh in a moment to see results.");
+      }
+      if (status.status !== "failed") {
+        setRankings(await fetchHackathonRankings(token, params.id));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to finalize rankings");
     } finally {

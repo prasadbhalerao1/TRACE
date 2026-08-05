@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 
 export default function CandidateInterviewsPage() {
+  const router = useRouter();
   const { getToken } = useAuth();
 
   // Browse state
@@ -88,7 +89,9 @@ export default function CandidateInterviewsPage() {
 
       await grantConsent(token, "ai_interview");
       const result = await startInterview(token, { interview_definition_id: definitionId });
-      window.location.href = `/interview/${result.session_id}`;
+      // router.push, not window.location.href: a full document reload throws away
+      // the whole React tree and re-downloads the bundle just to change route.
+      router.push(`/interview/${result.session_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start interview");
       setStartingSession(null);
@@ -111,7 +114,9 @@ export default function CandidateInterviewsPage() {
       const result = await startInterview(token, {
         topic_plan: practiceQuestions.map((q) => q.topic),
       });
-      window.location.href = `/interview/${result.session_id}`;
+      // router.push, not window.location.href: a full document reload throws away
+      // the whole React tree and re-downloads the bundle just to change route.
+      router.push(`/interview/${result.session_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start practice interview");
       setStartingSession(null);
@@ -170,7 +175,7 @@ export default function CandidateInterviewsPage() {
         <CardHeader>
           <CardTitle className="text-base font-semibold">Practice Interview</CardTitle>
           <CardDescription>
-            Create a custom interview for any role. Describe the position and we'll generate topics.
+            Create a custom interview for any role. Describe the position and we&apos;ll generate topics.
           </CardDescription>
         </CardHeader>
         <CardContent>

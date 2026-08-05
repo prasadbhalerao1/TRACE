@@ -116,6 +116,23 @@ export interface LeetcodeStats {
   latest_rating: number | null;
 }
 
+/** The four outcomes a self-reported hackathon entry can have. Shared by the create
+ * request and the stored entry so the form's select and the rendered list can't drift. */
+export type HackathonExperienceResult = "winner" | "top5" | "finalist" | "participant";
+
+/** A hackathon entry as stored on the profile: the fields the client submits plus the
+ * server-generated `id` and the optional link to a platform-run hackathon. Mirrors the
+ * dict built in `candidates/router.py::add_hackathon_experience`. Typed concretely
+ * rather than as `Record<string, unknown>` so the list rendering is checked. */
+export interface HackathonExperienceEntry {
+  id: string;
+  name: string;
+  result: HackathonExperienceResult;
+  weight: number;
+  date: string;
+  platform_hackathon_id?: string | null;
+}
+
 export interface CandidateProfileResponse {
   id: string;
   user_id: string;
@@ -127,7 +144,7 @@ export interface CandidateProfileResponse {
   skills: { name: string; source?: string; confidence?: number }[] | null;
   experience: Record<string, unknown>[] | null;
   education: Record<string, unknown>[] | null;
-  hackathon_experience?: Record<string, unknown>[] | null;
+  hackathon_experience?: HackathonExperienceEntry[] | null;
   merged_conflicts: { description: string; resolved: boolean }[] | null;
   username: string | null;
   portfolio_published: boolean;
@@ -142,6 +159,11 @@ export interface CandidateProfileResponse {
 export interface IngestionStatusResponse {
   status: "idle" | "processing" | "done" | "failed";
   error: string | null;
+  /** Human-readable phase of the running pipeline ("Analyzing your GitHub
+   * repositories", …), or null when nothing is running. Set by the backend as each
+   * graph node completes, so it reflects real progress rather than elapsed time.
+   * Optional: a backend deployed before this field existed simply omits it. */
+  stage?: string | null;
 }
 
 export async function fetchIngestionStatus(token: string): Promise<IngestionStatusResponse> {
@@ -153,21 +175,62 @@ export async function fetchIngestionStatus(token: string): Promise<IngestionStat
   return res.json();
 }
 
-/** Polls fetchIngestionStatus until it leaves "processing" (or maxAttempts is hit), then
- * resolves with the final status. Ingestion (resume/certificate/GitHub sync parsing) now
- * runs as a backend background task instead of blocking the upload request, so callers
- * that want to know when it's actually done (e.g. to refresh the Talent Score display)
- * need to poll rather than trust the upload response alone. */
+/** Polls fetchIngestionStatus until it leaves "processing", then resolves with the final
+ * status. Ingestion (resume/certificate/GitHub sync parsing) runs as a backend background
+ * task instead of blocking the upload request, so callers that want to know when it's
+ * actually done (e.g. to refresh the Talent Score display) need to poll rather than trust
+ * the upload response alone.
+ *
+ * Two behaviours matter for the GitHub-connect flow specifically:
+ *
+ * - The budget is a wall-clock `timeoutMs`, not an attempt count, and it's generous
+ *   (3 min). A full GitHub repo crawl regularly ran past the old 30x2s = 60s ceiling, at
+ *   which point this resolved with status still "processing" and the caller rendered a
+ *   stale profile that only a manual hard refresh would clear.
+ * - Intervals back off (2s -> 5s cap). Sub-second-value polling every 2s for minutes on
+ *   end was needless load on an endpoint whose answer changes once.
+ *
+ * `onUpdate` lets callers show live progress instead of a frozen screen. A transient
+ * fetch failure is retried rather than rejecting the whole poll — one blip shouldn't
+ * abort a 3-minute wait. Callers must still handle a returned "processing" (genuine
+ * timeout) by showing a "still working, refresh later" state, never a blank/stale one.
+ */
 export async function pollIngestionStatus(
   token: string,
-  { intervalMs = 2000, maxAttempts = 30 }: { intervalMs?: number; maxAttempts?: number } = {},
+  {
+    intervalMs = 2000,
+    maxIntervalMs = 5000,
+    timeoutMs = 180_000,
+    signal,
+    onUpdate,
+  }: {
+    intervalMs?: number;
+    maxIntervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onUpdate?: (status: IngestionStatusResponse) => void;
+  } = {},
 ): Promise<IngestionStatusResponse> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const result = await fetchIngestionStatus(token);
-    if (result.status !== "processing") return result;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  const deadline = Date.now() + timeoutMs;
+  let delay = intervalMs;
+  let last: IngestionStatusResponse = { status: "processing", error: null };
+  let consecutiveErrors = 0;
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) return last;
+    try {
+      last = await fetchIngestionStatus(token);
+      consecutiveErrors = 0;
+      onUpdate?.(last);
+      if (last.status !== "processing") return last;
+    } catch (err) {
+      // Tolerate transient failures; give up only if they persist.
+      if (++consecutiveErrors >= 5) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, maxIntervalMs);
   }
-  return fetchIngestionStatus(token);
+  return last;
 }
 
 export interface BadgeResponse {
@@ -737,19 +800,48 @@ export async function fetchMatchingStatus(token: string, jobId: string): Promise
   return res.json();
 }
 
-/** Same reasoning as pollIngestionStatus — job matching now runs as a backend background
- * task instead of blocking POST /jobs or the ?recompute=true request. */
+/** Same reasoning — and the same wall-clock budget, backoff, and transient-error
+ * tolerance — as pollIngestionStatus. Job matching runs as a backend background task
+ * instead of blocking POST /jobs or the ?recompute=true request, and a large candidate
+ * pool can take minutes, so an attempt-count cap resolved "processing" mid-run and left
+ * the recruiter looking at an empty match list. Callers must treat a returned
+ * "processing" as "still working", not as "no matches". */
 export async function pollMatchingStatus(
   token: string,
   jobId: string,
-  { intervalMs = 2000, maxAttempts = 30 }: { intervalMs?: number; maxAttempts?: number } = {},
+  {
+    intervalMs = 2000,
+    maxIntervalMs = 5000,
+    timeoutMs = 180_000,
+    signal,
+    onUpdate,
+  }: {
+    intervalMs?: number;
+    maxIntervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onUpdate?: (status: MatchingStatusResponse) => void;
+  } = {},
 ): Promise<MatchingStatusResponse> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const result = await fetchMatchingStatus(token, jobId);
-    if (result.status !== "processing") return result;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  const deadline = Date.now() + timeoutMs;
+  let delay = intervalMs;
+  let last: MatchingStatusResponse = { status: "processing", error: null };
+  let consecutiveErrors = 0;
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) return last;
+    try {
+      last = await fetchMatchingStatus(token, jobId);
+      consecutiveErrors = 0;
+      onUpdate?.(last);
+      if (last.status !== "processing") return last;
+    } catch (err) {
+      if (++consecutiveErrors >= 5) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, maxIntervalMs);
   }
-  return fetchMatchingStatus(token, jobId);
+  return last;
 }
 
 export interface JobCreateRequest {
@@ -1006,6 +1098,10 @@ export interface SubmissionResponse {
   static_analysis: StaticAnalysisReport | null;
   llm_review: CodeReviewRubric | null;
   score: number | null;
+  /** "processing" until backend grading (static analysis + LLM review) finishes. A null
+   * `score` while processing means "not graded yet" — never render it as a zero. */
+  grading_status: "processing" | "done" | "failed";
+  grading_error: string | null;
   submitted_at: string;
 }
 
@@ -1067,6 +1163,51 @@ export function submitAssessment(
 
 export function fetchSubmission(token: string, submissionId: string): Promise<SubmissionResponse> {
   return assessmentJson(`/submissions/${submissionId}`, token);
+}
+
+/** Polls a submission until backend grading finishes. `submitAssessment` now returns as
+ * soon as the row is stored (grading — repo fetch, static analysis, LLM code review —
+ * runs in a background task), so the score/review fields arrive here rather than in the
+ * submit response. Same budget/backoff/error-tolerance contract as pollIngestionStatus. */
+export async function pollSubmissionGrading(
+  token: string,
+  submissionId: string,
+  {
+    intervalMs = 2000,
+    maxIntervalMs = 5000,
+    timeoutMs = 180_000,
+    signal,
+    onUpdate,
+  }: {
+    intervalMs?: number;
+    maxIntervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onUpdate?: (submission: SubmissionResponse) => void;
+  } = {},
+): Promise<SubmissionResponse> {
+  const deadline = Date.now() + timeoutMs;
+  let delay = intervalMs;
+  let last = await fetchSubmission(token, submissionId);
+  let consecutiveErrors = 0;
+
+  onUpdate?.(last);
+  if (last.grading_status !== "processing") return last;
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) return last;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, maxIntervalMs);
+    try {
+      last = await fetchSubmission(token, submissionId);
+      consecutiveErrors = 0;
+      onUpdate?.(last);
+      if (last.grading_status !== "processing") return last;
+    } catch (err) {
+      if (++consecutiveErrors >= 5) throw err;
+    }
+  }
+  return last;
 }
 
 // --- FR-2: AI Interview Agent ---
@@ -1463,7 +1604,63 @@ export function submitJudgeScore(
 
 export interface FinalizeRankingsResponse {
   hackathon_id: string;
+  /** Always "processing" — finalization runs in the background. `rankings` below is the
+   * previously-persisted set (empty on a first run), not this run's result. */
+  ranking_status: string;
   rankings: RankingResponse[];
+}
+
+export interface RankingStatusResponse {
+  status: "idle" | "processing" | "done" | "failed";
+  error: string | null;
+}
+
+export function fetchRankingStatus(
+  token: string,
+  hackathonId: string,
+): Promise<RankingStatusResponse> {
+  return hackathonJson(`/hackathons/${hackathonId}/rankings/status`, token);
+}
+
+/** Polls ranking finalization to completion. Same budget/backoff/error-tolerance
+ * contract as pollIngestionStatus — a large event's repo verification and novelty
+ * search can run for minutes. */
+export async function pollRankingStatus(
+  token: string,
+  hackathonId: string,
+  {
+    intervalMs = 2000,
+    maxIntervalMs = 5000,
+    timeoutMs = 300_000,
+    signal,
+    onUpdate,
+  }: {
+    intervalMs?: number;
+    maxIntervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onUpdate?: (status: RankingStatusResponse) => void;
+  } = {},
+): Promise<RankingStatusResponse> {
+  const deadline = Date.now() + timeoutMs;
+  let delay = intervalMs;
+  let last: RankingStatusResponse = { status: "processing", error: null };
+  let consecutiveErrors = 0;
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) return last;
+    try {
+      last = await fetchRankingStatus(token, hackathonId);
+      consecutiveErrors = 0;
+      onUpdate?.(last);
+      if (last.status !== "processing") return last;
+    } catch (err) {
+      if (++consecutiveErrors >= 5) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, maxIntervalMs);
+  }
+  return last;
 }
 
 export function finalizeHackathonRankings(
@@ -1855,7 +2052,7 @@ export async function updateProfile(token: string, body: ProfileUpdateRequest): 
 
 export interface HackathonExperienceRequest {
   name: string;
-  result: "winner" | "top5" | "finalist" | "participant";
+  result: HackathonExperienceResult;
   weight: number;
   date: string;
 }

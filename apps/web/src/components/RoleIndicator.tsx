@@ -1,7 +1,6 @@
 "use client";
 
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import { useEffect, useState } from "react";
 
 const ROLE_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   candidate: { bg: "bg-blue-100", text: "text-blue-700", label: "Candidate" },
@@ -15,13 +14,12 @@ export function RoleIndicator() {
   // Previously read `useAuth().user` — a field AuthContextValue does not define, so this
   // was a type error that always rendered nothing. The role lives on the /me payload.
   const { me } = useCurrentUser();
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted || !me?.profile) return null;
+  // No mount guard needed: `me` starts as `undefined` and is only populated by a
+  // client-side fetch, so the server and first client render both produce `null` here.
+  // The previous `mounted` state existed to avoid a hydration mismatch that this
+  // component could not actually have, and cost an extra render on every page.
+  if (!me?.profile) return null;
 
   const role = me.profile.role || "candidate";
   const colors = ROLE_COLORS[role] || ROLE_COLORS.candidate;

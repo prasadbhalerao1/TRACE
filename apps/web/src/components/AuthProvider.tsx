@@ -27,9 +27,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isSignedIn, setIsSignedIn] = useState(false);
 
   useEffect(() => {
+    // Reading localStorage is exactly the "subscribe to an external system" case the
+    // rule carves out: it does not exist during SSR, so this value cannot be computed in
+    // the initial state without breaking hydration. Runs once on mount with an empty
+    // dependency list, so there is no cascade to worry about.
     const token = localStorage.getItem("access_token");
+    /* eslint-disable react-hooks/set-state-in-effect */
     setIsSignedIn(!!token);
     setIsLoaded(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   const getToken = async (): Promise<string | null> => {

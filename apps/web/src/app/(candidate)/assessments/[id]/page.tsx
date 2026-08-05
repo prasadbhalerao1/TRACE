@@ -9,6 +9,7 @@ import { CodeEditor } from "@/components/CodeEditor";
 import { MCQForm } from "@/components/MCQForm";
 import {
   fetchAssessment,
+  pollSubmissionGrading,
   submitAssessment,
   type AssessmentResponse,
   type CodingAssessmentSpec,
@@ -54,20 +55,35 @@ export default function CandidateAssessmentPage() {
       const token = await getToken();
       if (!token) throw new Error("No session token");
 
+      let result: SubmissionResponse | null = null;
       if (assessment.type === "coding") {
         const spec = assessment.spec as CodingAssessmentSpec;
         const results = await runHiddenTests(code, spec.hidden_tests);
         setOutput(results);
-        const result = await submitAssessment(token, assessment.id, {
+        result = await submitAssessment(token, assessment.id, {
           code_or_answers: { code },
           test_results: results,
         });
-        setSubmission(result);
       } else if (assessment.type === "mcq") {
-        const result = await submitAssessment(token, assessment.id, {
+        result = await submitAssessment(token, assessment.id, {
           code_or_answers: { answers },
         });
+      }
+
+      if (result) {
+        // The submit response now returns as soon as the row is stored; grading (static
+        // analysis + LLM review) finishes in the background, so poll for the score
+        // instead of rendering the not-yet-graded null as a dash forever.
         setSubmission(result);
+        if (result.grading_status === "processing") {
+          const graded = await pollSubmissionGrading(token, result.id, {
+            onUpdate: setSubmission,
+          });
+          setSubmission(graded);
+          if (graded.grading_status === "failed") {
+            setError(graded.grading_error ?? "Grading failed");
+          }
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed");
@@ -148,9 +164,19 @@ export default function CandidateAssessmentPage() {
               )}
               {submission ? (
                 <div className="text-sm space-y-1">
-                  <p className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    Score: {submission.score?.toFixed(0) ?? "—"}/100
-                  </p>
+                  {submission.grading_status === "processing" ? (
+                    <p className="font-semibold text-slate animate-pulse">
+                      Submitted — grading your answer…
+                    </p>
+                  ) : submission.grading_status === "failed" ? (
+                    <p className="font-semibold text-rose-flagged">
+                      Grading failed. Your submission was saved.
+                    </p>
+                  ) : (
+                    <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      Score: {submission.score?.toFixed(0) ?? "—"}/100
+                    </p>
+                  )}
                   {submission.test_results?.rationale && (
                     <p className="text-xs text-slate">{submission.test_results.rationale}</p>
                   )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -67,10 +68,10 @@ export default function SignInPage() {
             </Button>
 
             <p className="text-center text-sm text-zinc-600">
-              Don't have an account?{" "}
-              <a href="/sign-up" className="font-semibold hover:underline">
+              Don&apos;t have an account?{" "}
+              <Link href="/sign-up" className="font-semibold hover:underline">
                 Sign up
-              </a>
+              </Link>
             </p>
           </form>
         </CardContent>

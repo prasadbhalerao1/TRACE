@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ConflictResolver } from "@/components/ConflictResolver";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
+import { INGESTION_STAGES, StageProgress } from "@/components/common/StageProgress";
 import {
   connectLeetcode,
   fetchDashboard,
@@ -22,6 +23,7 @@ import {
   addHackathonExperience,
   removeHackathonExperience,
   type CandidateProfileResponse,
+  type HackathonExperienceResult,
 } from "@/lib/api";
 
 export default function ProfileEditPage() {
@@ -33,6 +35,10 @@ export default function ProfileEditPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Which ingestion phase the backend reports it is currently running. Drives the
+  // stepwise progress list so a multi-minute GitHub crawl shows visible movement
+  // instead of one frozen "analyzing…" line.
+  const [ingestionStage, setIngestionStage] = useState<string | null>(null);
   const [leetcodeInput, setLeetcodeInput] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
   const resumeInputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +52,8 @@ export default function ProfileEditPage() {
   const [degree, setDegree] = useState("");
 
   const [hackathonName, setHackathonName] = useState("");
-  const [hackathonResult, setHackathonResult] = useState<"winner" | "top5" | "finalist" | "participant">("participant");
+  const [hackathonResult, setHackathonResult] =
+    useState<HackathonExperienceResult>("participant");
   const [hackathonWeight, setHackathonWeight] = useState(3);
   const [hackathonDate, setHackathonDate] = useState("");
   const [showHackathonForm, setShowHackathonForm] = useState(false);
@@ -105,22 +112,45 @@ export default function ProfileEditPage() {
     let cancelled = false;
     (async () => {
       if (githubStatus === "connected") {
-        if (!cancelled) setNotice("GitHub connected — processing in the background.");
+        if (!cancelled) {
+          setNotice("GitHub connected — analyzing your repositories…");
+        }
         try {
           const token = await getToken();
           if (token) {
-            const result = await pollIngestionStatus(token);
+            // Refresh what we already have right away so the page renders the connected
+            // profile instead of sitting blank for the whole crawl.
+            await reload().catch(() => undefined);
+
+            const result = await pollIngestionStatus(token, {
+              onUpdate: (status) => {
+                if (!cancelled && status.status === "processing") {
+                  setNotice("GitHub connected — analyzing your repositories…");
+                  setIngestionStage(status.stage ?? null);
+                }
+              },
+            });
             if (!cancelled) {
-              setNotice(
-                result.status === "failed"
-                  ? null
-                  : "GitHub connected — Talent Score updated.",
-              );
-              if (result.status === "failed") setError(result.error ?? "GitHub sync failed");
+              setIngestionStage(null);
+              if (result.status === "failed") {
+                setNotice(null);
+                setError(result.error ?? "GitHub sync failed");
+              } else if (result.status === "processing") {
+                // Genuine timeout on a very large account — say so explicitly rather
+                // than showing a stale profile that looks like nothing happened.
+                setNotice(
+                  "GitHub connected — still analyzing your repositories. Your Talent Score will update automatically; you can keep using the app.",
+                );
+              } else {
+                setNotice("GitHub connected — Talent Score updated.");
+              }
             }
           }
         } catch {
           // best-effort — the dashboard's own load will still reflect eventual state
+        } finally {
+          // Never leave a half-finished step list on screen if polling threw.
+          if (!cancelled) setIngestionStage(null);
         }
         await reload().catch(() => undefined);
       } else if (!cancelled) {
@@ -179,9 +209,15 @@ export default function ProfileEditPage() {
       // Ingestion (parsing + Talent Score recompute) now runs in the background —
       // the upload response returns immediately with ingestion_status: "processing".
       setNotice("Resume uploaded — processing in the background.");
-      const result = await pollIngestionStatus(token);
+      // Show the stored resume immediately; don't gate the whole page on the recompute.
+      await reload().catch(() => undefined);
+      const result = await pollIngestionStatus(token, {
+        onUpdate: (status) => setIngestionStage(status.stage ?? null),
+      });
       if (result.status === "failed") {
         setError(result.error ?? "Resume processing failed");
+      } else if (result.status === "processing") {
+        setNotice("Resume uploaded — still processing. Your Talent Score will update shortly.");
       } else {
         setNotice("Resume processed — Talent Score updated.");
       }
@@ -190,6 +226,7 @@ export default function ProfileEditPage() {
       setError(err instanceof Error ? err.message : "Resume upload failed");
     } finally {
       setBusy(null);
+      setIngestionStage(null);
       e.target.value = "";
     }
   }
@@ -204,9 +241,14 @@ export default function ProfileEditPage() {
       if (!token) throw new Error("No session token");
       await uploadCertificate(token, file);
       setNotice("Certificate uploaded — processing in the background.");
-      const result = await pollIngestionStatus(token);
+      await reload().catch(() => undefined);
+      const result = await pollIngestionStatus(token, {
+        onUpdate: (status) => setIngestionStage(status.stage ?? null),
+      });
       if (result.status === "failed") {
         setError(result.error ?? "Certificate processing failed");
+      } else if (result.status === "processing") {
+        setNotice("Certificate uploaded — still scanning. Results will appear shortly.");
       } else {
         setNotice("Certificate processed and OCR-scanned.");
       }
@@ -215,6 +257,7 @@ export default function ProfileEditPage() {
       setError(err instanceof Error ? err.message : "Certificate upload failed");
     } finally {
       setBusy(null);
+      setIngestionStage(null);
       e.target.value = "";
     }
   }
@@ -322,6 +365,13 @@ export default function ProfileEditPage() {
         <CardContent className="space-y-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
           {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
+          {ingestionStage && (
+            <StageProgress
+              stages={INGESTION_STAGES}
+              currentStage={ingestionStage}
+              className="rounded-md border bg-muted/30 p-3"
+            />
+          )}
 
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -482,7 +532,7 @@ export default function ProfileEditPage() {
           {/* List of existing hackathon entries */}
           {profile.hackathon_experience && profile.hackathon_experience.length > 0 && (
             <div className="space-y-2">
-              {profile.hackathon_experience.map((entry: any) => (
+              {profile.hackathon_experience.map((entry) => (
                 <div
                   key={entry.id}
                   className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 bg-zinc-50/50 p-3"
@@ -539,7 +589,9 @@ export default function ProfileEditPage() {
                   <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Result</label>
                   <select
                     value={hackathonResult}
-                    onChange={(e) => setHackathonResult(e.target.value as any)}
+                    onChange={(e) =>
+                      setHackathonResult(e.target.value as HackathonExperienceResult)
+                    }
                     className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/30"
                   >
                     <option value="winner">🏆 Winner</option>

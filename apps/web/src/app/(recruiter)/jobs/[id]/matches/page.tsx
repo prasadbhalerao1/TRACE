@@ -35,8 +35,14 @@ export default function RecruiterMatchesPage() {
   // was still running in the background (or had failed outright). Poll the job's matching
   // status and re-fetch the match list once it finishes.
   const [matchingStatus, setMatchingStatus] = useState<MatchingStatusResponse | null>(null);
+  // `retry` gets a new identity every render, so depending on it directly would restart
+  // the poll loop constantly. Held in a ref instead — written in an effect rather than
+  // during render, since a render-phase ref write is not safe under concurrent rendering
+  // (React may render without committing, leaving the ref pointing at a discarded pass).
   const retryRef = useRef(retry);
-  retryRef.current = retry;
+  useEffect(() => {
+    retryRef.current = retry;
+  }, [retry]);
 
   useEffect(() => {
     let cancelled = false;
