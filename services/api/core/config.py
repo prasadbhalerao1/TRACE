@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     # matching/copilot/dashboard requests run concurrently against a remote pooled
     # Postgres (Neon); each round-trip pays real network latency, so starving the pool
     # queues requests behind each other instead of running them in parallel.
+    #
+    # 20 + 20 overflow is ample now that no request holds a connection across a slow AI
+    # call: handlers that invoke a LangGraph/LLM pipeline wrap it in
+    # `db.without_db_connection()`, returning the connection to the pool for the seconds
+    # or minutes that call takes. Before that, twenty concurrent AI interviews pinned all
+    # twenty connections and every other endpoint — including trivial reads — blocked for
+    # up to `db_pool_timeout_seconds`. Raise these only in response to observed
+    # QueuePool timeout errors; a bigger pool is not a substitute for releasing
+    # connections, it just delays the same exhaustion.
     db_pool_size: int = 20
     db_max_overflow: int = 20
     db_pool_timeout_seconds: int = 30
@@ -75,6 +84,31 @@ class Settings(BaseSettings):
     # In-memory rate-limit middleware (services/api/core/rate_limit.py). Hackathon-demo
     # scale (<=20 users) — no Redis dependency added for this; see .agents/decisions.md.
     rate_limit_per_minute: int = 60
+
+    # Durable background-job queue (services/api/core/queue.py, services/workers/runner.py).
+    # Long AI pipelines (candidate ingestion, job matching, assessment grading, deck
+    # analysis, hackathon ranking) used to run as FastAPI BackgroundTasks inside the API
+    # process: they shared its event loop and were lost silently on restart/deploy,
+    # leaving rows stuck in "processing" forever with no retry.
+    #
+    # When `queue_enabled` is false, or Redis is simply unreachable, every enqueue falls
+    # back to the in-process BackgroundTasks path so local development and the demo work
+    # with no extra moving parts — the queue is an upgrade, never a hard requirement.
+    redis_url: str = "redis://localhost:6379"
+    queue_enabled: bool = True
+    # Per-job ceiling. Must exceed the slowest pipeline (a large GitHub crawl or a
+    # multi-team hackathon finalization), or arq cancels work that would have succeeded.
+    queue_job_timeout_seconds: int = 900
+    # Total attempts per job, including the first. Note that arq only retries a job when
+    # the task raises `arq.worker.Retry` (or is cancelled) — an ordinary exception is
+    # recorded as failed and never re-run. `services/workers/tasks.py` translates the
+    # transient infrastructure failures worth retrying into `Retry`; permanent ones
+    # (bad input, missing row) deliberately stay non-retryable.
+    queue_max_tries: int = 3
+    # Base delay for the retry backoff in `services/workers/tasks.py` (doubled per try).
+    queue_retry_base_delay_seconds: int = 5
+    # How long completed job results stay in Redis for status inspection.
+    queue_result_ttl_seconds: int = 3600
 
 
 

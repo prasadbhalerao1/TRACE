@@ -87,7 +87,8 @@ from services.agents.candidate_intelligence.tools.role_taxonomy import ROLE_SKIL
 from services.agents.candidate_intelligence.tools.roadmap import RoadmapGenerationUnavailable
 from services.agents.candidate_intelligence.tools.skill_gap import CareerGuidanceUnavailable
 from services.api.core.config import get_settings
-from services.api.core.db import get_db
+from services.api.core.db import get_db, without_db_connection
+from services.api.core.queue import TASK_RUN_INGESTION, enqueue
 from services.api.core.rbac import require_role
 from services.api.core.storage import StorageUnavailable, upload_file
 from services.api.core.tracing import start_agent_trace
@@ -179,7 +180,15 @@ async def add_hackathon_experience(
     await db.refresh(profile)
 
     # Trigger background rescore
-    background_tasks.add_task(_run_ingestion_background, str(profile.id), {})
+    await enqueue(
+        TASK_RUN_INGESTION,
+        profile.id,
+        {},
+        None,
+        background_tasks=background_tasks,
+        fallback=_run_ingestion_background,
+        job_id=f"ingest:{profile.id}",
+    )
 
     return profile
 
@@ -207,7 +216,15 @@ async def remove_hackathon_experience(
     await db.refresh(profile)
 
     # Trigger background rescore
-    background_tasks.add_task(_run_ingestion_background, str(profile.id), {})
+    await enqueue(
+        TASK_RUN_INGESTION,
+        profile.id,
+        {},
+        None,
+        background_tasks=background_tasks,
+        fallback=_run_ingestion_background,
+        job_id=f"ingest:{profile.id}",
+    )
 
     return profile
 
@@ -237,6 +254,65 @@ async def _require_consent(db: AsyncSession, user_id, consent_type: str) -> None
         )
 
 
+# Maps a graph node name to the phrase shown to the candidate while it runs. Keys must
+# match the node names registered in `candidate_intelligence/graph.py`; an unmapped node
+# simply leaves the stage unchanged rather than showing a raw identifier.
+_INGESTION_STAGE_LABELS = {
+    "resume_parser": "Reading your resume",
+    "github_analysis": "Analyzing your GitHub repositories",
+    "certificate_ocr": "Reading your certificates",
+    "profile_merge": "Merging your profile",
+    "talent_scoring": "Computing your Talent Score",
+    "badge_assignment": "Awarding badges",
+}
+
+
+async def _ainvoke_with_stage_updates(
+    db: AsyncSession, profile: CandidateProfile, initial_state: CandidateProfileState
+) -> dict:
+    """Runs the ingestion graph, recording each finished node as `ingestion_stage`.
+
+    `astream(stream_mode="updates")` yields one event per node as it completes, so the
+    stage the poller reports is real observed progress, not a timer-driven animation that
+    could claim "computing Talent Score" while the run is actually stuck on GitHub.
+
+    Each write is its own committed transaction, because the point is for a *different*
+    request (the frontend's status poll) to read it while this one is still running —
+    an uncommitted value would be invisible until the whole ingestion finished, which is
+    precisely the problem this solves.
+
+    Stage bookkeeping must never break ingestion: a failure to persist the label is
+    logged and swallowed, and the graph result is returned regardless.
+
+    `stream_mode=["updates", "values"]` is deliberate. "updates" carries the node names
+    needed for progress; "values" carries the full reduced state after each step, and
+    that is what the return value is taken from. Accumulating the "updates" deltas by
+    hand would be wrong twice over: it would drop router-supplied inputs no node rewrites
+    (the population lists, `hackathon_*`), and it would overwrite `conflicts` — an
+    `operator.add`-reduced channel whose deltas are per-node fragments — instead of
+    concatenating them, silently losing merge conflicts.
+    """
+    final_state: dict = {}
+    async for stream_mode, chunk in get_graph().astream(
+        initial_state, stream_mode=["updates", "values"]
+    ):
+        if stream_mode == "values":
+            # Full reduced state after this step; the last one is the graph's result.
+            final_state = chunk
+            continue
+        for node_name in chunk:
+            label = _INGESTION_STAGE_LABELS.get(node_name)
+            if label is None:
+                continue
+            try:
+                profile.ingestion_stage = label
+                await db.commit()
+            except Exception:  # noqa: BLE001 - progress display must not fail ingestion
+                logger.debug("Could not persist ingestion stage %r", label, exc_info=True)
+                await db.rollback()
+    return final_state
+
+
 async def _run_ingestion_and_persist(
     db: AsyncSession, profile: CandidateProfile, state_overrides: dict
 ) -> CandidateProfile:
@@ -255,20 +331,25 @@ async def _run_ingestion_and_persist(
     hackathon_platform_results = []
     if profile.id:
         team_members = await db.execute(
-            select(HackathonTeamMember).where(HackathonTeamMember.candidate_id == profile.id)
+            select(HackathonTeamMember.team_id).where(HackathonTeamMember.candidate_id == profile.id)
         )
-        for member in team_members.scalars().all():
+        team_ids = list(team_members.scalars().all())
+        if team_ids:
+            # Single IN query rather than one SELECT per team membership — this runs on
+            # every ingestion (resume upload, certificate upload, GitHub connect, and
+            # every hackathon-experience edit), so the N+1 landed directly on the
+            # user-visible "processing" wait.
             rankings = await db.execute(
-                select(HackathonRanking).where(
-                    (HackathonRanking.team_id == member.team_id)
-                )
+                select(HackathonRanking).where(HackathonRanking.team_id.in_(team_ids))
             )
-            for ranking in rankings.scalars().all():
-                hackathon_platform_results.append({
+            hackathon_platform_results = [
+                {
                     "rank": ranking.rank,
                     "composite_score": ranking.composite_score,
                     "hackathon_id": str(ranking.hackathon_id),
-                })
+                }
+                for ranking in rankings.scalars().all()
+            ]
 
     hackathon_self_reported = profile.hackathon_experience or []
 
@@ -315,7 +396,7 @@ async def _run_ingestion_and_persist(
         user_id=str(profile.user_id),
         tags=["candidate-intelligence", "ingestion"],
     ) as trace:
-        result_state = await get_graph().ainvoke(initial_state)
+        result_state = await _ainvoke_with_stage_updates(db, profile, initial_state)
         trace.update(output={"overall_score": result_state.get("overall_score")})
 
     merged = result_state["merged_profile"] or {}
@@ -447,10 +528,14 @@ async def _run_ingestion_background(
             await _run_ingestion_and_persist(bg_db, profile, state_overrides)
             profile.ingestion_status = "done"
             profile.ingestion_error = None
+            # Cleared on every terminal outcome so a finished run never leaves a stale
+            # "Analyzing your GitHub repositories" behind for the next poll to show.
+            profile.ingestion_stage = None
         except Exception as exc:  # noqa: BLE001 - surfaced via ingestion_error, never crashes the worker
             logger.exception("Background ingestion failed for candidate %s", profile_id)
             profile.ingestion_status = "failed"
             profile.ingestion_error = str(exc)[:2000]
+            profile.ingestion_stage = None
             await bg_db.commit()
             return
 
@@ -509,10 +594,14 @@ async def ingest_resume(
     profile.ingestion_error = None
     await db.commit()
     await db.refresh(profile)
-    background_tasks.add_task(
-        _run_ingestion_background,
+    await enqueue(
+        TASK_RUN_INGESTION,
         profile.id,
         {"raw_resume_bytes": file_bytes, "raw_resume_content_type": file.content_type},
+        None,
+        background_tasks=background_tasks,
+        fallback=_run_ingestion_background,
+        job_id=f"ingest:{profile.id}",
     )
     return profile
 
@@ -530,7 +619,15 @@ async def ingest_certificate(
     profile.ingestion_error = None
     await db.commit()
     await db.refresh(profile)
-    background_tasks.add_task(_run_ingestion_background, profile.id, {"certificate_file_bytes": file_bytes})
+    await enqueue(
+        TASK_RUN_INGESTION,
+        profile.id,
+        {"certificate_file_bytes": file_bytes},
+        None,
+        background_tasks=background_tasks,
+        fallback=_run_ingestion_background,
+        job_id=f"ingest:{profile.id}",
+    )
     return profile
 
 
@@ -540,7 +637,11 @@ async def get_ingestion_status(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     profile = await _get_or_create_profile(db, user)
-    return {"status": profile.ingestion_status, "error": profile.ingestion_error}
+    return {
+        "status": profile.ingestion_status,
+        "error": profile.ingestion_error,
+        "stage": profile.ingestion_stage,
+    }
 
 
 @router.get("/github/oauth-url")
@@ -605,11 +706,14 @@ async def github_oauth_callback(
     profile.ingestion_error = None
     await db.commit()
 
-    background_tasks.add_task(
-        _run_ingestion_background,
+    await enqueue(
+        TASK_RUN_INGESTION,
         profile.id,
         {"github_username": github_username, "github_access_token": access_token},
         access_token,
+        background_tasks=background_tasks,
+        fallback=_run_ingestion_background,
+        job_id=f"ingest:{profile.id}",
     )
 
     return RedirectResponse(f"{settings.frontend_url}/profile/edit?github=connected")
@@ -1129,7 +1233,9 @@ async def get_my_career_guidance(
         tags=["candidate-intelligence", "career-guidance"],
     ) as trace:
         try:
-            result_state = await get_career_guidance_graph().ainvoke(initial_state)
+            result_state = await without_db_connection(
+                db, lambda: get_career_guidance_graph().ainvoke(initial_state)
+            )
         except (CareerGuidanceUnavailable, RoadmapGenerationUnavailable) as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         trace.update(output={"resolved_target_role": result_state.get("resolved_target_role")})

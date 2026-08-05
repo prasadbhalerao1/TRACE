@@ -2,10 +2,12 @@
 Hackathon Controller.
 Handles Hackathon Creation, Team Ingestion (CSV, Webhook, Direct), Submissions, Judging Queue, Finalize Rankings, and Top Performers Feed.
 """
+import logging
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,10 +52,13 @@ from services.agents.hackathon.graph import get_hackathon_ranking_graph
 from services.agents.hackathon.state import HackathonRankingState
 from services.agents.hackathon.tools.normalization import NormalizationUnavailable, normalize_webhook_payload
 from services.api.core.config import get_settings
-from services.api.core.db import get_db
+from services.api.core.db import async_session, get_db
+from services.api.core.queue import TASK_FINALIZE_RANKINGS, enqueue
 from services.api.core.event_consumer import get_matching_top_performers_for_recruiter
 from services.api.core.rbac import require_role
 from services.api.core.tracing import start_agent_trace
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Hackathons & Top Performers"])
 
@@ -88,15 +93,26 @@ async def _upsert_team(db: AsyncSession, hackathon_id: uuid.UUID, team_input: Te
         await db.delete(m)
     await db.flush()
 
+    # Resolve every member's GitHub username to a candidate id in one IN-query instead of
+    # one SELECT per member. This helper runs once per team during a roster import, so the
+    # per-member query made import cost O(teams x members) round trips.
+    usernames = [m.github_username for m in team_input.members if m.github_username]
+    profile_ids_by_username: dict[str, uuid.UUID] = {}
+    if usernames:
+        profile_rows = await db.execute(
+            select(CandidateProfile.github_username, CandidateProfile.id).where(
+                CandidateProfile.github_username.in_(usernames)
+            )
+        )
+        profile_ids_by_username = {username: pid for username, pid in profile_rows.all()}
+
     members_created = 0
     for member_input in team_input.members:
-        candidate_id = None
-        if member_input.github_username:
-            profile_result = await db.execute(
-                select(CandidateProfile).where(CandidateProfile.github_username == member_input.github_username)
-            )
-            profile = profile_result.scalar_one_or_none()
-            candidate_id = profile.id if profile else None
+        candidate_id = (
+            profile_ids_by_username.get(member_input.github_username)
+            if member_input.github_username
+            else None
+        )
         db.add(
             HackathonTeamMember(
                 team_id=team.id,
@@ -345,56 +361,152 @@ async def _resolve_repo_candidate(db: AsyncSession, member_candidate_ids: list[u
 @router.post("/hackathons/{hackathon_id}/rankings/finalize", response_model=FinalizeRankingsResponse)
 async def finalize_rankings(
     hackathon_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     body: FinalizeRankingsRequest | None = None,
     user: User = Depends(require_role("organizer")),
     db: AsyncSession = Depends(get_db),
 ) -> FinalizeRankingsResponse:
+    """Kicks off finalization in the background and returns the currently-persisted
+    rankings immediately.
+
+    The pipeline (per-team repo verification against GitHub, cross-event novelty search,
+    composite scoring) previously ran inline here, holding the organizer's request open
+    for the entire run and scaling linearly with team count — the "Finalizing…" button
+    just sat there. Clients poll `GET /hackathons/{id}/rankings/status` and re-fetch
+    `GET /hackathons/{id}/rankings` once it leaves "processing". Same pattern as job
+    matching (`Job.matching_status`) and presentation upload.
+    """
     hackathon = await _get_hackathon_or_404(db, hackathon_id)
+    if hackathon.organizer_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_hackathon")
 
     teams_result = await db.execute(select(HackathonTeam).where(HackathonTeam.hackathon_id == hackathon_id))
     teams = list(teams_result.scalars().all())
     if not teams:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no_teams_to_rank")
 
+    if hackathon.ranking_status == "processing":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="ranking_already_in_progress")
+
+    hackathon.ranking_status = "processing"
+    hackathon.ranking_error = None
+    await db.commit()
+
+    await enqueue(
+        TASK_FINALIZE_RANKINGS,
+        hackathon_id,
+        user.id,
+        background_tasks=background_tasks,
+        fallback=_run_finalization_background,
+        job_id=f"rankings:{hackathon_id}",
+    )
+
+    existing = await db.execute(
+        select(HackathonRanking).where(HackathonRanking.hackathon_id == hackathon_id)
+    )
+    team_names = {str(t.id): t.team_name for t in teams}
+    return FinalizeRankingsResponse(
+        hackathon_id=hackathon_id,
+        ranking_status="processing",
+        rankings=[
+            RankingResponse(
+                id=r.id,
+                hackathon_id=r.hackathon_id,
+                team_id=r.team_id,
+                team_name=team_names.get(str(r.team_id)),
+                rank=r.rank,
+                composite_score=r.composite_score,
+                score_breakdown=r.score_breakdown,
+                finalized_at=r.finalized_at,
+            )
+            for r in sorted(existing.scalars().all(), key=lambda r: r.rank)
+        ],
+    )
+
+
+@router.get("/hackathons/{hackathon_id}/rankings/status")
+async def get_ranking_status(
+    hackathon_id: uuid.UUID,
+    user: User = Depends(require_role("organizer")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    hackathon = await _get_hackathon_or_404(db, hackathon_id)
+    if hackathon.organizer_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_hackathon")
+    return {"status": hackathon.ranking_status, "error": hackathon.ranking_error}
+
+
+async def _build_team_states(db: AsyncSession, teams: list[HackathonTeam]) -> list[dict]:
+    """Gathers the per-team ranking inputs in a fixed number of queries.
+
+    Previously issued up to four queries *per team* (submission, members, repo-analysis
+    submission, pitch score + plagiarism matches), so a 60-team event cost ~240 sequential
+    round-trips before the graph even started.
+    """
+    team_ids = [t.id for t in teams]
+
+    submissions_result = await db.execute(
+        select(HackathonSubmission).where(HackathonSubmission.team_id.in_(team_ids))
+    )
+    submission_by_team = {s.team_id: s for s in submissions_result.scalars().all()}
+
+    members_result = await db.execute(
+        select(HackathonTeamMember).where(HackathonTeamMember.team_id.in_(team_ids))
+    )
+    members_by_team: dict[uuid.UUID, list[HackathonTeamMember]] = defaultdict(list)
+    for m in members_result.scalars().all():
+        members_by_team[m.team_id].append(m)
+
+    analysis_ids = [
+        s.repo_analysis_submission_id
+        for s in submission_by_team.values()
+        if s.repo_analysis_submission_id is not None
+    ]
+    repo_score_by_submission_id: dict[uuid.UUID, float | None] = {}
+    if analysis_ids:
+        analysis_result = await db.execute(select(Submission).where(Submission.id.in_(analysis_ids)))
+        repo_score_by_submission_id = {row.id: row.score for row in analysis_result.scalars().all()}
+
+    presentation_ids = [
+        s.presentation_id for s in submission_by_team.values() if s.presentation_id is not None
+    ]
+    pitch_score_by_presentation: dict[uuid.UUID, float | None] = {}
+    plagiarism_by_presentation: dict[uuid.UUID, list[float]] = defaultdict(list)
+    if presentation_ids:
+        # Ordered newest-first so the first row seen per presentation is the latest score
+        # — same "setdefault wins" idiom as recruitment/router.py's latest-talent-score.
+        scores_result = await db.execute(
+            select(PresentationScore)
+            .where(PresentationScore.presentation_id.in_(presentation_ids))
+            .order_by(PresentationScore.presentation_id, PresentationScore.computed_at.desc())
+        )
+        for row in scores_result.scalars().all():
+            pitch_score_by_presentation.setdefault(row.presentation_id, row.overall_pitch_score)
+
+        matches_result = await db.execute(
+            select(PlagiarismMatch.presentation_id, PlagiarismMatch.similarity).where(
+                PlagiarismMatch.presentation_id.in_(presentation_ids)
+            )
+        )
+        for presentation_id, similarity in matches_result.all():
+            plagiarism_by_presentation[presentation_id].append(similarity)
+
     team_states: list[dict] = []
     for team in teams:
-        submission_result = await db.execute(
-            select(HackathonSubmission).where(HackathonSubmission.team_id == team.id)
-        )
-        submission = submission_result.scalar_one_or_none()
-
-        members_result = await db.execute(
-            select(HackathonTeamMember).where(HackathonTeamMember.team_id == team.id)
-        )
-        members = list(members_result.scalars().all())
-        member_candidate_ids = [str(m.candidate_id) for m in members if m.candidate_id is not None]
+        submission = submission_by_team.get(team.id)
+        member_candidate_ids = [
+            str(m.candidate_id) for m in members_by_team.get(team.id, []) if m.candidate_id is not None
+        ]
 
         repo_score = None
         if submission and submission.repo_analysis_submission_id:
-            existing_submission = await db.execute(
-                select(Submission).where(Submission.id == submission.repo_analysis_submission_id)
-            )
-            row = existing_submission.scalar_one_or_none()
-            repo_score = row.score if row else None
+            repo_score = repo_score_by_submission_id.get(submission.repo_analysis_submission_id)
 
         pitch_score = None
         plagiarism_similarities: list[float] = []
         if submission and submission.presentation_id:
-            score_result = await db.execute(
-                select(PresentationScore)
-                .where(PresentationScore.presentation_id == submission.presentation_id)
-                .order_by(PresentationScore.computed_at.desc())
-                .limit(1)
-            )
-            score_row = score_result.scalar_one_or_none()
-            pitch_score = score_row.overall_pitch_score if score_row else None
-
-            matches_result = await db.execute(
-                select(PlagiarismMatch.similarity).where(
-                    PlagiarismMatch.presentation_id == submission.presentation_id
-                )
-            )
-            plagiarism_similarities = [row[0] for row in matches_result.all()]
+            pitch_score = pitch_score_by_presentation.get(submission.presentation_id)
+            plagiarism_similarities = plagiarism_by_presentation.get(submission.presentation_id, [])
 
         team_states.append(
             {
@@ -408,6 +520,51 @@ async def finalize_rankings(
                 "member_candidate_ids": member_candidate_ids,
             }
         )
+    return team_states
+
+
+async def _run_finalization_background(hackathon_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Runs the ranking pipeline outside the request/response cycle in its own session.
+
+    Never raises: any failure is recorded as `ranking_status="failed"` with the reason, so
+    the organizer sees a real error instead of an event stuck on "processing" forever.
+    """
+    async with async_session() as db:
+        hackathon = (
+            await db.execute(select(Hackathon).where(Hackathon.id == hackathon_id))
+        ).scalar_one_or_none()
+        if hackathon is None:
+            logger.error("hackathon %s vanished before finalization could run", hackathon_id)
+            return
+        try:
+            await _finalize_and_persist(db, hackathon, user_id)
+            hackathon.ranking_status = "done"
+            hackathon.ranking_error = None
+        except Exception as exc:  # noqa: BLE001 - surfaced via ranking_error
+            logger.exception("ranking finalization failed for hackathon %s", hackathon_id)
+            await db.rollback()
+            # Re-fetch after rollback: the instance above is detached from the rolled-back
+            # transaction, so mutate a live row rather than a stale one.
+            hackathon = (
+                await db.execute(select(Hackathon).where(Hackathon.id == hackathon_id))
+            ).scalar_one_or_none()
+            if hackathon is None:
+                return
+            hackathon.ranking_status = "failed"
+            hackathon.ranking_error = str(exc)[:2000]
+        await db.commit()
+
+
+async def _finalize_and_persist(
+    db: AsyncSession, hackathon: Hackathon, user_id: uuid.UUID
+) -> list[HackathonRanking]:
+    hackathon_id = hackathon.id
+    teams_result = await db.execute(select(HackathonTeam).where(HackathonTeam.hackathon_id == hackathon_id))
+    teams = list(teams_result.scalars().all())
+    if not teams:
+        return []
+
+    team_states = await _build_team_states(db, teams)
 
     initial_state: HackathonRankingState = {
         "hackathon_id": str(hackathon_id),
@@ -422,16 +579,30 @@ async def finalize_rankings(
     with start_agent_trace(
         "hackathon.ranking_finalize",
         input_data={"hackathon_id": str(hackathon_id), "team_count": len(teams)},
-        user_id=str(user.id),
+        user_id=str(user_id),
         tags=["hackathon", "ranking"],
     ) as trace:
         result_state = await get_hackathon_ranking_graph().ainvoke(initial_state)
         trace.update(output={"final_rankings": result_state["final_rankings"]})
 
     teams_by_id = {str(t.id): t for t in teams}
-    for team_id_str, verification in result_state["repo_verification_results"].items():
-        team = teams_by_id[team_id_str]
-        team_state = next(t for t in team_states if t["team_id"] == team_id_str)
+    team_state_by_id = {t["team_id"]: t for t in team_states}
+    verification_results = result_state["repo_verification_results"]
+
+    # One query for every team's submission row instead of one per verified repo.
+    verified_team_ids = [teams_by_id[tid].id for tid in verification_results if tid in teams_by_id]
+    submission_by_team: dict[uuid.UUID, HackathonSubmission] = {}
+    if verified_team_ids:
+        submission_rows = await db.execute(
+            select(HackathonSubmission).where(HackathonSubmission.team_id.in_(verified_team_ids))
+        )
+        submission_by_team = {s.team_id: s for s in submission_rows.scalars().all()}
+
+    for team_id_str, verification in verification_results.items():
+        team = teams_by_id.get(team_id_str)
+        team_state = team_state_by_id.get(team_id_str)
+        if team is None or team_state is None:
+            continue
         candidate_id = await _resolve_repo_candidate(db, [uuid.UUID(c) for c in team_state["member_candidate_ids"]])
         if candidate_id is None:
             continue
@@ -446,24 +617,33 @@ async def finalize_rankings(
             static_analysis=verification["static_analysis"],
             llm_review=verification["llm_review"],
             score=verification["score"],
+            # Scored by the ranking pipeline itself, not the async grading path.
+            grading_status="done",
         )
         db.add(analysis_submission)
         await db.flush()
 
-        submission_result = await db.execute(select(HackathonSubmission).where(HackathonSubmission.team_id == team.id))
-        submission_row = submission_result.scalar_one_or_none()
+        submission_row = submission_by_team.get(team.id)
         if submission_row:
             submission_row.repo_analysis_submission_id = analysis_submission.id
+
+    # Load all pre-existing ranking rows at once — re-finalizing a 60-team event used to
+    # issue one SELECT per team here.
+    final_team_ids = [uuid.UUID(entry["team_id"]) for entry in result_state["final_rankings"]]
+    existing_rankings: dict[uuid.UUID, HackathonRanking] = {}
+    if final_team_ids:
+        existing_result = await db.execute(
+            select(HackathonRanking).where(
+                HackathonRanking.hackathon_id == hackathon_id,
+                HackathonRanking.team_id.in_(final_team_ids),
+            )
+        )
+        existing_rankings = {r.team_id: r for r in existing_result.scalars().all()}
 
     rankings: list[HackathonRanking] = []
     for entry in result_state["final_rankings"]:
         team_id = uuid.UUID(entry["team_id"])
-        existing = await db.execute(
-            select(HackathonRanking).where(
-                HackathonRanking.hackathon_id == hackathon_id, HackathonRanking.team_id == team_id
-            )
-        )
-        ranking_row = existing.scalar_one_or_none()
+        ranking_row = existing_rankings.get(team_id)
         if ranking_row is None:
             ranking_row = HackathonRanking(hackathon_id=hackathon_id, team_id=team_id)
             db.add(ranking_row)
@@ -491,27 +671,11 @@ async def finalize_rankings(
     )
     db.add(Event(event_type="hackathon.rankings.finalized", payload=result_state["notification_event_payload"]))
 
-    await db.commit()
-    for r in rankings:
-        await db.refresh(r)
-
-    team_names = {str(t.id): t.team_name for t in teams}
-    return FinalizeRankingsResponse(
-        hackathon_id=hackathon_id,
-        rankings=[
-            RankingResponse(
-                id=r.id,
-                hackathon_id=r.hackathon_id,
-                team_id=r.team_id,
-                team_name=team_names.get(str(r.team_id)),
-                rank=r.rank,
-                composite_score=r.composite_score,
-                score_breakdown=r.score_breakdown,
-                finalized_at=r.finalized_at,
-            )
-            for r in sorted(rankings, key=lambda r: r.rank)
-        ],
-    )
+    # Committed by the caller (`_run_finalization_background`) together with the
+    # ranking_status flip, so a crash between the two can't leave rankings written but
+    # the event still showing "processing". No per-row refresh: expire_on_commit=False.
+    await db.flush()
+    return rankings
 
 
 @router.get("/hackathons/{hackathon_id}/rankings", response_model=list[RankingResponse])

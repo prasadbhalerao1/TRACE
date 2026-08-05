@@ -4,10 +4,11 @@ Handles Skill Verification Assessments, Live AI Interviewer Sessions & Reports, 
 """
 import asyncio
 import base64
+import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from github import Github
 from github.GithubException import GithubException
 from sqlalchemy import select
@@ -57,10 +58,13 @@ from services.agents.assessment.tools.llm_review import AssessmentUnavailable
 from services.agents.assessment.tools.interview_llm import generate_definition_questions
 from services.agents.assessment.verification_graph import get_verification_graph
 from services.api.core.config import get_settings
-from services.api.core.db import get_db
+from services.api.core.db import async_session, get_db, without_db_connection
+from services.api.core.queue import TASK_GRADE_SUBMISSION, enqueue
 from services.api.core.rbac import require_role
 from services.api.core.tracing import start_agent_trace
 from services.api.modules.candidates.router import _get_or_create_profile, _require_consent
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Assessments & Verification"])
 
@@ -146,9 +150,18 @@ async def get_assessment(
 async def submit_assessment(
     assessment_id: uuid.UUID,
     body: SubmissionRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> Submission:
+    """Records the submission and returns immediately with `grading_status="processing"`.
+
+    The verification graph (repo fetch for project_analysis, static analysis, LLM code
+    review) previously ran inline here, so the candidate's "Submit" request stayed open
+    for the entire pipeline with no feedback. Clients poll `GET /submissions/{id}` and
+    re-render once `grading_status` is no longer "processing" — same pattern as
+    presentation upload and job matching.
+    """
     await _require_consent(db, user.id, "ai_assessment")
     profile = await _get_or_create_profile(db, user)
 
@@ -157,70 +170,131 @@ async def submit_assessment(
     if assessment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="assessment_not_found")
 
-    code_or_answers = dict(body.code_or_answers)
-    if assessment.type == "project_analysis":
-        repo_full_name = code_or_answers.get("repo_full_name", "")
-        # Synchronous PyGithub network call — keep it off the event loop.
-        code_or_answers["code"] = (
-            await asyncio.to_thread(_fetch_repo_sample_source, repo_full_name)
-            if repo_full_name
-            else ""
-        )
-
-    initial_state: VerificationState = {
-        "assessment_type": assessment.type,
-        "spec": assessment.spec or {},
-        "code_or_answers": code_or_answers,
-        "test_results": [r.model_dump() for r in body.test_results],
-        "static_analysis": {},
-        "tests_passed": 0,
-        "tests_total": 0,
-        "grading_rationale": None,
-        "llm_review": None,
-        "score": None,
-    }
-
-    with start_agent_trace(
-        "assessment.verification",
-        input_data={"assessment_type": assessment.type},
-        user_id=str(user.id),
-        tags=["assessment", "verification"],
-    ) as trace:
-        try:
-            result_state = await get_verification_graph().ainvoke(initial_state)
-        except AssessmentUnavailable as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-        trace.update(output={"score": result_state["score"], "tests_passed": result_state["tests_passed"]})
-
     submission = Submission(
         assessment_id=assessment.id,
         candidate_id=profile.id,
         code_or_answers=body.code_or_answers,
-        test_results={"results": [r.model_dump() for r in body.test_results], "rationale": result_state["grading_rationale"]},
-        static_analysis=result_state["static_analysis"],
-        llm_review=result_state["llm_review"],
-        score=result_state["score"],
+        test_results={"results": [r.model_dump() for r in body.test_results], "rationale": None},
+        grading_status="processing",
     )
     db.add(submission)
-    await db.flush()
-
-    settings = get_settings()
-    verification_input = {"assessment_type": assessment.type, "tests_total": result_state["tests_total"]}
-    verification_output = {"score": result_state["score"], "tests_passed": result_state["tests_passed"]}
-    db.add(
-        AgentRun(
-            agent_name="verification_report_agent",
-            subject_type="submission",
-            subject_id=submission.id,
-            input_ref=verification_input,
-            output=verification_output,
-            model_used=settings.llm_model_judgment,
-            langfuse_trace_id=trace.trace_id,
-        )
-    )
     await db.commit()
     await db.refresh(submission)
+
+    await enqueue(
+        TASK_GRADE_SUBMISSION,
+        submission.id,
+        assessment.id,
+        user.id,
+        [r.model_dump() for r in body.test_results],
+        background_tasks=background_tasks,
+        fallback=_grade_submission_background,
+        job_id=f"grade:{submission.id}",
+    )
     return submission
+
+
+async def _grade_submission_background(
+    submission_id: uuid.UUID,
+    assessment_id: uuid.UUID,
+    user_id: uuid.UUID,
+    test_results: list[dict],
+) -> None:
+    """Runs the verification graph outside the request/response cycle in its own session.
+
+    Never raises: any failure is recorded as `grading_status="failed"` with the reason on
+    the row, so a submission can't be left stuck in "processing" forever (the same
+    guarantee `_analyze_presentation` makes for pitch decks).
+    """
+    async with async_session() as db:
+        submission = (
+            await db.execute(select(Submission).where(Submission.id == submission_id))
+        ).scalar_one_or_none()
+        if submission is None:
+            logger.error("submission %s vanished before grading could run", submission_id)
+            return
+
+        assessment = (
+            await db.execute(select(Assessment).where(Assessment.id == assessment_id))
+        ).scalar_one_or_none()
+        if assessment is None:
+            submission.grading_status = "failed"
+            submission.grading_error = "assessment_not_found"
+            await db.commit()
+            return
+
+        try:
+            code_or_answers = dict(submission.code_or_answers or {})
+            if assessment.type == "project_analysis":
+                repo_full_name = code_or_answers.get("repo_full_name", "")
+                # Synchronous PyGithub network call — keep it off the event loop.
+                code_or_answers["code"] = (
+                    await asyncio.to_thread(_fetch_repo_sample_source, repo_full_name)
+                    if repo_full_name
+                    else ""
+                )
+
+            initial_state: VerificationState = {
+                "assessment_type": assessment.type,
+                "spec": assessment.spec or {},
+                "code_or_answers": code_or_answers,
+                "test_results": test_results,
+                "static_analysis": {},
+                "tests_passed": 0,
+                "tests_total": 0,
+                "grading_rationale": None,
+                "llm_review": None,
+                "score": None,
+            }
+
+            with start_agent_trace(
+                "assessment.verification",
+                input_data={"assessment_type": assessment.type},
+                user_id=str(user_id),
+                tags=["assessment", "verification"],
+            ) as trace:
+                result_state = await get_verification_graph().ainvoke(initial_state)
+                trace.update(
+                    output={"score": result_state["score"], "tests_passed": result_state["tests_passed"]}
+                )
+
+            submission.test_results = {
+                "results": test_results,
+                "rationale": result_state["grading_rationale"],
+            }
+            submission.static_analysis = result_state["static_analysis"]
+            submission.llm_review = result_state["llm_review"]
+            submission.score = result_state["score"]
+            submission.grading_status = "done"
+            submission.grading_error = None
+
+            settings = get_settings()
+            db.add(
+                AgentRun(
+                    agent_name="verification_report_agent",
+                    subject_type="submission",
+                    subject_id=submission.id,
+                    input_ref={
+                        "assessment_type": assessment.type,
+                        "tests_total": result_state["tests_total"],
+                    },
+                    output={
+                        "score": result_state["score"],
+                        "tests_passed": result_state["tests_passed"],
+                    },
+                    model_used=settings.llm_model_judgment,
+                    langfuse_trace_id=trace.trace_id,
+                )
+            )
+        except AssessmentUnavailable as exc:
+            submission.grading_status = "failed"
+            submission.grading_error = str(exc)[:2000]
+        except Exception as exc:  # noqa: BLE001 - surfaced via grading_error, never crashes the worker
+            logger.exception("grading failed for submission %s", submission_id)
+            submission.grading_status = "failed"
+            submission.grading_error = str(exc)[:2000]
+
+        await db.commit()
 
 
 async def _require_submission_access(db: AsyncSession, submission: Submission, user: User) -> None:
@@ -316,7 +390,9 @@ async def generate_definition_questions_endpoint(
         tags=["assessment", "interview", "definition"],
     ) as trace:
         try:
-            result_state = await get_interview_definition_graph().ainvoke(initial_state)
+            result_state = await without_db_connection(
+                db, lambda: get_interview_definition_graph().ainvoke(initial_state)
+            )
         except AssessmentUnavailable as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         trace.update(output={"topics": result_state["topics"]})
@@ -414,32 +490,34 @@ async def list_interview_definition_attempts(
     """List all interview attempts for a definition (ownership-checked)."""
     definition = await _definition_owned_by(db, definition_id, user)
 
+    # `has_report` comes from an EXISTS correlated subquery rather than a per-attempt
+    # SELECT: this used to issue one extra round trip for every attempt in the list, so a
+    # definition with 50 attempts cost 51 queries. One query now, and EXISTS lets
+    # Postgres stop at the first matching report instead of materializing the row.
+    has_report = (
+        select(InterviewReport.id)
+        .where(InterviewReport.session_id == InterviewSession.id)
+        .exists()
+    )
     result = await db.execute(
-        select(InterviewSession, CandidateProfile)
+        select(InterviewSession, CandidateProfile, has_report)
         .join(CandidateProfile, InterviewSession.candidate_id == CandidateProfile.id)
         .where(InterviewSession.interview_definition_id == definition_id)
         .order_by(InterviewSession.started_at.desc())
     )
 
-    attempts = []
-    for session, profile in result.all():
-        # Check if a report exists
-        report_result = await db.execute(
-            select(InterviewReport).where(InterviewReport.session_id == session.id)
-        )
-        has_report = report_result.scalar_one_or_none() is not None
-
-        attempts.append({
+    return [
+        {
             "session_id": session.id,
             "candidate_id": profile.id,
             "candidate_name": profile.full_name,
             "status": session.status,
             "started_at": session.started_at,
             "ended_at": session.ended_at,
-            "has_report": has_report,
-        })
-
-    return attempts
+            "has_report": report_exists,
+        }
+        for session, profile, report_exists in result.all()
+    ]
 
 
 @router.post("/interview-sessions", response_model=InterviewTurnResponse, status_code=status.HTTP_201_CREATED)
@@ -490,7 +568,12 @@ async def start_interview(
         },
     )
     db.add(session)
-    await db.flush()
+    # Commit, not just flush: the graph call below releases this session's connection,
+    # which discards any open transaction. A flushed-but-uncommitted InterviewSession
+    # would be rolled back and the row lost. Committing here also means the session row
+    # exists for the whole (slow) first-question generation, so a client that reconnects
+    # mid-call finds a real session rather than a phantom id.
+    await db.commit()
 
     initial_state: InterviewState = {
         "session_id": str(session.id),
@@ -515,17 +598,24 @@ async def start_interview(
         tags=["assessment", "interview"],
     ) as trace:
         try:
-            result_state = await get_interview_graph().ainvoke(initial_state)
+            result_state = await without_db_connection(
+                db, lambda: get_interview_graph().ainvoke(initial_state)
+            )
         except AssessmentUnavailable as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         trace.update(output={"question": result_state["next_question"]})
 
+    session = await db.merge(session)
     session.state = {
         "topic_plan": result_state["topic_plan"],
         "current_topic_idx": result_state["current_topic_idx"],
         "transcript": result_state["transcript"],
         "per_topic_scores": result_state["per_topic_scores"],
         "follow_up_count_this_topic": result_state["follow_up_count_this_topic"],
+        # Must be persisted here, not just on /turn: interview_turn rebuilds its state
+        # from saved.get("job_context"), so omitting it meant every definition-backed
+        # interview silently lost its role/JD context from the second question onward.
+        "job_context": job_context,
     }
     db.add(
         InterviewTranscriptTurn(session_id=session.id, turn_index=0, role="agent", text=result_state["next_question"])
@@ -616,10 +706,21 @@ async def interview_turn(
         tags=["assessment", "interview"],
     ) as trace:
         try:
-            result_state = await get_interview_graph().ainvoke(initial_state)
+            # Two serial judgment-tier LLM calls (turn_evaluation then question/followup)
+            # run inside this graph. Releasing the pooled connection first means twenty
+            # concurrent interviews no longer exhaust the pool and stall every other
+            # endpoint — everything this handler needs from `session`/`profile` has
+            # already been read into `initial_state` above.
+            result_state = await without_db_connection(
+                db, lambda: get_interview_graph().ainvoke(initial_state)
+            )
         except AssessmentUnavailable as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         trace.update(output={"question": result_state["next_question"], "status": result_state["interview_status"]})
+
+    # `session` was loaded before the connection was released; re-attach it so the
+    # mutations below are tracked and flushed on commit.
+    session = await db.merge(session)
 
     session.state = {
         "topic_plan": result_state["topic_plan"],
@@ -689,11 +790,14 @@ async def end_interview(
         tags=["assessment", "interview"],
     ) as trace:
         try:
-            result_state = await get_interview_report_graph().ainvoke(report_state)
+            result_state = await without_db_connection(
+                db, lambda: get_interview_report_graph().ainvoke(report_state)
+            )
         except AssessmentUnavailable as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         trace.update(output=dict(result_state))
 
+    session = await db.merge(session)
     if session.status != "completed":
         session.status = "completed"
         session.ended_at = datetime.now(timezone.utc)
@@ -795,7 +899,11 @@ async def generate_contribution_report(
         tags=["assessment", "contribution"],
     ) as trace:
         try:
-            result_state = await get_contribution_graph().ainvoke(initial_state)
+            # GitHub crawl + per-member LLM narratives — the longest-held connection in
+            # this router before this change.
+            result_state = await without_db_connection(
+                db, lambda: get_contribution_graph().ainvoke(initial_state)
+            )
         except AssessmentUnavailable as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         trace.update(output={"results": result_state["results"]})
@@ -836,9 +944,13 @@ async def generate_contribution_report(
             langfuse_trace_id=trace.trace_id,
         )
     )
+    # `generated_at` is a server-side default, so the rows do need to be re-read after
+    # commit — but as one query, not `db.refresh()` per row (which was a round trip each).
     await db.commit()
-    for row in rows:
-        await db.refresh(row)
+    if rows:
+        await db.execute(
+            select(ContributionReport).where(ContributionReport.id.in_([r.id for r in rows]))
+        )
     return rows
 
 

@@ -51,7 +51,7 @@ from services.agents.fraud.tools.photo_hash import compute_photo_hash
 from services.agents.fraud.tools.report_llm import generate_fraud_risk_report
 from services.api.core.audit import log_action
 from services.api.core.config import get_settings
-from services.api.core.db import get_db
+from services.api.core.db import get_db, without_db_connection
 from services.api.core.rbac import require_role
 from services.api.core.tracing import start_agent_trace
 from services.api.modules.candidates.router import _require_consent
@@ -59,6 +59,10 @@ from services.api.modules.candidates.router import _require_consent
 router = APIRouter(tags=["Trust & Fraud Prevention"])
 
 _REVIEWER_ROLES = ("admin", "recruiter")
+
+# Cap on simultaneous corpus image downloads during duplicate-profile detection — enough
+# to hide per-request latency without opening a socket per candidate on a large platform.
+_PHOTO_FETCH_CONCURRENCY = 8
 
 
 async def _certification_or_404(db: AsyncSession, certification_id: uuid.UUID) -> Certification:
@@ -109,14 +113,45 @@ async def _flag_or_404(db: AsyncSession, flag_id: uuid.UUID) -> FraudFlag:
     return flag
 
 
-async def _latest_photo_file(db: AsyncSession, user_id: uuid.UUID) -> File | None:
+async def _latest_photo_files(
+    db: AsyncSession, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, File]:
+    """Latest photo File per user, in one query.
+
+    The duplicate-profile check needs this for the entire candidate corpus; the previous
+    single-user helper was called in a loop, costing one round-trip per other candidate
+    on top of the per-candidate image download that follows.
+    """
+    if not user_ids:
+        return {}
     result = await db.execute(
         select(File)
-        .where(File.owner_user_id == user_id, File.file_type == "photo")
-        .order_by(File.uploaded_at.desc())
-        .limit(1)
+        .where(File.owner_user_id.in_(user_ids), File.file_type == "photo")
+        .order_by(File.owner_user_id, File.uploaded_at.desc())
     )
-    return result.scalar_one_or_none()
+    latest: dict[uuid.UUID, File] = {}
+    for row in result.scalars().all():
+        latest.setdefault(row.owner_user_id, row)
+    return latest
+
+
+async def _fetch_and_hash_photo(
+    client: httpx.AsyncClient, url: str
+) -> str | None:
+    """Downloads one image and perceptual-hashes it, or returns None on any failure.
+
+    Hashing is CPU-bound (PIL decode + imagehash.phash) so it runs off the event loop.
+    """
+    try:
+        resp = await client.get(url)
+    except httpx.HTTPError:
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        return await asyncio.to_thread(compute_photo_hash, resp.content)
+    except Exception:  # noqa: BLE001 - a corrupt/unsupported image must not fail the check
+        return None
 
 
 def _profile_text(profile: CandidateProfile) -> str:
@@ -237,7 +272,9 @@ async def check_certificate(
         user_id=str(user.id),
         tags=["fraud", "certificate"],
     ) as trace:
-        result_state = await get_cert_graph().ainvoke(initial_state)
+        result_state = await without_db_connection(
+            db, lambda: get_cert_graph().ainvoke(initial_state)
+        )
         trace.update(output=result_state["verdict"])
 
     flag = await _persist_check_result(
@@ -302,7 +339,9 @@ async def check_submission(
         user_id=str(user.id),
         tags=["fraud", "submission"],
     ) as trace:
-        result_state = await get_plagiarism_graph().ainvoke(initial_state)
+        result_state = await without_db_connection(
+            db, lambda: get_plagiarism_graph().ainvoke(initial_state)
+        )
         trace.update(output=result_state["verdict"])
 
     flag = await _persist_check_result(
@@ -358,40 +397,40 @@ async def check_profile_duplicate(
     target_photo_hash = None
     photo_corpus: list[tuple[str, str]] = []
     if has_photo_consent:
-        photo_file = await _latest_photo_file(db, profile.user_id)
-        if photo_file and photo_file.public_url:
-            try:
-                async with httpx.AsyncClient(timeout=8.0) as client:
-                    resp = await client.get(photo_file.public_url)
-                # PIL decode + imagehash.phash is CPU-bound — keep it off the event loop.
-                target_photo_hash = (
-                    await asyncio.to_thread(compute_photo_hash, resp.content)
-                    if resp.status_code == 200
-                    else None
-                )
-            except httpx.HTTPError:
-                target_photo_hash = None
+        # All photo rows (subject + entire corpus) in ONE query — this used to be a
+        # separate lookup per other candidate, and each of those preceded its own
+        # sequential image download.
+        photo_by_user = await _latest_photo_files(
+            db, [profile.user_id] + [p.user_id for p in other_profiles]
+        )
+        subject_photo = photo_by_user.get(profile.user_id)
 
-        if target_photo_hash:
-            # One client for the whole corpus (connection reuse) instead of a fresh
-            # AsyncClient per candidate; hashing is threaded so the CPU-bound PIL decode
-            # doesn't stall the event loop once per corpus entry.
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                for other in other_profiles:
-                    other_photo = await _latest_photo_file(db, other.user_id)
-                    if not other_photo or not other_photo.public_url:
-                        continue
-                    try:
-                        other_resp = await client.get(other_photo.public_url)
-                        other_hash = (
-                            await asyncio.to_thread(compute_photo_hash, other_resp.content)
-                            if other_resp.status_code == 200
-                            else None
-                        )
-                    except httpx.HTTPError:
-                        other_hash = None
-                    if other_hash:
-                        photo_corpus.append((str(other.id), other_hash))
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            if subject_photo and subject_photo.public_url:
+                target_photo_hash = await _fetch_and_hash_photo(client, subject_photo.public_url)
+
+            if target_photo_hash:
+                corpus_targets = [
+                    (str(other.id), photo_by_user[other.user_id].public_url)
+                    for other in other_profiles
+                    if other.user_id in photo_by_user and photo_by_user[other.user_id].public_url
+                ]
+                # Fetch the corpus concurrently rather than one blocking download at a
+                # time — this loop was the dominant cost of the whole check and scaled
+                # linearly with the number of candidates on the platform. Bounded so a
+                # large corpus can't open hundreds of sockets at once.
+                semaphore = asyncio.Semaphore(_PHOTO_FETCH_CONCURRENCY)
+
+                async def _bounded(url: str) -> str | None:
+                    async with semaphore:
+                        return await _fetch_and_hash_photo(client, url)
+
+                hashes = await asyncio.gather(*(_bounded(url) for _, url in corpus_targets))
+                photo_corpus = [
+                    (candidate_id, photo_hash)
+                    for (candidate_id, _), photo_hash in zip(corpus_targets, hashes)
+                    if photo_hash
+                ]
 
     dup_state = {
         "subject_type": "profile",
@@ -411,7 +450,11 @@ async def check_profile_duplicate(
         user_id=str(user.id),
         tags=["fraud", "profile"],
     ) as dup_trace:
-        dup_result = await get_duplicate_graph().ainvoke(dup_state)
+        # Photo hashing downloads and hashes the whole corpus over the network — by far
+        # the longest connection hold in this router.
+        dup_result = await without_db_connection(
+            db, lambda: get_duplicate_graph().ainvoke(dup_state)
+        )
         dup_trace.update(output=dup_result["verdict"])
 
     content_state = {
@@ -427,7 +470,9 @@ async def check_profile_duplicate(
         user_id=str(user.id),
         tags=["fraud", "resume"],
     ) as content_trace:
-        content_result = await get_content_graph().ainvoke(content_state)
+        content_result = await without_db_connection(
+            db, lambda: get_content_graph().ainvoke(content_state)
+        )
         content_trace.update(output=content_result["verdict"])
 
     dup_flag = await _persist_check_result(
