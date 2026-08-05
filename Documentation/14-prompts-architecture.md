@@ -56,29 +56,30 @@ which keeps a module's LLM behavior self-contained and reviewable in one place.
 `services/agents/prompts_loader.py`:
 
 ```python
+_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+
+
 @functools.lru_cache(maxsize=None)
-def _load_prompt_template(agent_name: str, prompt_name: str) -> Template:
+def _load_prompt_text(agent_name: str, prompt_name: str) -> str:
     agent_dir = Path(__file__).parent / agent_name / "prompts"
     prompt_file = agent_dir / f"{prompt_name}.md"
 
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt not found: {prompt_file}")
 
-    content = prompt_file.read_text()
-    # Strip markdown header lines (lines starting with #) before templating
-    lines = content.split('\n')
-    prompt_lines = [line for line in lines if not line.startswith('#')]
-    prompt_text = '\n'.join(prompt_lines).strip()
-
-    return Template(prompt_text)
+    content = prompt_file.read_text(encoding="utf-8")
+    # Strip ONLY the leading H1 title; `##` section headings are content.
+    lines = content.split("\n")
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+    return "\n".join(lines).strip()
 
 
 def load_prompt(agent_name: str, prompt_name: str, **variables) -> str:
-    template = _load_prompt_template(agent_name, prompt_name)
-    try:
-        return template.substitute(**variables)
-    except KeyError as e:
-        raise ValueError(f"Missing variable in prompt {prompt_name}: {e}") from e
+    text = _load_prompt_text(agent_name, prompt_name)
+    # Regex substitution of `{name}`; raises ValueError listing any variable the
+    # caller failed to supply, rather than shipping a literal placeholder.
+    ...
 ```
 
 Called as:
@@ -90,26 +91,35 @@ prompt = load_prompt("recruitment", "understand_query", raw_query=query_text)
 ```
 
 Notes on the mechanics:
-- **Interpolation is `string.Template`, but prompt files actually write plain `{variable}`
-  placeholders** (e.g. `services/agents/assessment/prompts/evaluate_turn.md` uses
-  `{topic}`, `{question}`, `{answer}`), not `string.Template`'s native `$variable` syntax.
-  `Template.substitute()` only replaces `$`-prefixed placeholders, so a bare `{variable}` is
-  passed through unless the code also does a `.format(**variables)`-style pass — worth
-  knowing if extending this: the `load_prompt` variables kwarg is documented as working with
-  `{variable}` style, so verify the exact interpolation behavior against
-  `prompts_loader.py` before relying on it in a new prompt with untested placeholder syntax.
-  A missing variable raises a clear `ValueError` naming the prompt and the missing key.
-- **Markdown header lines are stripped before templating.** Any line starting with `#` is
-  dropped, so a prompt file can carry a `# Title` and `## Schema Description` for a human
-  reader without those literal characters leaking into what's actually sent to the model.
+- **Interpolation is `{variable}`**, matching what every prompt file actually writes
+  (e.g. `assessment/prompts/evaluate_turn.md` uses `{topic}`, `{question}`, `{answer}`).
+  A missing variable raises `ValueError` naming the prompt and the missing keys — failing
+  loudly is deliberate, since the alternative is a paid LLM call carrying a literal
+  `{merged_profile_json}`. Write `{{` / `}}` for a literal brace.
+- **JSON examples inside prompts are safe.** The placeholder pattern is `{identifier}`
+  only, so `{"skills": ["Go"]}` in a worked example passes through untouched.
+- **Only the leading `# Title` line is stripped.** `##` section headings ("Examples",
+  "Rules") are part of the instruction and are sent to the model.
 - **File reads are cached** (`functools.lru_cache`) — a prompt file only changes on deploy,
   so re-reading it from disk on every single LLM call would be pure waste; the cache is
   keyed on `(agent_name, prompt_name)`.
 
+> **Fixed 2026-08-05 — this loader used to silently send un-interpolated prompts.**
+> It built a `string.Template` and called `.substitute()`, which only understands
+> `$name`, while every prompt file uses `{name}`. **No placeholder was ever substituted**:
+> the model received the literal text `"{query}"` and `{resume_text}`. It also dropped
+> every line starting with `#`, which removed all `##` section headings along with the
+> title. Nothing raised, because a schema-constrained call still returns well-formed
+> output — verified live against Gemini, the classifier answered
+> *"The user's query is not provided, so by default we lean toward the narrower … 
+> candidate_score operation"* and returned the wrong intent. Regression tests covering
+> substitution, heading retention, and the missing-variable error live in
+> `services/agents/tests/test_prompts_loader.py`.
+
 ## Adding a new prompt
 
 1. Create `services/agents/{agent_name}/prompts/{prompt_name}.md` with the prompt text and
-   `${variable}` placeholders where needed.
+   `{variable}` placeholders where needed.
 2. Call it from code:
    ```python
    from services.agents.prompts_loader import load_prompt
