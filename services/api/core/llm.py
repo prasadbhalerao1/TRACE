@@ -24,6 +24,7 @@ provider-switching both stay centralized here.
 """
 
 import asyncio
+import functools
 import json
 import logging
 from typing import Any
@@ -38,10 +39,22 @@ class LLMUnavailable(RuntimeError):
     """Raised when the configured provider API key is missing or execution fails."""
 
 
+@functools.lru_cache(maxsize=1)
 def get_llm_client() -> tuple[str, Any]:
     """Resolves and returns (provider_name, client_instance).
 
     Raises LLMUnavailable if no valid API key is present for the chosen provider.
+
+    Cached as a process-level singleton for the same reason `get_embedder()` is: a fresh
+    `anthropic.Anthropic(...)` / `openai.OpenAI(...)` builds a new httpx client with its
+    own empty connection pool, so constructing one per call meant every single LLM call
+    in the app paid a full TCP+TLS handshake and reused nothing. The provider SDK clients
+    are thread-safe and intended to be long-lived, and the settings this reads from are
+    themselves `lru_cache`d, so there is no per-request state to vary on.
+
+    `LLMUnavailable` (missing API key) is raised before any client is constructed, and
+    `lru_cache` does not cache exceptions — a call that fails on a missing key will
+    re-evaluate normally once the key is configured.
     """
     settings = get_settings()
     provider = (settings.llm_provider or "anthropic").lower()
