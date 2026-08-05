@@ -80,7 +80,17 @@ Start-Process powershell -ArgumentList @(
     "cd '$root'; & '$apiPython' -m uvicorn services.api.main:app --reload --port 8000"
 )
 
-# --- 3. Next.js frontend --------------------------------------------------------
+# --- 3. Background worker ------------------------------------------------------
+# Consumes the Redis job queue (candidate ingestion, job matching, assessment grading,
+# deck analysis, hackathon ranking). Without it those jobs sit queued in Redis; the API
+# only falls back to running them in-process when Redis itself is unreachable.
+Write-Host "Starting background worker (new window)..." -ForegroundColor Green
+Start-Process powershell -ArgumentList @(
+    "-NoExit", "-Command",
+    "cd '$root'; & '$apiPython' -m services.workers.runner"
+)
+
+# --- 4. Next.js frontend --------------------------------------------------------
 Write-Host "Starting Next.js frontend (new window)..." -ForegroundColor Green
 Start-Process powershell -ArgumentList @(
     "-NoExit", "-Command",
@@ -91,3 +101,4 @@ Write-Host ""
 Write-Host "== Started. See DEV_SERVERS.md for the full list of local URLs. ==" -ForegroundColor Cyan
 Write-Host "  Frontend : http://localhost:3000"
 Write-Host "  API      : http://localhost:8000  (docs at /docs)"
+Write-Host "  Worker   : background job queue (arq -> Redis)"

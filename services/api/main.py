@@ -113,20 +113,29 @@ async def _warm_embedder() -> None:
     # doesn't timeout waiting for model download/initialization (can take 30+ seconds
     # depending on network speed). Loaded lazily in background; subsequent requests
     # benefit from the cached model without blocking startup.
-    try:
-        from services.agents.recruitment.tools.embeddings import get_embedder
-        asyncio.create_task(_load_embedder_async())
-    except Exception:
-        pass
+    asyncio.create_task(_load_embedder_async())
 
 
 async def _load_embedder_async() -> None:
     try:
         from services.agents.recruitment.tools.embeddings import get_embedder
-        get_embedder()
+
+        # `get_embedder()` loads the model from disk — seconds of pure CPU/IO. Awaiting
+        # it via to_thread keeps it off the event loop; calling it directly here (as this
+        # did before) blocked every request for the duration of the very startup work
+        # that was supposed to happen in the background.
+        await asyncio.to_thread(get_embedder)
         logger.info("Embedder model pre-loaded successfully")
     except Exception as exc:
         logger.warning("Failed to pre-load embedder model: %s", exc)
+
+
+@app.on_event("shutdown")
+async def _close_queue_pool() -> None:
+    # Releases the arq/Redis connection pool opened lazily by services/api/core/queue.py.
+    from services.api.core.queue import close_queue_pool
+
+    await close_queue_pool()
 
 
 @app.get("/health")
