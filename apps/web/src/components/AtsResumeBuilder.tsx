@@ -6,7 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/components/AuthProvider";
 import { calculateATSScore, type ATSScoreDetail } from "@/lib/atsScoring";
+import {
+  DocumentGenerationError,
+  generateResume,
+  type GeneratedResumeContent,
+} from "@/lib/api";
 
 export type ResumeTemplateStyle = "apex" | "modern" | "creative" | "minimalist";
 
@@ -135,11 +141,15 @@ const INITIAL_RESUME: ResumeData = {
 };
 
 export function AtsResumeBuilder() {
+  const { getToken } = useAuth();
   const [data, setData] = useState<ResumeData>(INITIAL_RESUME);
   const [template, setTemplate] = useState<ResumeTemplateStyle>("apex");
   const [targetJd, setTargetJd] = useState("");
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [aiOptimized, setAiOptimized] = useState(false);
+  // Surfaced in the UI: a failed or withheld generation must say so, not silently
+  // leave the resume unchanged as if nothing had been clicked.
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [factCheckFindings, setFactCheckFindings] = useState<string[] | null>(null);
   const [activeTab, setActiveTab] = useState<"contact" | "skills" | "experience" | "projects" | "education">("contact");
   const [showAtsDetails, setShowAtsDetails] = useState(false);
 
@@ -184,28 +194,70 @@ export function AtsResumeBuilder() {
     }
   };
 
-  const handleAiOptimize = () => {
+  // Calls the real generator (`POST /candidates/me/resume/generate`), which runs the
+  // document-generation graph against the candidate's actual profile and passes the
+  // output through the fact-check guardrail before returning it.
+  //
+  // This previously faked it: a 1200ms setTimeout that pasted a fixed "Results-driven
+  // {role} with proven expertise in full-stack development…" summary and appended the
+  // literal string "— demonstrated measurable impact aligned with JD requirements" to
+  // every bullet, regardless of the JD or the candidate. It looked like AI tailoring and
+  // was the same text for every user — worse than no feature, since a candidate could
+  // send that to a real employer believing it had been personalized.
+  const handleAiOptimize = async () => {
     if (!targetJd.trim()) {
-      alert("Please paste a target Job Description (JD) to run AI bullet tailoring!");
+      setAiError("Paste a target job description first — tailoring needs something to tailor to.");
       return;
     }
     setIsOptimizing(true);
-    setTimeout(() => {
-      setIsOptimizing(false);
-      setAiOptimized(true);
+    setAiError(null);
+    setFactCheckFindings(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      const doc = await generateResume(token, targetJd);
+      const content = doc.content as GeneratedResumeContent;
+
       setData((prev) => ({
         ...prev,
-        summary: `Results-driven ${prev.roleTitle} with proven expertise in full-stack development. Specialized in building scalable systems and leading technical initiatives. Successfully delivered high-impact projects with measurable business outcomes.`,
-        experience: prev.experience.map((exp) => ({
-          ...exp,
-          bullets: exp.bullets.map((bullet) =>
-            bullet.includes("%") || bullet.match(/\d+[x]/)
-              ? bullet
-              : `${bullet} — demonstrated measurable impact aligned with JD requirements`
-          ),
-        })),
+        summary: content.summary || prev.summary,
+        roleTitle: content.headline || prev.roleTitle,
+        // `skills` is deliberately left alone. The builder splits it into five curated
+        // buckets (languages/frameworks/tools/databases/cloud) while the generator
+        // returns one flat list, and there is no reliable way to bucket "Docker" or
+        // "Postgres" back without guessing. Dumping the flat list into any single field
+        // would silently destroy the candidate's own categorization.
+        // Only replace experience when the generator actually returned some, so a sparse
+        // profile can't blank out what the candidate typed by hand.
+        experience: content.experience?.length
+          ? content.experience.map((exp, i) => ({
+              id: prev.experience[i]?.id ?? `exp-ai-${i}`,
+              company: exp.company ?? prev.experience[i]?.company ?? "",
+              role: exp.title ?? prev.experience[i]?.role ?? "",
+              location: prev.experience[i]?.location ?? "",
+              dates: exp.years ?? prev.experience[i]?.dates ?? "",
+              bullets: exp.bullets?.length ? exp.bullets : (prev.experience[i]?.bullets ?? []),
+            }))
+          : prev.experience,
       }));
-    }, 1200);
+
+      // Surfaced rather than swallowed: the backend returns 200 with findings when the
+      // guardrail passes but still flagged something worth the candidate's attention.
+      if (doc.fact_check_findings?.length) {
+        setFactCheckFindings(doc.fact_check_findings.map((f) => f.claim));
+      }
+    } catch (err) {
+      if (err instanceof DocumentGenerationError && err.findings?.length) {
+        // 422: the guardrail withheld the document because it contained claims the
+        // profile does not support. Show exactly which ones.
+        setAiError("Generation was withheld — the draft contained unsupported claims:");
+        setFactCheckFindings(err.findings.map((f) => f.claim));
+      } else {
+        setAiError(err instanceof Error ? err.message : "AI tailoring failed");
+      }
+    } finally {
+      setIsOptimizing(false);
+    }
   };
 
   // Helper functions to add/remove dynamic fields
@@ -454,8 +506,16 @@ export function AtsResumeBuilder() {
                 size="sm"
                 className="w-full text-xs font-medium cursor-pointer"
               >
-                {isOptimizing ? "Optimizing Bullets with AI..." : "Run AI ATS Tailor"}
+                {isOptimizing ? "Tailoring against the job description…" : "Run AI ATS Tailor"}
               </Button>
+              {aiError && <p className="text-xs text-rose-flagged">{aiError}</p>}
+              {factCheckFindings && factCheckFindings.length > 0 && (
+                <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-amber-pending">
+                  {factCheckFindings.map((claim, i) => (
+                    <li key={i}>{claim}</li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
 

@@ -71,16 +71,6 @@ const CRITICAL_ATS_KEYWORDS = [
   "%", "x", "roi", "revenue", "growth", "performance", "million", "thousand",
 ];
 
-const ATS_SAFE_FORMATS = [
-  "pdf", "docx", "doc", "txt", "rtf"
-];
-
-const DANGEROUS_ATS_ELEMENTS = [
-  "table", "column", "sidebar", "header", "footer", "text box",
-  "text frame", "shape", "image", "chart", "graph", "icon",
-  "special character", "symbol", "barcode", "qr code"
-];
-
 export function calculateATSScore(data: ResumeData): ATSScoreDetail {
   const breakdown = {
     parsing: calculateParsingScore(data),
