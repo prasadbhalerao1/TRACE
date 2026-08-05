@@ -53,6 +53,12 @@ class CandidateProfile(Base):
     # frontend polls GET /candidates/me/ingestion-status until this leaves "processing".
     ingestion_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="idle")
     ingestion_error: Mapped[str | None] = mapped_column(Text)
+    # Which phase the running pipeline is in, for the stepwise progress UI. The whole run
+    # can take minutes on a large GitHub account, and a single unchanging "analyzing…"
+    # message for that long is indistinguishable from a hang — which is exactly how it
+    # was reported. Written by `_run_ingestion_and_persist` as each phase starts, so it
+    # reflects real progress rather than an animation on a timer.
+    ingestion_stage: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship("User", lazy="joined")
@@ -83,6 +89,11 @@ class GithubSnapshot(Base):
     pushed_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
     description: Mapped[str | None] = mapped_column(Text)
     fetched_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Scanned on every candidate dashboard load, the public portfolio, /me/github-summary,
+    # and (IN-filtered over the whole candidate set) on every recruiter candidate-pool
+    # build — this was a sequential scan on all of those paths.
+    __table_args__ = (Index("idx_github_snapshots_candidate", "candidate_id"),)
 
 
 class Certification(Base):
@@ -149,6 +160,10 @@ class Badge(Base):
     skill_name: Mapped[str] = mapped_column(Text, nullable=False)
     corroboration_sources: Mapped[list] = mapped_column(JSONB, nullable=False)
     awarded_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Same hot paths as github_snapshots above (dashboard, badges list, candidate-pool
+    # build) — previously unindexed.
+    __table_args__ = (Index("idx_badges_candidate", "candidate_id"),)
 
 
 class GeneratedDocument(Base):

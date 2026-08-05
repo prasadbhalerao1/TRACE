@@ -185,6 +185,10 @@ class FinalizeRankingsRequest(BaseModel):
 
 class FinalizeRankingsResponse(BaseModel):
     hackathon_id: UUID
+    # "processing" — finalization now runs as a background task, so `rankings` here is
+    # whatever was already persisted (empty on a first run), NOT the result of this run.
+    # Poll GET /hackathons/{id}/rankings/status and re-fetch the rankings once done.
+    ranking_status: str
     rankings: list[RankingResponse]
 
 

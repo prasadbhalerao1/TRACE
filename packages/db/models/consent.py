@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import CheckConstraint, ForeignKey, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import INET, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -31,4 +31,9 @@ class Consent(Base):
             name="ck_consents_consent_type",
         ),
         CheckConstraint("status IN ('granted','revoked')", name="ck_consents_status"),
+        # Every consent read is "the latest granted consent of this type for this
+        # candidate", ordered by granted_at DESC — see the interview-start and ingestion
+        # paths. `granted_at` is part of the index (descending) so that lookup terminates
+        # at the first matching row instead of sorting the candidate's whole history.
+        Index("idx_consents_candidate_granted", "candidate_id", granted_at.desc()),
     )

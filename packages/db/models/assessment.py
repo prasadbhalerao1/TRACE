@@ -54,6 +54,12 @@ class Submission(Base):
     static_analysis: Mapped[dict | None] = mapped_column(JSONB)
     llm_review: Mapped[dict | None] = mapped_column(JSONB)
     score: Mapped[float | None] = mapped_column(Float)
+    # "processing" until the verification graph (static analysis + LLM code review)
+    # finishes in the background, then "done" / "failed". Grading previously ran inline
+    # in POST /assessments/{id}/submit, holding the candidate's request open for the
+    # whole pipeline; the row is now inserted immediately and the client polls.
+    grading_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="done")
+    grading_error: Mapped[str | None] = mapped_column(Text)
     submitted_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -96,6 +102,8 @@ class InterviewSession(Base):
         CheckConstraint(
             "status IN ('in_progress','completed','abandoned')", name="ck_interview_sessions_status"
         ),
+        # The recruiter attempts list filters the whole table by definition.
+        Index("idx_interview_sessions_definition", "interview_definition_id"),
     )
 
 
@@ -136,6 +144,9 @@ class InterviewReport(Base):
     rubric_scores: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     hiring_recommendation: Mapped[str | None] = mapped_column(Text)
     generated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Looked up by session on every report fetch and existence check.
+    __table_args__ = (Index("idx_interview_reports_session", "session_id"),)
 
 
 class InterviewDefinition(Base):

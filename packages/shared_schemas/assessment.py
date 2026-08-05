@@ -71,6 +71,11 @@ class SubmissionResponse(BaseModel):
     static_analysis: dict | None
     llm_review: dict | None
     score: float | None
+    # "processing" while the verification graph runs in the background; "done"/"failed"
+    # afterwards. Clients must treat a null `score` with grading_status="processing" as
+    # not-yet-graded rather than as a zero.
+    grading_status: str
+    grading_error: str | None
     submitted_at: datetime
 
 

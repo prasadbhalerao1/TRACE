@@ -50,6 +50,15 @@ class Hackathon(Base):
     # the doc's only implicit "finalized" signal, but the organizer dashboard needs to
     # render event state before any ranking exists at all.
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="draft")
+    # Progress of the ranking-finalization pipeline, tracked separately from `status`
+    # above: `status` is the organizer-facing lifecycle (and is CHECK-constrained to
+    # draft/active/judging/finalized), whereas this is the async job state for a single
+    # finalize run. Finalization (repo verification, novelty search, composite scoring
+    # across every team) used to run inline in POST .../rankings/finalize and held the
+    # organizer's request open for the whole pipeline; it now runs as a background task
+    # and the client polls. Mirrors `Job.matching_status` / `Presentation.status`.
+    ranking_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="idle")
+    ranking_error: Mapped[str | None] = mapped_column(Text)
     # Configurable ranking weights (JSONB) — organizers can adjust how much each component contributes
     # to the final ranking. Defaults to {judge: 0.40, pitch: 0.30, repo: 0.20, novelty: 0.10}
     scoring_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -102,6 +111,9 @@ class HackathonTeamMember(Base):
         CheckConstraint("role IN ('lead','member')", name="ck_hackathon_team_members_role"),
         Index("idx_hackathon_team_members_team", "team_id"),
         UniqueConstraint("team_id", "candidate_id", name="uq_hackathon_team_members_team_candidate"),
+        # The unique constraint's index leads with team_id, so it cannot serve the
+        # reverse lookup ("which teams is this candidate on") the candidate view does.
+        Index("idx_hackathon_team_members_candidate", "candidate_id"),
     )
 
 
@@ -153,6 +165,10 @@ class HackathonRanking(Base):
     __table_args__ = (
         UniqueConstraint("hackathon_id", "team_id", name="uq_hackathon_rankings_hackathon_team"),
         Index("idx_hackathon_rankings_hackathon_rank", "hackathon_id", "rank"),
+        # Per-team lookups (both constraint indexes above lead with hackathon_id, so
+        # neither covers a team_id-only filter) — used when rankings are read back and
+        # rewritten on each finalization.
+        Index("idx_hackathon_rankings_team", "team_id"),
     )
 
 

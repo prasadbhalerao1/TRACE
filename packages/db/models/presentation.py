@@ -39,6 +39,9 @@ class PlagiarismMatch(Base):
     similarity: Mapped[float] = mapped_column(Float, nullable=False)
     flagged_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    # Read on every deck detail view to list that deck's matches.
+    __table_args__ = (Index("idx_plagiarism_matches_presentation", "presentation_id"),)
+
 
 class PresentationScore(Base):
     __tablename__ = "presentation_scores"
