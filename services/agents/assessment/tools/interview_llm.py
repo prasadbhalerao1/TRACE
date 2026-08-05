@@ -83,13 +83,63 @@ _REPORT_PARAMETERS = {
 }
 
 
+# How many of the most recent transcript turns to send verbatim when asking the next
+# question. The prompt only needs history for two things — "show awareness of what's been
+# discussed" and "avoid repetition" — and both are served by the recent turns plus a list
+# of the earlier topics.
+#
+# Sending the whole transcript made cost quadratic in interview length: turn N re-sent
+# every prior turn, so a 20-turn interview paid for ~210 turn-renderings instead of 20.
+# Long answers made it worse, since each one was resent on every subsequent question.
+_MAX_VERBATIM_TURNS = 6
+# Truncation ceiling for a single answer. A candidate pasting a large block (a stack
+# trace, a whole file) would otherwise blow up every later prompt that includes it.
+_MAX_TURN_CHARS = 1200
+
+
+def _render_history(transcript: list[dict]) -> str:
+    """Bounded rendering of the interview so far.
+
+    Recent turns go in verbatim; everything older collapses to a one-line summary of the
+    questions already asked, which is what the "avoid repetition" instruction actually
+    needs. Returns the same "(interview just starting)" sentinel as before for an empty
+    transcript, so the prompt reads identically on the first question.
+    """
+    if not transcript:
+        return "(interview just starting)"
+
+    def render(turn: dict) -> str:
+        text = (turn.get("text") or "").strip()
+        if len(text) > _MAX_TURN_CHARS:
+            text = text[:_MAX_TURN_CHARS] + " … [truncated]"
+        return f"{turn.get('role')}: {text}"
+
+    if len(transcript) <= _MAX_VERBATIM_TURNS:
+        return "\n".join(render(t) for t in transcript)
+
+    older, recent = transcript[:-_MAX_VERBATIM_TURNS], transcript[-_MAX_VERBATIM_TURNS:]
+    asked = [
+        (t.get("text") or "").strip()
+        for t in older
+        if t.get("role") == "agent" and (t.get("text") or "").strip()
+    ]
+    lines = []
+    if asked:
+        summarized = "; ".join(q[:120] for q in asked)
+        lines.append(f"(earlier in this interview, already asked: {summarized})")
+    else:
+        lines.append(f"({len(older)} earlier turn(s) omitted)")
+    lines.extend(render(t) for t in recent)
+    return "\n".join(lines)
+
+
 async def generate_question(topic: str, candidate_profile_summary: str, transcript: list[dict], job_context: dict | None = None) -> str:
     import logging
     from services.agents.prompts_loader import load_prompt
 
     logger = logging.getLogger(__name__)
 
-    history = "\n".join(f"{t['role']}: {t['text']}" for t in transcript) or "(interview just starting)"
+    history = _render_history(transcript)
 
     role_context_section = ""
     if job_context:

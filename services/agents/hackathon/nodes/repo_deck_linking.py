@@ -19,11 +19,20 @@ state for the router to persist as real `Assessment`/`Submission` rows after thi
 completes, exactly like every other cross-module write in this codebase.
 """
 
+import asyncio
+
 from services.agents.assessment.state import VerificationState
 from services.agents.assessment.tools.llm_review import AssessmentUnavailable
 from services.agents.assessment.verification_graph import get_verification_graph
 from services.agents.hackathon.state import HackathonRankingState
 from services.api.modules.assessments.router import _fetch_repo_sample_source
+
+
+# Cap on simultaneous repo verifications. Each one is a GitHub API fetch plus an LLM
+# review, so this bounds pressure on both the GitHub rate limit and the LLM provider's
+# concurrency limit while still overlapping the network waits that dominate the work.
+_MAX_CONCURRENT_REPO_SCORES = 5
+_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_REPO_SCORES)
 
 
 def _repo_full_name(repo_url: str) -> str:
@@ -34,7 +43,10 @@ def _repo_full_name(repo_url: str) -> str:
 
 async def _score_repo(repo_url: str) -> dict:
     repo_full_name = _repo_full_name(repo_url)
-    source = _fetch_repo_sample_source(repo_full_name)
+    # `_fetch_repo_sample_source` is synchronous PyGithub I/O. Called directly it blocks
+    # the event loop for the whole GitHub round trip, which would both stall every other
+    # in-flight request and serialize the concurrent scoring below into a queue.
+    source = await asyncio.to_thread(_fetch_repo_sample_source, repo_full_name)
 
     initial_state: VerificationState = {
         "assessment_type": "project_analysis",
@@ -61,23 +73,39 @@ async def run(state: HackathonRankingState) -> dict:
     repo_scores: dict[str, float | None] = {}
     repo_verification_results: dict[str, dict] = {}
 
+    pending: list[tuple[str, str]] = []
     for team in state["teams"]:
         team_id = team["team_id"]
         existing_repo_score = team.get("repo_score")
         if existing_repo_score is not None:
             repo_scores[team_id] = existing_repo_score
-            continue
-        if not team.get("repo_url"):
+        elif not team.get("repo_url"):
+            repo_scores[team_id] = None
+        else:
+            pending.append((team_id, team["repo_url"]))
+
+    async def score_one(team_id: str, repo_url: str) -> tuple[str, dict | None]:
+        async with _semaphore:
+            try:
+                return team_id, await _score_repo(repo_url)
+            except AssessmentUnavailable:
+                # Static analysis ran (it's pure Python, no external dependency) but the
+                # LLM code review couldn't (e.g. missing ANTHROPIC_API_KEY) — degrade to
+                # None, never fabricate a repo quality number, same pattern every other
+                # module uses.
+                return team_id, None
+
+    # Each team's verification is an independent GitHub fetch + static analysis + LLM
+    # review, and they were run strictly one after another — so finalizing a 30-team
+    # hackathon took 30x one team's latency, most of it spent waiting on the network.
+    # Bounded concurrency: fast enough to matter, capped so a large event doesn't open 100
+    # simultaneous GitHub/LLM calls and trigger rate limiting (which `_score_repo`'s
+    # AssessmentUnavailable path would silently turn into missing scores).
+    for team_id, result in await asyncio.gather(*(score_one(t, u) for t, u in pending)):
+        if result is None:
             repo_scores[team_id] = None
             continue
-        try:
-            result = await _score_repo(team["repo_url"])
-            repo_scores[team_id] = result["score"]
-            repo_verification_results[team_id] = result
-        except AssessmentUnavailable:
-            # Static analysis ran (it's pure Python, no external dependency) but the LLM
-            # code review couldn't (e.g. missing ANTHROPIC_API_KEY) — degrade to None,
-            # never fabricate a repo quality number, same pattern every other module uses.
-            repo_scores[team_id] = None
+        repo_scores[team_id] = result["score"]
+        repo_verification_results[team_id] = result
 
     return {"repo_scores": repo_scores, "repo_verification_results": repo_verification_results}

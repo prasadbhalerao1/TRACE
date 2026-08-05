@@ -9,14 +9,16 @@ candidates, which is what keeps the downstream Sonnet re-rank cost-bounded (doc 
 "LLM only on the final shortlist" rule).
 """
 
+import asyncio
+
 from services.agents.recruitment.state import CopilotState
 from services.agents.recruitment.tools.embeddings import (
     SKILL_SIMILARITY_THRESHOLD,
     candidate_skill_centroid,
     cosine_similarity,
+    embed_skills,
     embed_texts,
 )
-from services.agents.recruitment.tools.skill_descriptions import describe_skill
 
 _SHORTLIST_LIMIT = 50
 
@@ -78,6 +80,12 @@ def _matches_hard_filters(
 
 
 async def run(state: CopilotState) -> dict:
+    """Async wrapper only — see `_run_sync`. Embedding + filtering is CPU-bound and this
+    node runs directly on the Copilot request path, so keep it off the event loop."""
+    return await asyncio.to_thread(_run_sync, state)
+
+
+def _run_sync(state: CopilotState) -> dict:
     filters = state["structured_filters"]
     hard_filters = filters.get("_hard_filters", {})
     pool = state.get("candidate_pool") or []
@@ -93,12 +101,15 @@ async def run(state: CopilotState) -> dict:
         # bare name — bare short skill-name embeddings don't reliably separate genuinely
         # related skills from unrelated ones (measured directly; see
         # embeddings.SKILL_SIMILARITY_THRESHOLD's docstring).
-        required_vectors = embed_texts([describe_skill(s) for s in required_skills])
+        # `embed_skills` applies describe_skill() internally and memoizes per distinct
+        # skill, so the repeated skills across the pool are encoded once, not once per
+        # candidate.
+        required_vectors = embed_skills(required_skills)
         required_vectors_by_name = dict(zip(required_skills, required_vectors))
         for candidate in pool:
             skill_names = [s["name"] for s in candidate.get("skills", [])]
             candidate_vectors_by_id[candidate["candidate_id"]] = (
-                embed_texts([describe_skill(name) for name in skill_names]) if skill_names else None
+                embed_skills(skill_names) if skill_names else None
             )
 
     survivors = [

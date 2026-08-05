@@ -2,6 +2,8 @@
 description + required skills once per posting, upserts into `job_description_embeddings`
 (doc 02 §6)."""
 
+import asyncio
+
 from services.agents.recruitment.state import MatchingState
 from services.agents.recruitment.tools.embeddings import (
     embed_texts,
@@ -11,6 +13,12 @@ from services.agents.recruitment.tools.embeddings import (
 
 
 async def run(state: MatchingState) -> dict:
+    """Async wrapper only — embedding is CPU-bound and the Qdrant upsert is a blocking
+    network call, so both go off the event loop (see `match_candidates.run`)."""
+    return await asyncio.to_thread(_run_sync, state)
+
+
+def _run_sync(state: MatchingState) -> dict:
     text = state["job_description"] + "\n\nRequired skills: " + ", ".join(state.get("job_required_skills") or [])
     job_vector = embed_texts([text])[0]
 
