@@ -34,7 +34,7 @@ from packages.db.models import (
 from services.api.core.db import async_session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("dataaxle.seed")
+logger = logging.getLogger("overwatch.seed")
 
 
 async def seed_relational_database(session: AsyncSession):
@@ -48,7 +48,7 @@ async def seed_relational_database(session: AsyncSession):
         org = Organization(
             id=uuid.uuid4(),
             name="Demo Tech Corp",
-            domain="dataaxle.ai",
+            domain="overwatch.ai",
             org_type="company",
             created_at=datetime.now(timezone.utc),
         )
@@ -58,11 +58,11 @@ async def seed_relational_database(session: AsyncSession):
 
     # 2. Demo Users
     user_data = [
-        ("user_candidate_demo", "demo_candidate@dataaxle.ai", "candidate", "Alex Rivera"),
-        ("user_recruiter_demo", "demo_recruiter@dataaxle.ai", "recruiter", "Sarah Chen"),
-        ("user_organizer_demo", "demo_organizer@dataaxle.ai", "organizer", "Marcus Vance"),
-        ("user_judge_demo", "demo_judge@dataaxle.ai", "judge", "Dr. Elena Rostova"),
-        ("user_admin_demo", "demo_admin@dataaxle.ai", "admin", "System Administrator"),
+        ("user_candidate_demo", "demo_candidate@overwatch.ai", "candidate", "Alex Rivera"),
+        ("user_recruiter_demo", "demo_recruiter@overwatch.ai", "recruiter", "Sarah Chen"),
+        ("user_organizer_demo", "demo_organizer@overwatch.ai", "organizer", "Marcus Vance"),
+        ("user_judge_demo", "demo_judge@overwatch.ai", "judge", "Dr. Elena Rostova"),
+        ("user_admin_demo", "demo_admin@overwatch.ai", "admin", "System Administrator"),
     ]
 
     users_map = {}

@@ -29,12 +29,12 @@ from arq.connections import RedisSettings
 from services.api.core.config import get_settings
 from services.workers.tasks import TASKS
 
-logger = logging.getLogger("dataaxle.workers.runner")
+logger = logging.getLogger("overwatch.workers.runner")
 
 
 async def startup(ctx: dict) -> None:
     logger.info("=========================================================")
-    logger.info(" DataAxle background worker ready")
+    logger.info(" Overwatch background worker ready")
     logger.info(" Tasks: %s", ", ".join(f.__name__ for f in TASKS))
     logger.info("=========================================================")
 

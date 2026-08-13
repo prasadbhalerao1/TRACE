@@ -67,7 +67,7 @@ const INITIAL_RESUME: ResumeData = {
   fullName: "Naveen Beniwal",
   roleTitle: "Software & AI Systems Engineer",
   phone: "+91 99999 99999",
-  email: "naveen@dataaxle.ai",
+  email: "naveen@overwatch.ai",
   location: "Kurukshetra, India",
   linkedin: "linkedin.com/in/naveenbeniwal",
   github: "github.com/naveenbeniwal",
@@ -84,7 +84,7 @@ const INITIAL_RESUME: ResumeData = {
   experience: [
     {
       id: "exp-1",
-      company: "DataAxle AI Systems",
+      company: "Overwatch AI Systems",
       role: "Lead Full-Stack AI Engineer",
       location: "Remote",
       dates: "2025 – Present",

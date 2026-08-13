@@ -26,7 +26,7 @@ until a future session follows the steps below.
    is easier for automated testing).
 3. Set a stable email, e.g. `e2e-candidate@example.com`, and a strong password.
 4. After creation, find the user's **User ID** in the Dashboard.
-5. In your DataAxle app, hit `POST /users/onboarding` with `{ "role": "candidate" }` authenticated
+5. In your Overwatch app, hit `POST /users/onboarding` with `{ "role": "candidate" }` authenticated
    as that new Clerk user to complete the platform onboarding step — without this the dashboard
    route will redirect to `/onboarding` and the test will fail.
 

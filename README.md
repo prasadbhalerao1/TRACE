@@ -9,7 +9,7 @@ A high-performance, multi-agent AI talent intelligence, recruitment matching, ha
 The codebase is organized into clean, maintainable, decoupled packages and services:
 
 ```
-DataAxle/
+Overwatch/
 ├── apps/
 │   └── web/                             # Next.js 16 (React 19, Tailwind CSS, Turbopack)
 │       ├── e2e/                         # Playwright E2E test suite & setup

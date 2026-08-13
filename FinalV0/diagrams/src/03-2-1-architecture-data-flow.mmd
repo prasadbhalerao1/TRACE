@@ -1,0 +1,9 @@
+graph LR
+    A["CLIENT<br/>Next.js 16 · React 19<br/>6 role sections"] --> B["API GATEWAY<br/>FastAPI · REST"]
+    B --> C["AUTH &amp; RBAC<br/>bcrypt · JWT<br/>role check per route"]
+    C --> D["ROUTERS<br/>own the database<br/>persist results"]
+    D --> E["Candidate Intelligence · 1<br/>Recruitment · 2<br/>Assessment · 5"]
+    D --> F["Fraud · 4<br/>PPT · Hackathon<br/>Supervisor · 3"]
+    E --> G["LLM GATEWAY<br/>Anthropic · OpenAI<br/>Groq · Gemini"]
+    F --> G
+    G --> H["Postgres · 34 tables<br/>Qdrant · embeddings<br/>Redis · counters"]

@@ -51,7 +51,7 @@ from arq.worker import Retry
 
 from services.api.core.config import get_settings
 
-logger = logging.getLogger("dataaxle.workers.tasks")
+logger = logging.getLogger("overwatch.workers.tasks")
 
 # Substrings that mark a recorded failure as worth another attempt. Matched
 # case-insensitively against the error text the pipeline persisted. Deliberately
