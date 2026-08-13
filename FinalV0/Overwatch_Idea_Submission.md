@@ -1,4 +1,4 @@
-# Overwatch
+# TRACE — Talent Reliability & Assessment through Credential Evidence
 ### AI Talent Intelligence & Recruitment Platform
 **Team: The Big Oh's** · Idea Submission
 
@@ -10,7 +10,7 @@
 
 1. **Executive Summary & Core Value Proposition**
    1. Executive Summary
-   2. What Overwatch Is, In Plain Terms
+   2. What TRACE Is, In Plain Terms
    3. The Problem
    4. System Vision & Engineering Objectives
    5. Our USP
@@ -71,9 +71,9 @@ graph LR
 
 Technical hiring is broken because it relies on documents nobody can verify. A resume claims five years of Python experience. A PDF certificate asserts cloud skills. Recruiters scan these documents for six seconds and take a wild guess. Too often, candidates who get interviewed aren't the best engineers—they're just the ones who write the best resumes.
 
-**Overwatch flips this entirely.** We evaluate developers on artifacts that are extremely hard to fake: git commit histories, merged pull requests in external projects, timed coding sandboxes, and live technical interviews. Resumes still exist in our system, but they act as initial context, not proof.
+**TRACE flips this entirely.** We evaluate developers on artifacts that are extremely hard to fake: git commit histories, merged pull requests in external projects, timed coding sandboxes, and live technical interviews. Resumes still exist in our system, but they act as initial context, not proof.
 
-We built Overwatch around **four interconnected processing engines**:
+We built TRACE around **four interconnected processing engines**:
 
 | Engine | What it actually does |
 | :--- | :--- |
@@ -88,9 +88,9 @@ We built Overwatch around **four interconnected processing engines**:
 2. **No magic zeros:** When data is missing (like a fresh graduate with no assessment history), we renormalize weights across remaining signals. We don't treat missing history as zero ability.
 3. **Full audit trails:** Every composite score ships with an exact breakdown of its sub-components and backing evidence receipts.
 
-### 1.2 What Overwatch Is, In Plain Terms
+### 1.2 What TRACE Is, In Plain Terms
 
-**Overwatch inspects what a developer has actually built and turns that work into an auditable score recruiters can search and candidates can understand.**
+**TRACE inspects what a developer has actually built and turns that work into an auditable score recruiters can search and candidates can understand.**
 
 Here is how it works when a candidate links her profile:
 
@@ -103,7 +103,7 @@ graph LR
     E --> F["Score: 74<br/>3 of 9 signals missing"]
 ```
 
-When a recruiter searches for a Rust developer using plain English ("looking for someone who's built network tools in Rust"), Overwatch ranks candidates based on verified codebase artifacts, not keyword density. Clicking a candidate's score reveals the exact pull requests, repositories, and test scores behind the number.
+When a recruiter searches for a Rust developer using plain English ("looking for someone who's built network tools in Rust"), TRACE ranks candidates based on verified codebase artifacts, not keyword density. Clicking a candidate's score reveals the exact pull requests, repositories, and test scores behind the number.
 
 ### 1.3 The Problem
 
@@ -111,7 +111,7 @@ When a recruiter searches for a Rust developer using plain English ("looking for
 - **For Candidates:** Strong engineers who write simple resumes get filtered out early. Meanwhile, fresh graduates and self-taught developers get penalized by algorithms that default missing history to zero.
 - **For Hackathon Organizers:** Hackathons generate incredible signal—developers building working prototypes under tight deadlines. But once an event ends, that data vanishes. There's no pipeline connecting a third-place hackathon finish to a recruiter's hiring feed.
 
-**The root cause is clear:** Current recruiting software treats unverified claims and verified proof of work as the exact same thing. We built Overwatch to fix that.
+**The root cause is clear:** Current recruiting software treats unverified claims and verified proof of work as the exact same thing. We built TRACE to fix that.
 
 ### 1.4 System Vision & Engineering Objectives
 
@@ -128,7 +128,7 @@ We designed our codebase around six strict operational targets:
 
 ### 1.5 Our USP
 
-Six algorithmic features set Overwatch apart:
+Six algorithmic features set TRACE apart:
 
 | # | Feature | Why it matters in practice |
 | :--- | :--- | :--- |
@@ -143,9 +143,9 @@ Six algorithmic features set Overwatch apart:
 
 ### 1.6 How We Compare
 
-We designed Overwatch to connect the dots across existing tool categories:
+We designed TRACE to connect the dots across existing tool categories:
 
-| Feature | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **Overwatch** |
+| Feature | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **TRACE** |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Primary Data Source** | Self-written text | Timed coding tests | Resume documents | Event submissions | **Commits, PRs, timed code, live audio answers** |
 | **Recruitment Scope** | Sourcing | Testing | Application tracking | Event management | **Full end-to-end recruitment lifecycle** |
@@ -216,7 +216,7 @@ We chose our stack based on real operational needs:
 
 ### 2.3 Multi-Agent Architecture
 
-Overwatch runs **12 LangGraph state machines across 7 functional domains**. These aren't unstructured chatbot threads. Each graph uses explicit transition nodes and typed state schemas.
+TRACE runs **12 LangGraph state machines across 7 functional domains**. These aren't unstructured chatbot threads. Each graph uses explicit transition nodes and typed state schemas.
 
 | Domain Module | Active Graphs | Responsibility |
 | :--- | :---: | :--- |
@@ -264,10 +264,10 @@ Instead of following a rigid script, the system evaluates incoming voice respons
 
 ## 3. Repository Structure
 
-We organized Overwatch as a clean monorepo: `apps/web` holds the Next.js frontend, `packages/` contains shared code, and `services/` houses backend APIs and agents:
+We organized TRACE as a clean monorepo: `apps/web` holds the Next.js frontend, `packages/` contains shared code, and `services/` houses backend APIs and agents:
 
 ```
-overwatch/
+trace-platform/
 ├── apps/
 │   └── web/                   # Next.js 16 app & role-based routes
 ├── packages/
@@ -306,7 +306,7 @@ When a candidate uploads a resume, links GitHub, or adds certificates:
 1. **GitHub Ingestion:** Reads commit histories, PR merges, code quality metrics, language balances, and repo ownership.
 2. **Resume Parsing:** Extracts career history, education, and claimed skills.
 3. **Certificate Validation:** Scans text, issuing body, and credential IDs against verified databases using OCR.
-4. **Contradiction Detection:** Cross-checks resume claims against real code. If a candidate claims 4 years of Go but has no Go repositories, Overwatch flags the discrepancy for candidate review rather than guessing.
+4. **Contradiction Detection:** Cross-checks resume claims against real code. If a candidate claims 4 years of Go but has no Go repositories, TRACE flags the discrepancy for candidate review rather than guessing.
 
 **Output:** 9 sub-scores, a composite Talent Score, evidence receipts, and verified skill badges tied directly to backing code artifacts.
 
@@ -391,7 +391,7 @@ AI text detection heuristics carry lower weight and use bounded confidence limit
 
 ### 4.9 Role-Based Interfaces
 
-Overwatch includes six dedicated role interfaces:
+TRACE includes six dedicated role interfaces:
 
 | Role | Available Features |
 | :--- | :--- |
@@ -410,7 +410,7 @@ Public portfolios are private by default and require explicit candidate opt-in t
 
 ### 5.1 Core Formulations
 
-A major challenge in recruiting software is **scoring under incomplete information**. Most candidates are missing data—some have no assessment history, others have small git histories. Systems that treat missing data as zero unfairly punish junior developers. Overwatch uses dynamic weight renormalization to solve this.
+A major challenge in recruiting software is **scoring under incomplete information**. Most candidates are missing data—some have no assessment history, others have small git histories. Systems that treat missing data as zero unfairly punish junior developers. TRACE uses dynamic weight renormalization to solve this.
 
 ### Weight Renormalization Rule
 
@@ -420,7 +420,7 @@ $$S = \frac{\sum_{i \in A} w_i S_i}{\sum_{i \in A} w_i}$$
 
 where $A$ represents the set of active signals. Normalized weights always sum to $1.0$.
 
-If no signals exist for a category, Overwatch returns `undefined` rather than numeric zero.
+If no signals exist for a category, TRACE returns `undefined` rather than numeric zero.
 
 ### Talent Composite Score
 
@@ -492,7 +492,7 @@ where $t$ is elapsed days.
 
 ### 6.1 Schema Overview
 
-Overwatch manages state across 34 PostgreSQL tables across 7 functional domains:
+TRACE manages state across 34 PostgreSQL tables across 7 functional domains:
 
 | Relational Domain | Primary Entities Stored |
 | :--- | :--- |
@@ -585,11 +585,9 @@ graph LR
 
 ## 11. MVP & Repository
 
-**GitHub Repository:** *(Repository Link)*
+**GitHub Repository:** https://github.com/prasadbhalerao1/TRACE
 
-**Interface Screenshots:**
-
-*(Candidate dashboard with radar visualization and evidence receipts · Recruiter talent search with match score breakdowns · Applicant tracking pipeline view · Hackathon leaderboards · Admin fraud review queue.)*
+The repository contains the full monorepo described in §3: the Next.js frontend, the FastAPI gateway, all seven agent domains, and the migration and seed scripts needed to bring the stack up locally.
 
 ---
 
@@ -612,8 +610,8 @@ graph LR
 
 Build predictive career trajectory modeling, team optimization tools for hackathon organizers, and multi-language resume processing.
 
-> **Non-Goal (Human-in-the-Loop Guarantee):** Overwatch intentionally excludes automated rejection features. The system ranks, explains, and highlights evidence—human hiring managers retain complete authority over all hiring decisions.
+> **Non-Goal (Human-in-the-Loop Guarantee):** TRACE intentionally excludes automated rejection features. The system ranks, explains, and highlights evidence—human hiring managers retain complete authority over all hiring decisions.
 
 ---
 
-**Overwatch** · Team The Big Oh's
+**TRACE** · Team The Big Oh's

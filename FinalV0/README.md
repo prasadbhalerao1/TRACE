@@ -1,4 +1,4 @@
-# FinalV0 — Overwatch Phase 1 Submission
+# FinalV0 — TRACE Phase 1 Submission
 
 **Team: The Big Oh's**
 

@@ -1,4 +1,4 @@
-# Overwatch
+# TRACE — Talent Reliability & Assessment through Credential Evidence
 ### AI Talent Intelligence & Recruitment Platform
 **Team: The Big Oh's** · Idea Submission
 
@@ -10,7 +10,7 @@
 
 1. **Executive Summary & Core Value Proposition**
    1. Executive Summary
-   2. What Overwatch Is, In Plain Terms
+   2. What TRACE Is, In Plain Terms
    3. The Problem
    4. System Vision & Engineering Objectives
    5. Our USP
@@ -71,7 +71,7 @@ The work that proves someone can code is thrown away. A PDF of self-made claims 
 
 Technical hiring runs on documents nobody checks. A resume claims five years of Python. A certificate asserts cloud skills. A recruiter skims for six seconds and guesses. The people who make it to an interview are often the people who write good resumes, which is a different skill from the one being hired for.
 
-Overwatch scores developers on artifacts that are hard to fake instead: commit histories, pull requests merged into projects the candidate does not control, timed coding sandboxes, and live technical interviews. Resumes still enter the system. They just enter as context to be checked, not as evidence.
+TRACE scores developers on artifacts that are hard to fake instead: commit histories, pull requests merged into projects the candidate does not control, timed coding sandboxes, and live technical interviews. Resumes still enter the system. They just enter as context to be checked, not as evidence.
 
 Four engines do the processing.
 
@@ -84,9 +84,9 @@ Four engines do the processing.
 
 Three rules constrain the whole system. Fraud flags never move a score on their own — an admin has to review the flag and uphold it before any penalty lands. Missing data is never read as zero; a fresh graduate with no assessment history has weights renormalized across whatever signals do exist, because absence of evidence about someone is not evidence about their ability. And every composite score carries its own breakdown, down to the sub-components and the artifacts behind them.
 
-### 1.2 What Overwatch Is, In Plain Terms
+### 1.2 What TRACE Is, In Plain Terms
 
-Overwatch reads what a developer has built and turns it into a score recruiters can search against and candidates can argue with.
+TRACE reads what a developer has built and turns it into a score recruiters can search against and candidates can argue with.
 
 Here is a real path through the system. A candidate links her profile:
 
@@ -141,9 +141,9 @@ Every score also carries a confidence ratio, `active_signals / 9`. A 75 assemble
 
 ### 1.6 How We Compare
 
-Each existing category solves one slice of the problem. Overwatch spans them:
+Each existing category solves one slice of the problem. TRACE spans them:
 
-| Feature | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **Overwatch** |
+| Feature | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **TRACE** |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Primary Data Source** | Self-written text | Timed coding tests | Resume documents | Event submissions | **Commits, PRs, timed code, live audio answers** |
 | **Recruitment Scope** | Sourcing | Testing | Application tracking | Event management | **Full end-to-end recruitment lifecycle** |
@@ -261,7 +261,7 @@ The web tier scales horizontally behind a load balancer, which works because JWT
 The project is a monorepo. `apps/web` is the Next.js frontend, `packages/` holds code shared across both sides, and `services/` contains the API and the agents:
 
 ```
-overwatch/
+trace-platform/
 ├── apps/
 │   └── web/                   # Next.js 16 app & role-based routes
 ├── packages/
@@ -567,11 +567,9 @@ Two of these are worth being blunt about. The initial weights are informed guess
 
 ## 11. MVP & Repository
 
-**GitHub Repository:** *(Repository Link)*
+**GitHub Repository:** https://github.com/prasadbhalerao1/TRACE
 
-**Interface Screenshots:**
-
-*(Candidate dashboard with radar visualization and evidence receipts · Recruiter talent search with match score breakdowns · Applicant tracking pipeline view · Hackathon leaderboards · Admin fraud review queue.)*
+The repository contains the full monorepo described in §3: the Next.js frontend, the FastAPI gateway, all seven agent domains, and the migration and seed scripts needed to bring the stack up locally.
 
 ---
 
@@ -583,8 +581,8 @@ After that: recruiter-defined scoring profiles for companies that weight things 
 
 Further out sit career trajectory modelling, team composition tools for organizers, and resume parsing beyond English.
 
-One thing is deliberately absent from all three phases. Overwatch will not auto-reject anyone. It ranks, explains, and shows evidence; the decision stays with a person who can be asked to justify it.
+One thing is deliberately absent from all three phases. TRACE will not auto-reject anyone. It ranks, explains, and shows evidence; the decision stays with a person who can be asked to justify it.
 
 ---
 
-**Overwatch** · Team The Big Oh's
+**TRACE** · Team The Big Oh's
