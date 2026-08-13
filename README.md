@@ -1,15 +1,13 @@
 # TRACE: Talent Reliability & Assessment through Credential Evidence
 
-AI talent intelligence and hiring platform.
-
 An AI-native hiring and hackathon platform. Candidates build a verified profile from real
 evidence (GitHub activity, resume, certificates), get scored on a multi-dimensional Talent
-Score, get matched to jobs by a recruiter copilot, get assessed via coding tests, project
-review, and live AI interviews — and everything is cross-checked by a fraud-detection layer
+Score, get matched to jobs by a recruiter copilot, and get assessed via coding tests, project
+review, and live AI interviews. Everything is cross-checked by a fraud-detection layer
 that never auto-penalizes anyone without a human in the loop. A parallel hackathon track lets
 organizers run events whose top performers feed directly into recruiter pipelines.
 
-**Full technical documentation lives in [`Documentation/`](Documentation/README.md)** — start
+**Full technical documentation lives in [`Documentation/`](Documentation/README.md)**. Start
 there for architecture, module deep-dives, and setup instructions. This README is a
 high-level orientation.
 
