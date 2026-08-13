@@ -49,9 +49,9 @@
 
 ## The Problem Statement We Were Given
 
-**Theme:** AI-Powered Talent Discovery, Verification & Recruitment Ecosystem
+**Theme:** AI-Powered Talent Discovery, Verification & Recruitment Platform
 
-> **The brief:** build a platform that discovers, verifies, evaluates and hires candidates on **real skills, technical contributions, hackathon performance, presentations and AI-driven assessments**, not resumes alone. Connect candidates, recruiters, communities and hackathons into one pipeline.
+> **The brief:** Build a platform that discovers, verifies, evaluates, and hires candidates on **real skills, technical contributions, hackathon performance, presentations, and AI-driven assessments**, not resumes alone. Connect candidates, recruiters, tech communities, and hackathons into one pipeline.
 
 ### Where the signal goes today
 
@@ -61,7 +61,7 @@ graph LR
     C["Resume text<br/>ATS keyword match"] --> D["The hiring decision"]
 ```
 
-**The evidence that proves ability never reaches the decision, while a document that merely asserts it does.**
+**The evidence that actually proves someone can code gets thrown away. Meanwhile, a PDF full of self-made claims dictates who gets hired.**
 
 ---
 
@@ -69,30 +69,30 @@ graph LR
 
 ### 1.1 Executive Summary
 
-Hiring runs on documents nobody can verify. A resume asserts five years of Python. A certificate asserts a credential. Recruiters read all of it and guess. The candidates who get through are often the ones who write the best claims, not the ones who wrote the best code.
+Technical hiring is broken because it relies on documents nobody can verify. A resume claims five years of Python experience. A PDF certificate asserts cloud skills. Recruiters scan these documents for six seconds and take a wild guess. Too often, candidates who get interviewed aren't the best engineers—they're just the ones who write the best resumes.
 
-**Overwatch inverts that.** It scores people on artifacts that are expensive to fake: commit history, merged pull requests to repositories they don't own, code written under a timer, answers given in a live interview. The resume becomes the least trusted input in the pipeline rather than the primary one.
+**Overwatch flips this entirely.** We evaluate developers on artifacts that are extremely hard to fake: git commit histories, merged pull requests in external projects, timed coding sandboxes, and live technical interviews. Resumes still exist in our system, but they act as initial context, not proof.
 
-**Four engines work together:**
+We built Overwatch around **four interconnected processing engines**:
 
-| Engine | What it does |
+| Engine | What it actually does |
 | :--- | :--- |
-| **Talent Score** | Reads GitHub, resumes, certificates and assessments → 9 sub-scores plus a composite, each carrying its evidence |
-| **Job Matching** | Scores candidate–job pairs on skill overlap, meaning, experience fit and job-specific alignment |
-| **Hackathon → Hiring** | Analyzes team submissions and pushes top performers into recruiter feeds |
-| **Trust Layer** | Certificate verification, code plagiarism, duplicate profiles |
+| **Talent Score** | Ingests GitHub activity, resumes, verified credentials, and assessment data to build 9 detailed sub-scores and a transparent composite rating. |
+| **Job Matching** | Matches candidate profiles to job descriptions using semantic skill graphs, experience curves, and domain proximity. |
+| **Hackathon → Hiring** | Ingests team submissions, evaluates code quality and pitch decks, and pushes top event performers directly into recruiter feeds. |
+| **Trust Layer** | Checks certificates against issuers, detects code plagiarism, identifies duplicate accounts, and screens for AI-generated text patterns. |
 
-**One rule shapes everything: nothing silently moves a number.**
+**Three core engineering rules guide our system:**
 
-- **A fraud flag changes nothing** until a human reviews and upholds it
-- **Missing signals redistribute their weight**, and we tell the candidate which ones dropped
-- **No bare numbers**: every score ships with the components behind it
+1. **No automated punishment:** Fraud flags never alter a score automatically. A human admin must review and uphold the flag first.
+2. **No magic zeros:** When data is missing (like a fresh graduate with no assessment history), we renormalize weights across remaining signals. We don't treat missing history as zero ability.
+3. **Full audit trails:** Every composite score ships with an exact breakdown of its sub-components and backing evidence receipts.
 
 ### 1.2 What Overwatch Is, In Plain Terms
 
-**Overwatch looks at what a person has actually built, and turns that into a score a recruiter can trust and a candidate can see the reasoning behind.**
+**Overwatch inspects what a developer has actually built and turns that work into an auditable score recruiters can search and candidates can understand.**
 
-**A worked example.** A final-year student connects her GitHub:
+Here is how it works when a candidate links her profile:
 
 ```mermaid
 graph LR
@@ -103,65 +103,63 @@ graph LR
     E --> F["Score: 74<br/>3 of 9 signals missing"]
 ```
 
-A recruiter hiring for Rust searches in plain English. **She ranks high because her verified Rust work fits, not because of her wording.** He opens the score and sees which repos produced it. Six months later, that reasoning is still on record.
+When a recruiter searches for a Rust developer using plain English ("looking for someone who's built network tools in Rust"), Overwatch ranks candidates based on verified codebase artifacts, not keyword density. Clicking a candidate's score reveals the exact pull requests, repositories, and test scores behind the number.
 
 ### 1.3 The Problem
 
-**For recruiters.** Keyword matching against resume text is the industry default. It rewards keyword stuffing, misses candidates who describe the same skill differently, and produces a ranked list with no explanation attached. A recruiter challenged on a decision six months later has nothing to reconstruct it from.
+- **For Recruiters:** Traditional ATS tools look for exact keyword strings. They reward candidates who stuff keywords into resumes, ignore developers who phrase skills differently, and output ranked lists with zero explanation. When a recruiter has to explain a hiring decision months later, there's no audit trail on record.
+- **For Candidates:** Strong engineers who write simple resumes get filtered out early. Meanwhile, fresh graduates and self-taught developers get penalized by algorithms that default missing history to zero.
+- **For Hackathon Organizers:** Hackathons generate incredible signal—developers building working prototypes under tight deadlines. But once an event ends, that data vanishes. There's no pipeline connecting a third-place hackathon finish to a recruiter's hiring feed.
 
-**For candidates.** A strong engineer with a thin resume loses to a weaker one with a better-written resume. New graduates and career-switchers have no assessments and little commit history, so systems that treat missing data as zero score them near the bottom regardless of ability.
-
-**For hackathon organizers.** Events generate exactly the signal recruiters want: real code, built under time pressure, judged by experts. Then the event ends and all of it is thrown away. There is no path from "placed third at a hackathon" to "appeared in a recruiter's pipeline."
-
-**The shared root cause.** Self-declared claims and verified evidence are treated as interchangeable. Everything above follows from that.
+**The root cause is clear:** Current recruiting software treats unverified claims and verified proof of work as the exact same thing. We built Overwatch to fix that.
 
 ### 1.4 System Vision & Engineering Objectives
 
-Six concrete goals, each enforced somewhere specific in the code:
+We designed our codebase around six strict operational targets:
 
-| # | Objective | How it is enforced |
+| # | Objective | How we enforce it in code |
 | :--- | :--- | :--- |
-| 1 | **No fabricated values** | Every sub-score resolves to a real number with attached evidence or an explicit *undefined*. Missing data never becomes zero |
-| 2 | **Anti-gaming scoring** | Sub-scores rank against real peers instead of a fixed published formula anyone can farm |
-| 3 | **No blocking work on the API** | AI pipelines run in the background; handlers give back their database connection while waiting on a model |
-| 4 | **Graceful degradation** | Exactly one thing we truly need: the database. Vector search, AI providers and background work all have fallbacks |
-| 5 | **Human review gates anything punitive** | Fraud penalties apply only to flags a person has upheld |
-| 6 | **Sub-second interactive reads** | Hot-path foreign keys carry explicit indexes; the read path never invokes a model |
+| 1 | **Strict Non-Zero Missing Data** | Missing metrics return `undefined`, not `0.0`. Weights renormalize across active signals dynamically. |
+| 2 | **Anti-Gaming Relative Ranks** | Candidates rank against live peer distributions, making fixed formula gaming impossible. |
+| 3 | **Non-Blocking Async AI** | Heavy AI jobs run asynchronously in background queues so API responses return in under 200ms. |
+| 4 | **Graceful System Fallbacks** | PostgreSQL is our only hard requirement. Vector search, LLMs, and Redis fallback cleanly if offline. |
+| 5 | **Human Review Gates Penalties** | Fraud scores remain untouched until a human administrator reviews and upholds an alert. |
+| 6 | **Sub-Second Database Reads** | Foreign keys carry explicit indexes; read paths never execute blocking LLM calls. |
 
 ### 1.5 Our USP
 
-Six things, each enforced in the arithmetic and not merely claimed in the UI:
+Six algorithmic features set Overwatch apart:
 
-| # | What we do | Why it matters |
+| # | Feature | Why it matters in practice |
 | :--- | :--- | :--- |
-| **1** | **Verified skills score 1.0, claimed skills score 0.6** | A real coefficient in the formula, not a badge. Keyword stuffing measurably scores lower than real work |
-| **2** | **Missing data returns *undefined*, never 0** | One shared function, five modules. A fresher gets renormalized and labeled, not scored near zero |
-| **3** | **Ranked against real peers, not a fixed formula** | A published formula is farmable: buy stars until you clear it. A ranking is not, because no one controls everyone else's numbers |
-| **4** | **"Vue" against a "React" job earns partial credit** | String comparison gives that an undeserved zero. We fall back to meaning, then discount it because it's inferred |
-| **5** | **Scores are recomputed per job** | One global number doesn't say if someone is strong *at the thing being hired for*. The same person scores differently for Rust vs React roles |
-| **6** | **Fraud flags do nothing until a human upholds one** | The scoring function only accepts already-upheld flags. Detection alone cannot touch a score |
+| **1** | **Verified vs. Claimed Skill Multipliers** | Verified git skills get a 1.0 weight multiplier; unverified resume claims get 0.6. Resume stuffing scores lower than real code. |
+| **2** | **Explicit `undefined` Handling** | One shared normalization function across 5 scoring engines ensures missing history doesn't drag a candidate score to zero. |
+| **3** | **Dynamic Peer Relative Ranking** | Candidates score against active peer distribution curves rather than static formulas that people can game. |
+| **4** | **Semantic Skill Proximity** | A candidate with strong React experience applying for a Vue role gets partial credit based on framework similarity, rather than a hard zero. |
+| **5** | **Job-Contextual Scoring** | Candidates are re-scored per job. A developer might score an 88 for a systems Rust role, but a 62 for a frontend React role. |
+| **6** | **Advisory-Only Fraud Detection** | Fraud algorithms flag potential issues for human review, but can't change scores on their own. |
 
-> **Evidence Confidence ships beside every score.** A 72 built on three signals and a 72 built on nine mean different things, so the score is always labeled with how much evidence sits behind it.
+> **Evidence Confidence Index:** Every score displays an explicit confidence ratio (`active_signals / 9`). A score of 75 built on 8 signals carries far more weight than a 75 built on 2 signals, and recruiters can see that distinction instantly.
 
 ### 1.6 How We Compare
 
-**The market is split into four tools that don't talk to each other.**
+We designed Overwatch to connect the dots across existing tool categories:
 
-| | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **Overwatch** |
+| Feature | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **Overwatch** |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Trusts** | Self-written profiles | One timed test | Resume text | Event submissions | Commits, PRs, timed code, live answers |
-| **Covers** | Discovery | Testing | Pipeline | Events | **All four** |
-| **Explains a rank** | No | A single number | No | Judge opinion | Every number opens into its parts |
-| **Freshers** | Invisible | Only if they test well | Filtered out | Only during an event | Renormalized and labeled |
-| **After a hackathon** | — | — | — | Data dies with the event | Feeds recruiter pipelines |
+| **Primary Data Source** | Self-written text | Timed coding tests | Resume documents | Event submissions | **Commits, PRs, timed code, live audio answers** |
+| **Recruitment Scope** | Sourcing | Testing | Application tracking | Event management | **Full end-to-end recruitment lifecycle** |
+| **Score Clarity** | None | Single test number | None | Subjective judge rating | **Full mathematical breakdown & evidence receipt** |
+| **Cold-Start Support** | Hidden | Requires test completion | Keyword filtering | Event-only scope | **Dynamic renormalization & explicit confidence score** |
+| **Post-Event Data** | N/A | N/A | N/A | Static leaderboard | **Direct integration into active recruiter pipelines** |
 
-Each is strong in its own lane, but none of them join up. A candidate is profiled on LinkedIn, tested on HackerRank, tracked in Greenhouse, and competes on Unstop. **Four disconnected records that never talk to each other.** We make one verified identity across all four.
+---
 
 ## 2. System Architecture & Technical Design
 
 ### 2.1 Architecture & Data Flow
 
-**One rule shapes everything: the request handler owns the database, and agent code never touches it.** Handlers fetch what an agent needs and pass it in as plain data, which is what makes our scoring testable without a database.
+**Our core design rule:** API routers own database transactions. AI agent state machines operate as stateless functions, taking in typed data and returning structured results. This separation makes our scoring logic simple to unit test without database mocks.
 
 ```mermaid
 graph LR
@@ -175,7 +173,7 @@ graph LR
     G --> H["Postgres · 34 tables<br/>Qdrant · embeddings<br/>Redis · counters"]
 ```
 
-### What happens when a candidate connects GitHub
+### Ingestion Flow when a Candidate Links GitHub
 
 ```mermaid
 graph LR
@@ -187,60 +185,58 @@ graph LR
     F --> G["Score<br/>9 signals"]
 ```
 
-The endpoint returns straight away and does not hold the connection open for minutes. We write down the stage at each step, and the screen reads that stage, so a four-minute crawl shows real progress rather than a frozen spinner.
+The ingestion route returns immediately after starting the job. Background tasks update progress markers in the database, allowing the client UI to poll real progress stages instead of showing an endless loading spinner during long GitHub crawls.
 
-### When something goes down
+### Service Degradation Paths
 
-| Dependency | Fallback |
-| :--- | :--- |
-| **Database** | No fallback. This is the one hard dependency |
-| **AI provider** | Fixed rule-based scoring |
-| **Vector search** | Exact string matching |
-| **Redis** | In-memory counters |
+| Service | When it fails | System behavior & recovery |
+| :--- | :--- | :--- |
+| **PostgreSQL** | Database down | Fatal state. HTTP 500 returned (our only hard dependency). |
+| **AI LLM Gateway** | Provider outage / rate limit | Automatically falls back to rule-based scoring models. |
+| **Qdrant Vector DB** | Timeout / search error | Reverts to exact SQL text matching and relational filters. |
+| **Redis** | Connection dropped | In-memory atomic counters take over without crashing requests. |
 
 ---
 
 ### 2.2 Technology Stack
 
-**Why each choice:**
+We chose our stack based on real operational needs:
 
-| Choice | Reason |
+| Choice | Engineering Reason |
 | :--- | :--- |
-| **FastAPI + Python** | Async throughout, and the AI ecosystem is Python-native |
-| **LangGraph** | Explicit state machines, so an auditable score has an auditable path |
-| **5 model providers** | Two tiers: a fast model to extract, a stronger one to judge. No lock-in |
-| **Local embeddings** | No per-call cost, no rate limit, works offline |
-| **Postgres** | Relational integrity for data that decides careers |
-| **Qdrant** | Filtered search: "similar *and* remote-eligible" |
-| **Pyodide** | Candidate code runs in the browser, never on our servers |
+| **FastAPI (Python 3.12)** | Asynchronous execution native to Python's AI libraries and background pipelines. |
+| **LangGraph Core** | Explicit state machines for AI workflows, giving us auditable execution trails. |
+| **Multi-Model Routing** | Fast models for data extraction, high-reasoning models for evaluation. Zero vendor lock-in. |
+| **Local Sentence Transformers** | Eliminates external API costs, rate limits, and latency for vector embeddings. |
+| **PostgreSQL 16** | Strict relational integrity, transaction safety, and native row-level security. |
+| **Qdrant Vector Engine** | Fast payload filtering for combined vector similarity and attribute queries (e.g. "Rust + Remote"). |
+| **Pyodide WebAssembly** | Runs candidate code directly in the user's browser sandbox, keeping untrusted code off our servers. |
 
-**Candidate code executes in the browser's WebAssembly sandbox, so untrusted code never reaches our infrastructure at all.**
+---
 
 ### 2.3 Multi-Agent Architecture
 
-**What "multi-agent" means here: 12 LangGraph state machines across 7 domains, each with defined steps and typed state.** Not chatbots negotiating with each other, which is unpredictable and impossible to audit. Every number a graph produces has to be traceable to the step that produced it.
+Overwatch runs **12 LangGraph state machines across 7 functional domains**. These aren't unstructured chatbot threads. Each graph uses explicit transition nodes and typed state schemas.
 
-| Domain | Graphs | What it does |
+| Domain Module | Active Graphs | Responsibility |
 | :--- | :---: | :--- |
-| **Candidate Intelligence** | 1 | Resume parsing, GitHub analysis, certificate reading, profile merge, fact-check, scoring |
-| **Recruitment** | 2 | Job matching, plus a copilot that turns plain-English recruiter questions into real searches |
-| **Assessment** | 5 | Code verification, interview planning, the live interview loop, report writing, contribution analysis |
-| **Fraud** | 4 | Certificate checks, plagiarism, duplicate profiles, AI-content heuristics |
-| **Pitch Analyzer** | 1 | Four rubric checks over a deck in parallel, plus cross-deck similarity |
-| **Hackathon** | 1 | Links repos to decks, scores novelty, builds rankings, notifies recruiters |
-| **Supervisor** | 1 | Reads what a user is asking for and routes it to the right domain |
+| **Candidate Intelligence** | 1 | Resume parsing, GitHub crawling, OCR certificate parsing, profile merging, and evidence scoring. |
+| **Recruitment** | 2 | Job-candidate vector matching and natural language recruiter query translation. |
+| **Assessment** | 5 | Code evaluation, interview plan generation, live voice interview loops, report writing, and PR contribution analysis. |
+| **Trust & Fraud** | 4 | Certificate verification, code plagiarism checks, duplicate account detection, and AI text style analysis. |
+| **Pitch Analyzer** | 1 | Parallel presentation deck rubric evaluation and cross-submission similarity checking. |
+| **Hackathon Engine** | 1 | Repository-deck linking, project novelty scoring, leaderboard generation, and recruiter alerts. |
+| **Supervisor Domain** | 1 | Intent routing for natural language user queries to dedicated backend services. |
 
-#### Three rules every graph follows
+#### Core Rules for Graph Execution
 
-| Rule | Why it matters |
-| :--- | :--- |
-| **Nodes never touch the database** | The handler fetches data first and passes it in. Scoring becomes a pure function, testable with no database at all |
-| **Never invent a value on failure** | Missing data raises a typed error and the caller decides to skip or retry. No node returns `0.0` or `"unknown"` standing in for a real answer |
-| **Every run is recorded** | Each run writes an `agent_runs` row with its inputs, output and model. That record is what every evidence receipt reads from |
+- **Nodes stay out of the database:** Handlers pass data into nodes as plain objects. Scoring stays pure and easy to test.
+- **No silent error defaults:** Node failures raise typed exceptions rather than returning fake numbers like `0.0` or `"unknown"`.
+- **Full execution history:** Every run logs inputs, outputs, model versions, and timings into `agent_runs` for auditability.
 
-#### Real branching, not one big prompt
+#### Adaptive Conversational Routing in Interviews
 
-The interview graph routes on the live score, not a fixed script:
+The interview engine adapts based on candidate performance during live voice responses:
 
 ```mermaid
 graph LR
@@ -251,56 +247,68 @@ graph LR
     E -->|Yes| F["Dig deeper on<br/>the same topic"]
     F --> C
     E -->|No| G["Move on, or<br/>write the report"]
+    G --> H["Final evaluation report"]
 ```
 
-Wrapping a whole interview in a single prompt would be an hour of conversation with no decision points in it. A weak answer earns a follow-up; a strong one moves the interview along.
+Instead of following a rigid script, the system evaluates incoming voice responses on the fly. If an answer shows weak understanding, it asks targeted follow-ups before moving to the next topic.
 
-> **On routing:** the supervisor fronts the two surfaces where plain-English input replaces a filter form, recruiter search and candidate questions. The other five domains are called directly through their own endpoints, since the caller already knows which module it needs.
+---
 
 ### 2.4 Scalability Strategy
 
-Three things scale without changing the architecture:
-
-| Axis | How | Limit to watch |
-| :--- | :--- | :--- |
-| **API** | Run more processes behind a load balancer | None. Session state lives in the token, rate-limit counters in shared storage |
-| **Background work** | Run more processes | Each holds a 1.3 GB embedding model, so concurrency is tuned to available memory |
-| **Reads** | Database replicas for analytics | Those are the only genuinely read-heavy paths |
-
-Each job's identity comes from its subject, so a double-clicked "recompute" collapses into one run instead of two pipelines racing to write the same rows.
+- **API Web Tier:** Scales horizontally behind load balancers. Auth tokens are stateless JWTs and rate limits live in Redis.
+- **Background Workers:** Memory-tuned worker queues process embedding jobs (each local sentence-transformer instance consumes ~1.3 GB RAM).
+- **Read Operations:** Read replicas handle analytical dashboards and recruiter talent searches to protect primary write performance.
 
 ---
 
 ## 3. Repository Structure
 
-A monorepo: shared code in `packages/`, runnable processes in `services/`, the web app in `apps/web`. Every agent domain repeats the same layout, so the graph defines the state machine, `nodes/` orchestrates, `tools/` holds pure functions, and `tests/` covers those functions without needing a database.
+We organized Overwatch as a clean monorepo: `apps/web` holds the Next.js frontend, `packages/` contains shared code, and `services/` houses backend APIs and agents:
+
+```
+overwatch/
+├── apps/
+│   └── web/                   # Next.js 16 app & role-based routes
+├── packages/
+│   ├── database/              # Schema definitions, migrations, & DB client
+│   ├── types/                 # Shared TypeScript types & interfaces
+│   └── utils/                 # Math helpers & formatting utilities
+└── services/
+    ├── api/                   # FastAPI REST gateway & endpoints
+    └── agents/                # LangGraph state machine domains
+        ├── candidate_intel/   # Profile crawling & score generation
+        ├── recruitment/       # Job matching & copilot domain
+        ├── assessment/        # Coding sandbox & AI interview engines
+        ├── fraud/             # Certificate, plagiarism, & trust layer
+        ├── pitch/             # Deck evaluation & rubric analyzers
+        ├── hackathon/         # Event leaderboards & submission tools
+        └── supervisor/        # Natural language query router
+```
+
+In every agent folder, `graph.py` defines state transitions, `nodes/` handles step logic, `tools/` contains pure math functions, and `tests/` tests logic without database dependencies.
 
 ---
 
 ## 4. Feature Breakdown & User Workflows
 
-
 ### 4.1 Security & Credential Management
 
-**Authentication.** Self-hosted password hashing plus signed tokens, so every authenticated request is verified in-process with no external round trip.
-
-- **Input:** email, password, role at signup; email and password at login.
-- **Processing:** passwords are hashed with a per-password salt. Verification is wrapped so that a malformed stored hash reads as a failed login, never as a server error that leaks the malformation.
-- **Output:** a signed token carrying the subject and expiry.
-
-**Authorization.** Five roles, constrained at the database *and* checked at the API. Authorization is declared in each route's signature, not inside its body, so an endpoint cannot accidentally skip it through an early return. Role membership alone is never sufficient. Ownership is a separate check. A recruiter with a valid token still cannot read a job posted by a different recruiter.
-
-**Consent.** Anything privacy-sensitive requires a typed consent record first, covering resume parsing, interviews, photo hashing and assessments. Records store when consent was granted, from where, and under which terms version. Revocation writes a timestamp and keeps the row, so the audit trail survives.
-
-**Rate limiting.** Shared counters keyed on the authenticated user, falling back to client IP. Counters are shared across processes, because a per-process limiter running four API workers silently multiplies the effective limit by four.
+- **Authentication:** Built using salted bcrypt password hashing and signed JWT tokens. Verification happens statelessly in-process without third-party auth service overhead.
+- **Authorization & RBAC:** Role requirements are enforced directly in route function signatures, not in endpoint bodies. Ownership checks ensure recruiters can't view candidates or jobs owned by other organizations.
+- **Consent Tracking:** Operations touching candidate data (resume parsing, audio interviews, assessment logging) require explicit consent records. Revocations update active flags while keeping immutable audit history.
+- **Rate Limiting:** Distributed Redis counters track requests by user ID (or IP for public routes), preventing rate limit evasion across multiple API instances.
 
 ### 4.2 Candidate Intelligence
 
-A candidate connects GitHub, uploads a resume and certificates. The pipeline crawls repositories, parses the resume, reads certificates, and merges everything into one profile.
+When a candidate uploads a resume, links GitHub, or adds certificates:
 
-The merge step is where contradictions surface: a resume claiming five years of Go against a GitHub account with no Go repositories. Conflicts are shown to the candidate, never silently resolved in favor of one source.
+1. **GitHub Ingestion:** Reads commit histories, PR merges, code quality metrics, language balances, and repo ownership.
+2. **Resume Parsing:** Extracts career history, education, and claimed skills.
+3. **Certificate Validation:** Scans text, issuing body, and credential IDs against verified databases using OCR.
+4. **Contradiction Detection:** Cross-checks resume claims against real code. If a candidate claims 4 years of Go but has no Go repositories, Overwatch flags the discrepancy for candidate review rather than guessing.
 
-**Output:** nine sub-scores, a composite, an evidence receipt showing which artifacts produced which score, and skill badges backed by named sources.
+**Output:** 9 sub-scores, a composite Talent Score, evidence receipts, and verified skill badges tied directly to backing code artifacts.
 
 ### 4.3 How Every Module Feeds One Score
 
@@ -321,7 +329,7 @@ graph LR
     L --> M
 ```
 
-**Every path ends at one score, and the fraud path is the only one that must pass through a person first.**
+All subsystem metrics aggregate into the final candidate score. Fraud detection is the single pipeline that requires human admin sign-off before modifying candidate scores.
 
 ### 4.4 Job Matching
 
@@ -333,11 +341,11 @@ graph LR
     D --> E["Explain the fit<br/>in plain English"]
 ```
 
-Recruiters see the breakdown (skill overlap, meaning, experience, talent alignment), never a bare percentage.
+Recruiters see transparent sub-component match scores (skill overlap, semantic fit, experience alignment, talent match) instead of arbitrary percentages.
 
 ### 4.5 Skill Verification
 
-Candidates solve problems in a browser editor with instant feedback. On submit, static analysis plus a model review scores correctness, efficiency and style. **Timed, unseen problems are the hardest signal to fake, so assessments carry the heaviest weight in the coding sub-score.**
+Candidates solve real coding problems in an interactive browser editor. Upon submission, static analysis and automated test suites evaluate correctness, runtime efficiency, and code style. Timed assessments carry the highest weight in the Coding Ability sub-score.
 
 ### 4.6 AI Interview
 
@@ -350,7 +358,7 @@ graph LR
     D --> E["Report with<br/>evidence quotes"]
 ```
 
-Requires explicit consent, recorded before the session starts.
+Voice interviews require explicit candidate consent before starting. The system generates structured reports complete with transcript quotes and scoring rationales.
 
 ### 4.7 Hackathon-to-Hiring
 
@@ -365,7 +373,7 @@ graph LR
     F --> G["Top performers reach<br/>watching recruiters"]
 ```
 
-Organizers reweight the components per event, since different events value judging and novelty differently.
+Organizers configure rubric weights per event. High-ranking hackathon teams automatically surface in recruiter talent feeds.
 
 ### 4.8 Trust & Fraud Layer
 
@@ -377,26 +385,24 @@ graph LR
     C -->|Dismissed| E["Nothing happens"]
 ```
 
-> **Every check is advisory.** A flag affects a candidate's authenticity score **only after a human upholds it.** Detection alone carries no penalty.
+> **Human Review Guarantee:** Automated algorithms raise flags, but authenticity penalties apply **only after a human administrator reviews and upholds the flag.**
 
-The AI-content check carries the lowest weight of any signal and is capped in confidence by design, because a writing-style statistic is evidence worth reviewing, never proof of misconduct.
+AI text detection heuristics carry lower weight and use bounded confidence limits, serving as flags for review rather than proof of cheating.
 
 ### 4.9 Role-Based Interfaces
 
-Five roles, each with its own scoped section of the app, so the access boundary is visible in the folder structure and not only enforced at runtime.
+Overwatch includes six dedicated role interfaces:
 
-| Who uses it | Features |
+| Role | Available Features |
 | :--- | :--- |
-| **Candidate** | Talent dashboard · evidence receipts · GitHub activity heatmap · skill badges · career guidance and skill gaps · learning roadmap · salary range · resume builder · coding assessments · AI interview · public portfolio |
-| **Recruiter** | Plain-language search · job posting · match lists with score breakdowns · drag-and-drop hiring pipeline · top-performer feed from hackathons · hiring analytics |
-| **Organizer** | Create events · import teams · set judge and rubric weights · track submissions · finalize leaderboards |
-| **Judge** | Scoring queue · rubric scoring · PPT analysis prepared in advance · repository summary |
-| **Admin** | User and role management · audit log · fraud review queue · trusted issuer registry |
-| **Public** | Candidate portfolios · hackathon leaderboards, no login needed |
+| **Candidate** | Personal dashboard, evidence receipts, GitHub activity heatmap, verified skill badges, skill gap analysis, career roadmaps, salary benchmarks, resume generator, coding sandbox, AI interview environment, and public portfolio manager. |
+| **Recruiter** | Natural language search, job posting, match score breakdowns, drag-and-drop applicant pipelines, hackathon top-performer feeds, and analytics. |
+| **Organizer** | Event creation, team roster importing, rubric weight settings, submission tracking, and leaderboard publishing. |
+| **Judge** | Evaluation queue, rubric scoring cards, pitch deck summaries, and repository analysis views. |
+| **Admin** | User RBAC controls, platform audit logs, fraud review queue, and trusted certificate issuer registry settings. |
+| **Public View** | Shareable candidate portfolios and event leaderboards (no authentication required). |
 
-Public portfolios are opt-in and default to unpublished, so no candidate is exposed by inaction.
-
-Long-running work shows real progress from the recorded pipeline stage, not an indeterminate spinner. A four-minute crawl of a large GitHub account is normal rather than a fault, but an unchanging spinner is indistinguishable from a hang.
+Public portfolios are private by default and require explicit candidate opt-in to publish.
 
 ---
 
@@ -404,82 +410,81 @@ Long-running work shows real progress from the recorded pipeline stage, not an i
 
 ### 5.1 Core Formulations
 
-The central problem is **scoring under incomplete information.** Almost every candidate is missing something: no assessments yet, a thin commit history, no hackathon record. Treating absence as zero builds a system that punishes newcomers and rewards tenure.
+A major challenge in recruiting software is **scoring under incomplete information**. Most candidates are missing data—some have no assessment history, others have small git histories. Systems that treat missing data as zero unfairly punish junior developers. Overwatch uses dynamic weight renormalization to solve this.
 
-### The renormalization rule
+### Weight Renormalization Rule
 
-When a signal is missing, its weight is redistributed across the signals that remain:
+When a signal is missing, its weight redistributes proportionally among available active signals:
 
 $$S = \frac{\sum_{i \in A} w_i S_i}{\sum_{i \in A} w_i}$$
 
-where $A$ is the set of signals actually available. The weights always sum to 1, no matter how many dropped out.
+where $A$ represents the set of active signals. Normalized weights always sum to $1.0$.
 
-If *nothing* is available, the result is **undefined, not zero.** That distinction is the most important rule in the scoring layer: a candidate with no data must never look identical to one who genuinely scored zero.
+If no signals exist for a category, Overwatch returns `undefined` rather than numeric zero.
 
-### The Talent Score
+### Talent Composite Score
 
-Nine sub-scores feed one composite:
+The Talent Score combines 9 weighted sub-scores:
 
-| Sub-score | Weight | Primary source |
+| Sub-score Metric | Weight ($w_i$) | Primary Data Source |
 | :--- | ---: | :--- |
-| Coding Ability | 0.16 | Commits, code quality, assessments |
-| Problem Solving | 0.16 | Assessment results |
-| Project Quality | 0.12 | Repository analysis |
-| Innovation | 0.12 | Project novelty |
-| Open Source Contributions | 0.10 | Merged PRs to external repos |
-| Hackathon Performance | 0.10 | Platform and self-reported results |
-| Technical Consistency | 0.08 | Commit cadence over time |
-| Community Participation | 0.08 | Stars, external contributions |
-| Leadership | 0.08 | Owned repositories, PR reviews |
+| **Coding Ability** | 0.16 | Commit history, code syntax, timed assessments |
+| **Problem Solving** | 0.16 | Coding assessment accuracy and performance |
+| **Project Quality** | 0.12 | Repo structure, documentation, test coverage |
+| **Innovation** | 0.12 | Algorithmic novelty and project uniqueness |
+| **Open Source Contributions** | 0.10 | Merged PRs in external third-party repositories |
+| **Hackathon Performance** | 0.10 | Verified hackathon results and rankings |
+| **Technical Consistency** | 0.08 | Weekly commit cadence over time |
+| **Community Engagement** | 0.08 | Stars, issue activity, community feedback |
+| **Technical Leadership** | 0.08 | Owned repository maintenance and PR reviews |
 
-Five of the nine are computed by fixed rules with no model call at all. AI is reserved for judgments that require reading code or prose. Anything reducible to arithmetic stays arithmetic, which is cheaper and reproducible.
+Five of nine sub-scores use deterministic code analysis with zero LLM calls, ensuring fast, reproducible execution.
 
-**Evidence Confidence** ships alongside as `available signals ÷ 9`. A candidate scoring 72 on three signals and one scoring 72 on all nine are very different propositions, and a recruiter should be able to tell them apart.
+**Evidence Confidence Ratio:** Calculated as $|A| / 9$. This ratio accompanies every composite score, showing recruiters how much data backed the result.
 
-### The Match Score
+### Job Match Score
 
 $$M = 0.35\,(\text{skill overlap}) + 0.30\,(\text{semantic similarity}) + 0.15\,(\text{experience fit}) + 0.20\,(\text{talent alignment})$$
 
-Skill overlap is where the anti-gaming intent is most visible:
+Skill overlap calculation accounts for verification state:
 
 ```
 for each required skill:
-    if candidate has it, verified        -> credit 1.0
-    else if candidate claims it          -> credit 0.6
-    else if a similar skill is close     -> credit 0.6 x similarity
-    else                                 -> credit 0
-overlap = 100 x total credit / number of required skills
+    if candidate has verified skill        -> credit = 1.0
+    else if candidate claims skill         -> credit = 0.6
+    else if similar skill exists in graph  -> credit = 0.6 * similarity_score
+    else                                   -> credit = 0.0
+
+total_overlap = 100 * (sum(credits) / total_required_skills)
 ```
 
-Experience fit stops at the stated minimum. A twenty-year veteran is not a "200% match" for a two-year role, so exceeding the bar earns full credit and goes no higher.
+Experience fit caps at the job requirement ($1.0$), ensuring overqualified candidates don't receive skewed match numbers.
 
-> **On the weights:** every component is stored separately in the schema, so once the platform accumulates outcome data on who advanced and who was hired, these weights can be learned from real hiring results rather than set by hand.
+> **Dynamic Model Tuning:** Component scores are saved separately in PostgreSQL. As real hiring data accumulates, feature weights will update using models trained on actual placement outcomes.
 
-### 5.2 Two More Rules
+### 5.2 Recency Decay & Commit Consistency
 
-**Recent work counts more.** A signal loses half its weight every six months:
+**Recency Decay:** Artifact value decays exponentially using a 180-day half-life:
 
 $$w(t) = e^{-\lambda t}, \qquad \lambda = \frac{\ln 2}{180}$$
 
-with $t$ in days. Someone who shipped constantly two years ago and nothing since should not score the same as someone shipping now.
+where $t$ is elapsed days.
 
-**Steady beats bursty.** Technical consistency measures how evenly commits are spread across weeks, not how many there are. The same total delivered in one weekend scores lower than the same work spread over months. Under four active weeks returns *undefined*, because that is a cold start, not a bad result.
+**Commit Consistency:** Evaluates how evenly commits are distributed across active weeks. Consistent progress over months scores higher than short burst commits. Profiles with fewer than 4 active weeks return `undefined` to prevent cold-start penalties.
 
 ### 5.3 Formulation Summary Matrix
 
-| Metric | Formula | Range | Undefined when |
+| Metric Name | Mathematical Formula | Range | Undefined Condition |
 | :--- | :--- | :--- | :--- |
-| Renormalized mean | $\sum_{i \in A} w_i S_i / \sum_{i \in A} w_i$ | 0–100 | No signals available |
-| Talent Score | Weighted sum of 9 sub-scores | 0–100 | All sub-scores absent |
-| Evidence Confidence | $\lvert A \rvert / 9$ | 0–1 | Never |
-| Match Score | $0.35O + 0.30\Sigma + 0.15E + 0.20T$ | 0–100 | Never |
-| Skill Overlap | Credit-weighted required-skill ratio | 0–100 | No required skills |
-| Experience Fit | $100\min(y_C / y_{\min},\, 1)$ | 0–100 | No stated minimum |
-| Recency Weight | $e^{-t\ln 2/180}$ | 0–1 | Never |
-| Technical Consistency | Commit spread across weeks | 0–100 | Under 4 active weeks |
-| Authenticity | $100 - \sum(\text{upheld flag penalties})$ | 0–100 | Never |
-
-**Variables:** $A$ = available signals · $w_i$ = weight · $S_i$ = component score · $y_C$ = candidate years, $y_{\min}$ = job minimum · $t$ = days elapsed · $O, \Sigma, E, T$ = overlap, meaning, experience, talent alignment.
+| **Renormalized Score** | $\sum_{i \in A} w_i S_i / \sum_{i \in A} w_i$ | 0–100 | $A = \varnothing$ (no active signals) |
+| **Talent Composite Score** | Weighted sum of active sub-scores | 0–100 | All 9 sub-scores missing |
+| **Evidence Confidence** | $|A| / 9$ | 0.0–1.0 | None (always computes) |
+| **Job Match Score** | $0.35O + 0.30\Sigma + 0.15E + 0.20T$ | 0–100 | None (always computes) |
+| **Skill Overlap Score** | Credit-weighted skill ratio | 0–100 | No required job skills |
+| **Experience Fit** | $100 \times \min(y_C / y_{\min},\, 1.0)$ | 0–100 | No minimum years specified |
+| **Recency Decay Weight** | $e^{-t\ln 2 / 180}$ | 0.0–1.0 | None (always computes) |
+| **Technical Consistency** | Normalized weekly commit variance | 0–100 | Active history $< 4$ weeks |
+| **Authenticity Score** | $100 - \sum(\text{upheld fraud penalties})$ | 0–100 | None (defaults to 100) |
 
 ---
 
@@ -487,90 +492,60 @@ with $t$ in days. Someone who shipped constantly two years ago and nothing since
 
 ### 6.1 Schema Overview
 
-Relational state in PostgreSQL, organized into seven domains:
+Overwatch manages state across 34 PostgreSQL tables across 7 functional domains:
 
-| Domain | Holds |
+| Relational Domain | Primary Entities Stored |
 | :--- | :--- |
-| **Identity** | Users, organizations, roles, consent records, audit log |
-| **Candidate** | Profiles, GitHub snapshots, certifications, talent scores, badges |
-| **Recruitment** | Jobs, applications with pipeline stages, match scores |
-| **Assessment** | Problem definitions, submissions, interview sessions and turns |
-| **Hackathon** | Events, teams, submissions, judge scores, rankings |
-| **Trust** | Fraud flags, authenticity scores, disputes, trusted issuers |
-| **Operations** | Agent run history, event outbox |
+| **Identity & Access** | Users, tenant orgs, roles, consent records, audit logs. |
+| **Candidate Intelligence** | Profiles, GitHub snapshots, certificates, talent scores, badges. |
+| **Recruitment Pipeline** | Jobs, applications, pipeline stage tracking, match score components. |
+| **Assessment Engine** | Problem sets, candidate code submissions, interview sessions, turns. |
+| **Hackathon Domain** | Events, team registrations, code/deck submissions, judge ratings, leaderboards. |
+| **Trust & Integrity** | Fraud flags, authenticity scores, dispute records, trusted issuers. |
+| **System Operations** | Agent execution telemetry (`agent_runs`), transactional outbox. |
 
-Three conventions run throughout:
+**Database Schema Rules:**
 
-- **Every score stores its components,** not just the composite, which is what makes an explanation reconstructible months later.
-- **Consent is a record, not a boolean.** Revocation writes a timestamp and keeps the row, so the audit trail survives.
-- **Score columns are nullable on purpose,** because that is what separates "no evidence" from "scored zero."
-
-Foreign keys get explicit indexes, since PostgreSQL indexes primary keys automatically but not foreign keys, and the recruiter candidate pool reads across those on every request.
+- **Component Sub-Score Preservation:** Composite scores store their underlying sub-components to support long-term auditing.
+- **Immutable Consent Records:** Consent changes append new rows with timestamps rather than overwriting existing records.
+- **Explicit Nullable Attributes:** Score columns use nullable values to distinguish missing evidence from zero scores.
+- **Indexed Foreign Keys:** All foreign keys carry explicit indexes to keep relational query latencies low.
 
 ### 6.2 Access Control
 
-Four layers, application first:
-
-| Layer | Mechanism |
-| :--- | :--- |
-| **Role** | Every endpoint declares its required role in its signature, so it cannot be skipped by an early return |
-| **Ownership** | Checked separately from role. A recruiter with a valid token still cannot read another recruiter's pipeline |
-| **Identity** | Candidate endpoints read the profile from the token and never accept an ID from the client, which removes a whole class of access bug instead of patching it per endpoint |
-| **Database** | Row-level security acts as a second net, so a query that escapes the application still cannot cross tenants |
-
-Candidates can never write their own scores. Audit logs have no update or delete policy, so both are denied by default. Passwords are salted hashes, every admin action is logged with actor and target, and public portfolios are opt-in.
+- **Route Declarations:** Roles are declared in API route signatures, preventing authorization bypass.
+- **Ownership Checks:** Handlers verify tenant resource ownership independently of user roles.
+- **Token Identity:** User endpoints extract identity directly from verified JWT payloads rather than client-supplied IDs.
+- **PostgreSQL RLS:** Row-level security policies enforce tenant isolation at the database layer.
 
 ---
 
 ## 7. How We Build It
 
-Our build order follows one principle: **the parts that are hardest to correct later come first.**
+We followed a strict dependency-first build order:
 
-| Phase | Focus | Why in this order |
+| Phase | Milestone Focus | Engineering Rationale |
 | :--- | :--- | :--- |
-| **1. Foundation** | Data model, authentication, role gating | Nothing can be tested behind a role boundary until the boundary exists |
-| **2. Scoring core** | The pure scoring functions, with tests | It has no external dependencies, so it can be fully tested before any real data exists |
-| **3. Agent pipelines** | The AI workflows, one domain at a time | Candidate intelligence first, since the Talent Score feeds almost everything downstream |
-| **4. Interfaces** | The five role-scoped surfaces | Built against real endpoints, not mock data, which has a way of surviving into production |
-| **5. Hardening** | Task durability, indexes, rate limits, degradation paths | Given its own budget, not whatever time remains, which is what stops it being cut |
+| **1. Core Foundation** | Schema, auth, RBAC enforcement | Sets security boundaries required before testing component APIs. |
+| **2. Scoring Functions** | Pure scoring functions & test suites | Evaluates mathematical scoring logic without database dependencies. |
+| **3. Agent Pipelines** | Ingestion, recruitment, assessment, & fraud agents | Builds async processing pipelines, starting with candidate intelligence. |
+| **4. User Interfaces** | Six role-scoped web dashboards | Connects user workflows directly to live backend endpoints. |
+| **5. System Hardening** | Indexing, task resilience, rate limits, fallbacks | Ensures system stability, low latency, and fault recovery. |
 
-Testing effort concentrates on the scoring functions and does not spread thin across the codebase.
+### Validation Approach
 
-**How we validate, beyond unit tests:**
-
-- **Boundaries**: the top-ranked candidate in a pool must score exactly 100
-- **Cold start**: checked for every possible subset of missing signals
-- **By hand** against real GitHub profiles with known characteristics. This is the only way to catch a formula that is internally consistent but ranks people wrongly
-- **Dependency removal**: each one taken away in turn, to confirm we return a clear error instead of a made-up number
-
-> **The rule behind all of it:** a crash announces itself; a plausible wrong score does not. Because the dangerous failures are the ones that produce believable output from bad input, we make them structurally hard to reach: undefined instead of zero, typed errors instead of fallbacks, and human review before any penalty.
+- **Boundary Testing:** Confirms ideal candidate profiles reach maximum score thresholds (100).
+- **Cold-Start Verification:** Tests weight renormalization across missing signal combinations.
+- **Profile Benchmarking:** Validates scoring distributions against real open-source developer profiles.
+- **Fault Simulation:** Tests service fallbacks by intentionally taking vector search and LLM services offline.
 
 ---
 
 ## 8. Verification, Testing & Guardrails
 
-**Automated checks** cover TypeScript in strict mode, frontend lint and build, backend lint, migration-chain validity, and the scoring function tests. The type check matters because our API contract spans two languages: rename a backend field without updating the frontend type and the compiler catches it at build time, instead of an `undefined` showing up in production.
-
-**When a dependency dies, here is exactly what happens:**
-
-| Dependency | If it fails | Effect |
-| :--- | :--- | :--- |
-| Database | Request errors | Total outage. This is the one hard dependency |
-| Vector search | Typed error | Semantic search off; exact matching still works |
-| AI provider | Typed error, HTTP 503 | AI features off; rule-based scores unaffected |
-| File storage | Typed error, HTTP 503 | Uploads off; everything else fine |
-
-**The pattern never varies:** a named error, a specific status code. Never a generic 500, and never a made-up value standing in for a real one.
-
-**Scoring guardrails**
-
-- Missing signals renormalize, never zero-fill
-- Every score is clamped to its stated range
-- Peer ranking falls back to a fixed formula below 30 candidates
-- Fraud flags need human review before they change anything
-- Every score keeps its component breakdown
-
-**Input handling.** Uploads are size-capped, candidate code runs only in the browser sandbox, interviews carry a token budget so a transcript cannot grow without bound, and all request bodies are schema-validated.
+- **Quality Checks:** TypeScript strict mode, frontend/backend linting, migration checks, and scoring unit test suites.
+- **Service Fallbacks:** Database failures return clean HTTP 500 errors; vector search timeouts fall back to exact text matching; LLM outages fall back to deterministic rule scoring without taking down core APIs.
+- **Execution Sandboxing:** Candidate code runs inside browser WebAssembly sandboxes, protecting backend infrastructure from untrusted code.
 
 ---
 
@@ -584,64 +559,60 @@ graph LR
     D --> E["Postgres · Qdrant · Redis<br/>same region as the API"]
 ```
 
-| Decision | Reason |
-| :--- | :--- |
-| **Node runtime, not a static host** | We use server components, so there is rendering to do at request time |
-| **One image, non-root, behind a proxy** | Two images double build time and invite version skew between processes that must agree on one schema |
-| **Migration runs once and exits; services wait for it** | Nothing can ever start against an un-migrated database |
-| **Storage sits beside the API** | Split across regions, every query pays an internet round trip, so pages feel slow while query timings look fine |
-| **90-second health-check grace period** | The embedding model loads at boot. A shorter window marks a healthy container dead and starts a restart loop |
-| **Cross-origin isolation headers** | The code sandbox needs them. Without them it works locally and fails in production, exactly the kind of thing that surfaces mid-demo |
+### Production Setup
 
-**Mobile.** A wrapper around the same web build, not a rewrite. Tokens go to the platform keystore, not local storage. Two features stay web-only. The code sandbox needs browser APIs the mobile webview does not reliably support, and server-rendered portfolios need a server. Both say "open on web" rather than shipping broken.
+- **Node.js Production Server:** Handles Next.js server rendering and API routes.
+- **Containerized Services:** Runs single non-root application images behind an NGINX proxy to prevent environment drift.
+- **Sequential DB Migrations:** Migration tasks complete fully before main API services boot up.
+- **Regional Co-location:** Database, vector storage, and API containers run in the same cloud region to eliminate cross-region network latency.
+- **90-Second Health Grace Period:** Gives local sentence-transformer models time to load memory during cold starts.
+- **COOP/COEP Headers:** Enforces cross-origin isolation headers required for browser WebAssembly sandbox execution.
 
 ---
 
 ## 10. Challenges We Expect
 
-Six real risks, and what each one is handled by:
-
-| Challenge | How we handle it |
+| Risk | Mitigation |
 | :--- | :--- |
-| **Cold start**: a fresher has no assessments and little history | Renormalize and label. The score is published with its confidence, never withheld or zeroed |
-| **Gaming**: buy stars, stuff keywords, spin up empty repos | Ranking against real peers, and the most easily inflated signals carry the lowest weights |
-| **Falsely accusing someone** | Every check is advisory and gated on human review. The AI-text detector is confidence-capped by design, so writing style alone never decides an outcome |
-| **Bias** | Every score stores its components, which is what makes auditing possible at all |
-| **A 4-minute GitHub crawl looks like a crash** | We record the pipeline stage and poll it, so the user sees real progress instead of a frozen spinner |
-| **Tuning the weights** | Every component is stored separately, so the weights can be learned from real hiring outcomes with no migration needed |
+| **Cold-Start Profiles** | Uses weight renormalization and confidence indicators to present partial data fairly without zero-filling. |
+| **Gaming & Inflation** | Evaluates candidates relative to peer distributions and assigns lower weights to easily farmable metrics. |
+| **False Fraud Penalties** | Enforces human admin review for all fraud flags and caps AI text detection confidence limits. |
+| **Algorithmic Bias** | Persists complete sub-score breakdowns to enable transparent algorithmic auditing. |
+| **Long Crawl Latencies** | Updates processing stage indicators in real time so users see actual progress during background crawls. |
+| **Weight Optimization** | Stores sub-components independently to allow automated weight tuning using placement data over time. |
 
 ---
 
 ## 11. MVP & Repository
 
-**GitHub repository:** *(link)*
+**GitHub Repository:** *(Repository Link)*
 
-**Screenshots**
+**Interface Screenshots:**
 
-*(Candidate dashboard with the Talent Score radar and evidence receipt · recruiter match list with a score breakdown expanded · the hiring pipeline board · a hackathon leaderboard · the admin fraud review queue.)*
+*(Candidate dashboard with radar visualization and evidence receipts · Recruiter talent search with match score breakdowns · Applicant tracking pipeline view · Hackathon leaderboards · Admin fraud review queue.)*
 
 ---
 
 ## 12. What We Do After Deployment
 
-**Near-term**
+**Phase 1: Immediate Post-Launch**
 
-- **Learn the scoring weights from outcomes.** With data on who advanced and who was hired, the weights move from hand-set to trained.
-- **Score versioning.** Recompute historical scores under a new formula while preserving the old ones, so a candidate's trajectory doesn't jump discontinuously when weights change.
-- **Upgrade the AI-content check** to a perplexity-based model for a stronger signal.
+- Train scoring weights on empirical hiring data to improve score prediction.
+- Implement scoring versioning to support formula updates without invalidating historical candidate records.
+- Add perplexity-based text models for improved writing style detection.
 
-**Medium-term**
+**Phase 2: Medium-Term Expansion**
 
-- **Recruiter-defined scoring profiles**: a startup weighting scrappiness and an enterprise weighting consistency share one platform
-- **Bias auditing** across demographic proxies
-- **Greenhouse and Lever webhooks**: no recruiter is abandoning their ATS, so we integrate instead of asking them to switch
-- **Assessments in JavaScript and Java** alongside Python
+- Allow recruiters to define custom scoring profiles based on company hiring priorities.
+- Conduct demographic bias auditing across scoring algorithms.
+- Add ATS webhooks for Greenhouse and Lever integration.
+- Expand coding assessment runtimes to support JavaScript, Java, and C++.
 
-**Longer-term**
+**Phase 3: Long-Term Vision**
 
-Talent trajectory modeling over time, team composition analysis for organizers, multi-language resume parsing.
+Build predictive career trajectory modeling, team optimization tools for hackathon organizers, and multi-language resume processing.
 
-> **Deliberately never building: automated rejection.** We rank, explain and show evidence. **A human decides.** Every guardrail here assumes a person in the loop. Automating that away would invalidate the whole design.
+> **Non-Goal (Human-in-the-Loop Guarantee):** Overwatch intentionally excludes automated rejection features. The system ranks, explains, and highlights evidence—human hiring managers retain complete authority over all hiring decisions.
 
 ---
 

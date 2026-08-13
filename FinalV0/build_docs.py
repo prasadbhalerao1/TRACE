@@ -18,7 +18,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parent
-SRC = ROOT.parent / "Overwatch_Idea_Submission.md"
+SRC = ROOT / "Overwatch_Idea_Submission.md" if (ROOT / "Overwatch_Idea_Submission.md").exists() else ROOT.parent / "Overwatch_Idea_Submission.md"
 DIAGRAMS = ROOT / "diagrams"
 
 ACCENT = RGBColor(0x1A, 0x1A, 0x1A)
