@@ -1,4 +1,4 @@
-"""Build the DOCX and print-ready HTML for the Overwatch idea submission.
+"""Build the DOCX and print-ready HTML for the TRACE idea submission.
 
 Mermaid fences are swapped for the PNGs already rendered into diagrams/, tables
 keep their grid, and the whole thing is sized to land inside the 10-15 page

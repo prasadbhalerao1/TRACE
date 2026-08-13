@@ -742,7 +742,7 @@ INSERT INTO trusted_issuers (
   '["Coursera Inc.", "Coursera Online"]',
   'https://coursera.org/verify/{credential_id}',
   'high',
-  'admin@overwatch.ai'
+  'admin@trace-platform.ai'
 );
 ```
 

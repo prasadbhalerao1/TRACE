@@ -34,7 +34,7 @@ logger = logging.getLogger("overwatch.workers.runner")
 
 async def startup(ctx: dict) -> None:
     logger.info("=========================================================")
-    logger.info(" Overwatch background worker ready")
+    logger.info(" TRACE background worker ready")
     logger.info(" Tasks: %s", ", ".join(f.__name__ for f in TASKS))
     logger.info("=========================================================")
 

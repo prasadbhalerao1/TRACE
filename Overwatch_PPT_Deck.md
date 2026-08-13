@@ -1,4 +1,4 @@
-# Overwatch
+# TRACE — Talent Reliability & Assessment through Credential Evidence
 ### AI Talent Intelligence & Recruitment Platform
 **Team: The Big Oh's** · Phase 1 Submission
 
@@ -6,7 +6,7 @@
 
 ---
 
-# Slide 1: Overwatch
+# Slide 1: TRACE
 
 ## Hiring based on what people built, not what they wrote
 
@@ -241,7 +241,7 @@ graph TD
 
 ## Against the market
 
-| | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **Overwatch** |
+| | LinkedIn / Naukri | HackerRank / Codility | Greenhouse / Lever | Unstop / Devfolio | **TRACE** |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Trusts** | Self-written profiles | One timed test | Resume text | Event submissions | Commits, PRs, timed code, live answers |
 | **Covers** | Discovery only | Testing only | Pipeline only | Events only | **All four, one score** |
@@ -288,7 +288,7 @@ We rank, explain, and show evidence. **A human decides.** Every guardrail here a
 
 # Slide 10: Thank You
 
-# Overwatch
+# TRACE
 
 ### Hiring based on what people built, not what they wrote
 

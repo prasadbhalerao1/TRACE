@@ -26,7 +26,7 @@ This guide provides step-by-step instructions on how to acquire and configure ea
 1. Navigate to the [Anthropic Console](https://console.anthropic.com/).
 2. Create an account or log in.
 3. Select **API Keys** from the dashboard or account settings.
-4. Click **Create Key**, specify a name (e.g. `Overwatch-Dev`), and generate the key.
+4. Click **Create Key**, specify a name (e.g. `TRACE-Dev`), and generate the key.
 5. Copy the generated key (starts with `sk-ant-api...`) and assign it to `ANTHROPIC_API_KEY`.
 
 ---
@@ -115,7 +115,7 @@ No external secrets required.
 1. Log in to [GitHub](https://github.com/) and navigate to **Settings** $\rightarrow$ **Developer settings** $\rightarrow$ **OAuth Apps** (`https://github.com/settings/developers`).
 2. Click **New OAuth App**.
 3. Fill in the fields:
-   * **Application name**: `Overwatch Talent Platform`
+   * **Application name**: `TRACE Talent Platform`
    * **Homepage URL**: `http://localhost:3000` (or your frontend URL)
    * **Authorization callback URL**: `http://localhost:3000/api/auth/github/callback`
 4. Click **Register application**.

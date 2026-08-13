@@ -12,7 +12,7 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
-Write-Host "== Overwatch dev environment ==" -ForegroundColor Cyan
+Write-Host "== TRACE dev environment ==" -ForegroundColor Cyan
 
 # --- 0. Kill anything already bound to the dev ports --------------------------
 Write-Host "Freeing ports 3000 (web) and 8000 (api)..." -ForegroundColor Yellow

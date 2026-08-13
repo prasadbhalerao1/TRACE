@@ -449,7 +449,7 @@ filtered = [h for h in all_hits if h.payload["candidate_id"] == candidate_id]
 
 ## Future Enhancements
 
-1. **Fine-tuned embeddings** — Currently BAAI/bge generic; could fine-tune on Overwatch's domain
+1. **Fine-tuned embeddings** — Currently BAAI/bge generic; could fine-tune on TRACE's domain
 2. **Sparse-dense hybrid** — Combine BM25 (keyword) + HNSW (semantic) for robustness
 3. **Embedding versioning** — Track which model generated which vector; re-embed on model upgrade
 4. **Re-seeding script** — Batch refresh all job/candidate embeddings without downtime
@@ -460,6 +460,6 @@ filtered = [h for h in all_hits if h.payload["candidate_id"] == candidate_id]
 
 - **Qdrant Docs:** https://qdrant.tech/documentation/
 - **Sentence Transformers:** https://www.sbert.net/
-- **Overwatch SRS 01 §7:** Career Guidance skill gap specification
-- **Overwatch Doc 02:** Recruitment module vector search patterns
-- **Overwatch Doc 08 §2:** Match score formula (embedding weights)
+- **TRACE SRS 01 §7:** Career Guidance skill gap specification
+- **TRACE Doc 02:** Recruitment module vector search patterns
+- **TRACE Doc 08 §2:** Match score formula (embedding weights)

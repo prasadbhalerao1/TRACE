@@ -84,7 +84,7 @@ const INITIAL_RESUME: ResumeData = {
   experience: [
     {
       id: "exp-1",
-      company: "Overwatch AI Systems",
+      company: "TRACE AI Systems",
       role: "Lead Full-Stack AI Engineer",
       location: "Remote",
       dates: "2025 – Present",

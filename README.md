@@ -1,4 +1,6 @@
-# AI Talent Intelligence & Recruitment Platform
+# TRACE — Talent Reliability & Assessment through Credential Evidence
+
+AI talent intelligence and recruitment platform.
 
 A high-performance, multi-agent AI talent intelligence, recruitment matching, hackathon evaluation, and trust/fraud prevention platform.
 
@@ -9,7 +11,7 @@ A high-performance, multi-agent AI talent intelligence, recruitment matching, ha
 The codebase is organized into clean, maintainable, decoupled packages and services:
 
 ```
-Overwatch/
+TRACE/
 ├── apps/
 │   └── web/                             # Next.js 16 (React 19, Tailwind CSS, Turbopack)
 │       ├── e2e/                         # Playwright E2E test suite & setup

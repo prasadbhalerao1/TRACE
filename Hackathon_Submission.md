@@ -1,4 +1,4 @@
-# Overwatch — AI Talent Intelligence & Recruitment Platform
+# TRACE — Talent Reliability & Assessment through Credential Evidence
 ### Hackathon Submission Document
 
 ---
@@ -60,7 +60,7 @@
 
 Hiring runs on documents that nobody can verify. A resume asserts five years of Python; a certificate PDF asserts a credential; a hackathon win asserts that someone built something. Recruiters read all of it and guess. The candidates who get through are frequently the ones who write the best claims, not the ones who wrote the best code.
 
-Overwatch inverts that. It scores people on artifacts that are expensive to fake: commit history, merged pull requests to repositories they don't own, code written under a timer, answers given in a live interview. The resume is treated as the least trustworthy input in the pipeline rather than the primary one.
+TRACE inverts that. It scores people on artifacts that are expensive to fake: commit history, merged pull requests to repositories they don't own, code written under a timer, answers given in a live interview. The resume is treated as the least trustworthy input in the pipeline rather than the primary one.
 
 The platform is a Python monorepo: a FastAPI backend, sixteen LangGraph agent subgraphs, PostgreSQL for relational state, Qdrant for vector search, and Redis backing a durable job queue. The frontend is Next.js 16 with React 19. It serves five distinct roles (candidate, recruiter, organizer, judge, admin), and each role has its own App Router route group and its own access boundary.
 
@@ -216,7 +216,7 @@ A monorepo with four areas: shared code in `packages/`, runnable processes in
 `services/`, the UI in `apps/web`, containers and helper scripts around them.
 
 ```
-Overwatch/
+TRACE/
 |-- infra/docker-compose.yml   Postgres 16 + Qdrant + Redis 7
 |-- scripts/                   dev-up.ps1, DB seeders, Qdrant index backfill
 |
@@ -1419,8 +1419,8 @@ Two optional tools: Tesseract OCR (certificate and slide-image text extraction �
 ### Step 1 — Clone
 
 ```bash
-git clone <repository-url> Overwatch
-cd Overwatch
+git clone <repository-url> TRACE
+cd TRACE
 ```
 
 ### Step 2 — Start infrastructure
@@ -2057,7 +2057,7 @@ http {
     server {
         listen 443 ssl;
         http2 on;
-        server_name api.overwatch.local;
+        server_name api.trace-platform.local;
 
         ssl_certificate     /etc/nginx/certs/fullchain.pem;
         ssl_certificate_key /etc/nginx/certs/privkey.pem;
@@ -2190,7 +2190,7 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   trailingSlash: true,
   env: {
-    NEXT_PUBLIC_API_URL: process.env.MOBILE_API_URL ?? "https://api.overwatch.app",
+    NEXT_PUBLIC_API_URL: process.env.MOBILE_API_URL ?? "https://api.trace-platform.app",
   },
 };
 
@@ -2203,8 +2203,8 @@ export default nextConfig;
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "app.overwatch.mobile",
-  appName: "Overwatch",
+  appId: "app.trace-platform.mobile",
+  appName: "TRACE",
   webDir: ".next-mobile",
   android: {
     allowMixedContent: false,
@@ -2233,7 +2233,7 @@ npm install --save-dev @capacitor/cli
 npm install @capacitor/core @capacitor/android \
             @capacitor/splash-screen @capacitor/preferences
 
-MOBILE_API_URL=https://api.overwatch.app \
+MOBILE_API_URL=https://api.trace-platform.app \
   npx next build --config next.config.mobile.ts
 
 npx cap add android
@@ -2283,7 +2283,7 @@ Token storage uses `@capacitor/preferences`, backed by the platform keystore, ra
 ```typescript
 import { Preferences } from "@capacitor/preferences";
 
-const TOKEN_KEY = "overwatch.auth.token";
+const TOKEN_KEY = "trace-platform.auth.token";
 
 export async function storeToken(token: string): Promise<void> {
   await Preferences.set({ key: TOKEN_KEY, value: token });
@@ -2385,7 +2385,7 @@ Released under the MIT License.
 ```
 MIT License
 
-Copyright (c) 2026 Overwatch
+Copyright (c) 2026 TRACE
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

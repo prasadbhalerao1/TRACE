@@ -1,4 +1,4 @@
-# Overwatch — Local Infrastructure
+# TRACE — Local Infrastructure
 #
 # Everything the app depends on for data/state runs locally in Docker: Postgres,
 # Qdrant, and Redis. There is no cloud dependency in the default development setup.
