@@ -544,7 +544,7 @@ graph LR
 
 ### Production Setup
 
-A Node process serves the Next.js rendering and its API routes. Services run as single non-root container images behind NGINX, which is mostly about preventing the environment drift that makes production bugs unreproducible locally.
+A Node process serves the Next.js rendering and its API routes. Services run as single non-root container images behind a reverse proxy, which is mostly about preventing the environment drift that makes production bugs unreproducible locally.
 
 Migrations run to completion before the API boots, so a half-migrated schema is never serving traffic. Postgres, Qdrant, and the API containers sit in one region. The latency saved is small per call and considerable across a crawl. Health checks allow a 90-second grace period, because the local sentence-transformer models need that long to load into memory on a cold start and would otherwise be killed mid-boot. COOP and COEP headers are set on the frontend, which the WebAssembly sandbox requires to run at all.
 
