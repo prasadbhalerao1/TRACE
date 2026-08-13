@@ -61,7 +61,7 @@ const INITIAL_RESUME: ResumeData = {
   fullName: "Naveen Beniwal",
   roleTitle: "Software & AI Systems Engineer",
   phone: "+91 99999 99999",
-  email: "naveen@dataaxle.ai",
+  email: "naveen@trace-platform.ai",
   location: "Kurukshetra, India",
   linkedin: "linkedin.com/in/naveenbeniwal",
   github: "github.com/naveenbeniwal",
