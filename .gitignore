@@ -60,3 +60,7 @@ infra/qdrantdata/
 # Claude Code local/runtime state (not shared project config)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Submission drafts and their generated DOCX/PDF builds
+FinalV0/
+FinalV1/
