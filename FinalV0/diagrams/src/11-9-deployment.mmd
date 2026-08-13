@@ -1,5 +1,0 @@
-graph LR
-    A["Web app<br/>Node runtime"] --> B["Reverse proxy<br/>handles TLS"]
-    C["API container"] --> B
-    C --> D["Storage layer"]
-    D --> E["Postgres · Qdrant · Redis<br/>same region as the API"]
