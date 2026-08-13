@@ -6,7 +6,7 @@
 
 ## Table of Contents
 
-**The Problem Statement We Were Given**
+**Problem Statement**
 
 1. **Executive Summary & Core Value Proposition**
    1. Executive Summary
@@ -47,11 +47,11 @@
 
 ---
 
-## The Problem Statement We Were Given
+## Problem Statement
 
 **Theme:** AI-Powered Talent Discovery, Verification & Recruitment Platform
 
-> **The brief:** Build a platform that discovers, verifies, evaluates, and hires candidates on **real skills, technical contributions, hackathon performance, presentations, and AI-driven assessments**, not resumes alone. Connect candidates, recruiters, tech communities, and hackathons into one pipeline.
+> **The scope:** Build a platform that discovers, verifies, evaluates, and hires candidates on **real skills, technical contributions, hackathon performance, presentations, and AI-driven assessments**, not resumes alone. Connect candidates, recruiters, tech communities, and hackathons into one pipeline.
 
 ### Where the signal goes today
 
