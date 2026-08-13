@@ -207,7 +207,7 @@ export default function CandidateFlagsPage() {
             </CardHeader>
             <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
               <p>
-                **Proof over Paperwork**: DataAxle maintains strict checks on code plagiarism, certificate
+                **Proof over Paperwork**: TRACE maintains strict checks on code plagiarism, certificate
                 authenticity, and duplicate profiles.
               </p>
               <p>

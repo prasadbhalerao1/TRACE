@@ -113,7 +113,7 @@ VALUES (
 INSERT INTO users (id, email, password_hash, full_name, username, role, is_active, created_at, updated_at)
 VALUES (
   '550e8400-e29b-41d4-a716-446655440401'::uuid,
-  'admin@dataaxle.io',
+  'admin@trace-platform.io',
   '$2b$12$slYQmyNdGzin7olVyON1Je4Zlv8Z2xM8nGKmHXQM1Xs5d7i5vLDDW', -- password123
   'Admin User',
   'admin',

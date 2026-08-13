@@ -1,4 +1,6 @@
-# DataAxle — AI Talent Intelligence & Hiring Platform
+# TRACE: Talent Reliability & Assessment through Credential Evidence
+
+AI talent intelligence and hiring platform.
 
 An AI-native hiring and hackathon platform. Candidates build a verified profile from real
 evidence (GitHub activity, resume, certificates), get scored on a multi-dimensional Talent

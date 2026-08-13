@@ -1,4 +1,4 @@
-# DataAxle — Local Infrastructure Services
+# TRACE — Local Infrastructure Services
 # Note: Production & Active Dev use Cloud Providers configured in .env:
 # - PostgreSQL: Managed Neon Cloud Postgres (DATABASE_URL)
 # - Vector DB: Managed Qdrant Cloud (QDRANT_URL)

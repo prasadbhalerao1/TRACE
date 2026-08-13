@@ -17,7 +17,7 @@ async def run_worker_loop():
     """Main background worker process loop."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     logger.info("=========================================================")
-    logger.info(" DataAxle Standalone Background Worker Process Initialized ")
+    logger.info(" TRACE Standalone Background Worker Process Initialized ")
     logger.info(" Monitoring async task queue for notifications, PDF OCR, and LangGraph pipelines ")
     logger.info("=========================================================")
 
