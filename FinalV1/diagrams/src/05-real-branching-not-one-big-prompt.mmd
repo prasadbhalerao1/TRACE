@@ -1,8 +1,0 @@
-graph LR
-    A["Plan topics from<br/>the job description"] --> B["Ask a question"]
-    B --> C["Candidate answers<br/>by voice"]
-    C --> D["Score that answer"]
-    D --> E{"Under 70, and fewer<br/>than 3 follow-ups?"}
-    E -->|Yes| F["Dig deeper on<br/>the same topic"]
-    F --> C
-    E -->|No| G["Move on, or<br/>write the report"]
