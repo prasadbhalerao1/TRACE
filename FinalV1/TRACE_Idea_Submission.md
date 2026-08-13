@@ -1,4 +1,4 @@
-# TRACE — Talent Reliability & Assessment through Credential Evidence
+# TRACE: Talent Reliability & Assessment through Credential Evidence
 ### AI Talent Intelligence & Recruitment Platform
 **Team: The Big Oh's** · Idea Submission
 
@@ -82,7 +82,7 @@ Four engines do the processing.
 | **Hackathon → Hiring** | Ingests team submissions, evaluates code quality and pitch decks, and pushes top event performers directly into recruiter feeds. |
 | **Trust Layer** | Checks certificates against issuers, detects code plagiarism, identifies duplicate accounts, and screens for AI-generated text patterns. |
 
-Three rules constrain the whole system. Fraud flags never move a score on their own — an admin has to review the flag and uphold it before any penalty lands. Missing data is never read as zero; a fresh graduate with no assessment history has weights renormalized across whatever signals do exist, because absence of evidence about someone is not evidence about their ability. And every composite score carries its own breakdown, down to the sub-components and the artifacts behind them.
+Three rules constrain the whole system. Fraud flags never move a score on their own. An admin has to review the flag and uphold it before any penalty lands. Missing data is never read as zero; a fresh graduate with no assessment history has weights renormalized across whatever signals do exist, because absence of evidence about someone is not evidence about their ability. And every composite score carries its own breakdown, down to the sub-components and the artifacts behind them.
 
 ### 1.2 What TRACE Is, In Plain Terms
 
@@ -105,7 +105,7 @@ On the other side, a recruiter types "looking for someone who's built network to
 
 Recruiters get tools that match keyword strings. That rewards resume stuffing, misses developers who describe the same skill in different words, and produces ranked lists with no reasoning attached. Months later, when someone asks why a particular candidate was passed over, there is nothing on record to answer with.
 
-Candidates face the mirror image. Good engineers who write plain resumes get filtered out in the first pass, and anyone without a long history — new graduates, career changers, self-taught developers — gets scored against algorithms that quietly read "no data" as "no ability."
+Candidates face the mirror image. Good engineers who write plain resumes get filtered out in the first pass, and anyone without a long history (new graduates, career changers, self-taught developers) gets scored against algorithms that quietly read "no data" as "no ability."
 
 Hackathon organizers sit on the best signal of all and cannot use it. People build working software under a deadline, someone wins, and then the event ends and all of it evaporates. A third-place finish never reaches a recruiter's feed because no pipeline connects the two.
 
@@ -183,7 +183,7 @@ graph LR
     F --> G["Score<br/>9 signals"]
 ```
 
-The ingestion route returns as soon as the job is queued. Background tasks write progress markers as they go, so the client polls actual stages — crawling, parsing, scoring — rather than spinning for however long a large GitHub history takes to walk.
+The ingestion route returns as soon as the job is queued. Background tasks write progress markers as they go, so the client polls actual stages, crawling and parsing and scoring, rather than spinning for however long a large GitHub history takes to walk.
 
 ### Service Degradation Paths
 
@@ -207,7 +207,7 @@ Each choice below was made against a specific constraint, not a preference:
 | **Multi-model routing** | Cheap fast models for extraction, stronger models for evaluation, and no single vendor to be locked into. |
 | **Local sentence transformers** | Embeddings with no per-call cost, no rate limit, and no network round trip. |
 | **PostgreSQL 16** | Relational integrity, real transactions, and row-level security in the database rather than the application. |
-| **Qdrant** | Payload filtering fast enough to combine vector similarity with hard attributes — "Rust" and "remote" in one query. |
+| **Qdrant** | Payload filtering fast enough to combine vector similarity with hard attributes: "Rust" and "remote" in one query. |
 | **Pyodide (WebAssembly)** | Candidate code executes in the candidate's own browser, so untrusted code never reaches our servers. |
 
 ---
@@ -246,7 +246,7 @@ graph LR
     G --> H["Final evaluation report"]
 ```
 
-There is no fixed script. Answers are scored as they arrive, and a weak answer earns a narrower follow-up on the same topic before the interview moves on — up to three times, after which it moves on regardless.
+There is no fixed script. Answers are scored as they arrive, and a weak answer earns a narrower follow-up on the same topic before the interview moves on, up to three times, after which it moves on regardless.
 
 ---
 
@@ -292,7 +292,7 @@ Passwords are salted and hashed with bcrypt, and sessions are signed JWTs verifi
 
 Role requirements sit in the route function signature rather than inside the handler body. That placement matters more than it looks: a check written into a function body can be skipped by an early return, while one declared in the signature cannot be reached around. On top of the role check, handlers verify ownership separately, so a recruiter with a valid recruiter token still cannot open another organization's candidates or jobs.
 
-Anything that touches candidate data — parsing a resume, recording interview audio, logging an assessment — requires a consent record first. Revoking consent flips the active flag and appends a row; nothing is overwritten, so the history of what was permitted when stays intact.
+Anything that touches candidate data, whether that is parsing a resume, recording interview audio or logging an assessment, requires a consent record first. Revoking consent flips the active flag and appends a row; nothing is overwritten, so the history of what was permitted when stays intact.
 
 Rate limits are Redis counters keyed by user ID, falling back to IP on public routes. Keeping them in Redis rather than in each process is what stops a client from evading the limit by spreading requests across API instances.
 
@@ -302,7 +302,7 @@ When a candidate uploads a resume, links GitHub, or adds a certificate, four pas
 
 The GitHub crawl reads commit history, merged pull requests, code quality signals, language distribution, and which repositories the candidate actually owns versus forked. Resume parsing pulls out career history, education, and claimed skills. Certificates go through OCR, and the extracted text, issuing body, and credential ID are checked against known issuers.
 
-The fourth pass is the one that matters most. It compares what the resume claims against what the code shows. Someone claiming four years of Go with no Go repository anywhere is not accused of lying — the gap is surfaced to the candidate, who can link a private repo, explain that the work was at a previous employer, or let it stand as unverified. Guessing which of those is true is exactly what the system refuses to do.
+The fourth pass is the one that matters most. It compares what the resume claims against what the code shows. Someone claiming four years of Go with no Go repository anywhere is not accused of lying. The gap is surfaced to the candidate, who can link a private repo, explain that the work was at a previous employer, or let it stand as unverified. Guessing which of those is true is exactly what the system refuses to do.
 
 What comes out: 9 sub-scores, a composite Talent Score, evidence receipts, and skill badges that each point back at the artifact that earned them.
 
@@ -337,7 +337,7 @@ graph LR
     D --> E["Explain the fit<br/>in plain English"]
 ```
 
-A recruiter never sees a bare percentage. The four components — skill overlap, semantic fit, experience alignment, talent match — are shown separately, so a 71 that comes from strong skills and thin experience is legible as such.
+A recruiter never sees a bare percentage. The four components (skill overlap, semantic fit, experience alignment, talent match) are shown separately, so a 71 that comes from strong skills and thin experience is legible as such.
 
 ### 4.5 Skill Verification
 
@@ -369,7 +369,7 @@ graph LR
     F --> G["Top performers reach<br/>watching recruiters"]
 ```
 
-Rubric weights are set per event, since a design-focused hackathon should not be scored like a systems one. Teams that finish near the top surface in recruiter feeds automatically — which is the connection that does not exist today.
+Rubric weights are set per event, since a design-focused hackathon should not be scored like a systems one. Teams that finish near the top surface in recruiter feeds automatically, which is the connection that does not exist today.
 
 ### 4.8 Trust & Fraud Layer
 
@@ -406,7 +406,7 @@ Portfolios start private. Publishing one is an explicit action the candidate tak
 
 ### 5.1 Core Formulations
 
-The hard problem in scoring candidates is that the data is always incomplete. Someone has no assessment history; someone else has three commits and a strong interview. A system that fills those gaps with zeros is not being neutral — it is asserting that the candidate has no ability in that dimension, which it has no basis for. Renormalizing the weights instead is the difference between "we don't know" and "you scored nothing."
+The hard problem in scoring candidates is that the data is always incomplete. Someone has no assessment history; someone else has three commits and a strong interview. A system that fills those gaps with zeros is not being neutral. It is asserting that the candidate has no ability in that dimension, which it has no basis for. Renormalizing the weights instead is the difference between "we don't know" and "you scored nothing."
 
 ### Weight Renormalization Rule
 
@@ -414,7 +414,7 @@ A missing signal's weight is redistributed proportionally across the signals tha
 
 $$S = \frac{\sum_{i \in A} w_i S_i}{\sum_{i \in A} w_i}$$
 
-where $A$ is the set of active signals and the normalized weights always sum to $1.0$. When $A$ is empty the function returns `undefined`, not zero — there is no score to report, and saying so is more honest than inventing one.
+where $A$ is the set of active signals and the normalized weights always sum to $1.0$. When $A$ is empty the function returns `undefined`, not zero. There is no score to report, and saying so is more honest than inventing one.
 
 ### Talent Composite Score
 
@@ -502,7 +502,7 @@ Four schema conventions hold across all of them. Composite scores keep their sub
 
 ### 6.2 Access Control
 
-Access control is layered deliberately, so that no single mistake opens a door. Roles are declared in route signatures. Ownership is checked separately from role, because holding the right role says nothing about owning the specific record. Identity is read from the verified JWT payload and never from a client-supplied ID, which closes the obvious "pass someone else's user_id" attack. Underneath all of that, row-level security enforces tenant isolation in PostgreSQL itself — if the application layer is ever wrong, the database still refuses.
+Access control is layered deliberately, so that no single mistake opens a door. Roles are declared in route signatures. Ownership is checked separately from role, because holding the right role says nothing about owning the specific record. Identity is read from the verified JWT payload and never from a client-supplied ID, which closes the obvious "pass someone else's user_id" attack. Underneath all of that, row-level security enforces tenant isolation in PostgreSQL itself, so if the application layer is ever wrong, the database still refuses.
 
 ---
 
@@ -546,7 +546,7 @@ graph LR
 
 A Node process serves the Next.js rendering and its API routes. Services run as single non-root container images behind NGINX, which is mostly about preventing the environment drift that makes production bugs unreproducible locally.
 
-Migrations run to completion before the API boots, so a half-migrated schema is never serving traffic. Postgres, Qdrant, and the API containers sit in one region — the latency saved is small per call and considerable across a crawl. Health checks allow a 90-second grace period, because the local sentence-transformer models need that long to load into memory on a cold start and would otherwise be killed mid-boot. COOP and COEP headers are set on the frontend, which the WebAssembly sandbox requires to run at all.
+Migrations run to completion before the API boots, so a half-migrated schema is never serving traffic. Postgres, Qdrant, and the API containers sit in one region. The latency saved is small per call and considerable across a crawl. Health checks allow a 90-second grace period, because the local sentence-transformer models need that long to load into memory on a cold start and would otherwise be killed mid-boot. COOP and COEP headers are set on the frontend, which the WebAssembly sandbox requires to run at all.
 
 ---
 
@@ -575,7 +575,7 @@ The repository contains the full monorepo described in §3: the Next.js frontend
 
 ## 12. What We Do After Deployment
 
-The first work after launch is fitting the weights to real hiring data, which requires score versioning to land alongside it — otherwise updating a formula silently invalidates every historical record. Perplexity-based models would also replace the current text-style heuristics, which are the weakest component in the system today.
+The first work after launch is fitting the weights to real hiring data, which requires score versioning to land alongside it, because otherwise updating a formula silently invalidates every historical record. Perplexity-based models would also replace the current text-style heuristics, which are the weakest component in the system today.
 
 After that: recruiter-defined scoring profiles for companies that weight things differently, a demographic bias audit across the scoring path, ATS webhooks for Greenhouse and Lever, and assessment runtimes for JavaScript, Java, and C++.
 
@@ -585,4 +585,4 @@ One thing is deliberately absent from all three phases. TRACE will not auto-reje
 
 ---
 
-**TRACE** · Team The Big Oh's
+**TRACE** · Talent Reliability & Assessment through Credential Evidence · Team The Big Oh's

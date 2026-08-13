@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
-$src = (Resolve-Path 'Overwatch_Idea_Submission.docx').Path
-$dst = (Get-Location).Path + '\Overwatch_Idea_Submission.pdf'
+$src = (Resolve-Path 'TRACE_Idea_Submission.docx').Path
+$dst = (Get-Location).Path + '\TRACE_Idea_Submission.pdf'
 $w = New-Object -ComObject Word.Application
 $w.Visible = $false; $w.DisplayAlerts = 0
 $d = $w.Documents.Open($src, $false, $true, $false)
