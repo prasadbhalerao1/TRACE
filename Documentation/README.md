@@ -1,8 +1,8 @@
-# TRACE — Talent Reliability & Assessment through Credential Evidence — Platform Documentation
+# TRACE: Platform Documentation
 
 This directory contains the complete technical documentation for the TRACE AI hiring and
 hackathon platform, organized by module. Each doc is written as if explaining the system in
-a technical interview — confident, precise, focused on *why* decisions were made, and honest
+a technical interview: confident, precise, focused on *why* decisions were made, and honest
 about what's unfinished or scoped out.
 
 ## Documentation files

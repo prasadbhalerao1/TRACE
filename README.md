@@ -1,8 +1,6 @@
-# TRACE — Talent Reliability & Assessment through Credential Evidence
+# TRACE: Talent Reliability & Assessment through Credential Evidence
 
-AI talent intelligence and recruitment platform.
-
-A high-performance, multi-agent AI talent intelligence, recruitment matching, hackathon evaluation, and trust/fraud prevention platform.
+A multi-agent platform for talent intelligence, recruitment matching, hackathon evaluation, and trust/fraud prevention.
 
 ---
 
