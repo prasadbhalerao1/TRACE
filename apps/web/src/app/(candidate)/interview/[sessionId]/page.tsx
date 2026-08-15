@@ -45,6 +45,10 @@ export default function CandidateInterviewPage() {
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  // Current interim transcript, readable from the `onend` handler (see toggleSpeech).
+  const interimTranscriptRef = useRef("");
+  // Index of the last message read aloud, so re-renders don't stack duplicate speech.
+  const lastSpokenIndexRef = useRef(-1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -134,6 +138,7 @@ export default function CandidateInterviewPage() {
       recognitionRef.current?.stop();
       setListening(false);
       setInterimTranscript("");
+      interimTranscriptRef.current = "";
       setSpeechConfidence(null);
       return;
     }
@@ -167,13 +172,22 @@ export default function CandidateInterviewPage() {
         setSpeechConfidence(confidence > 0 ? Math.round(confidence * 100) : null);
       }
       setInterimTranscript(interim);
+      // Mirrored into a ref so `onend` — created once and therefore holding a stale
+      // closure over state — can read the current value.
+      interimTranscriptRef.current = interim;
     };
     recognition.onend = () => {
       setListening(false);
-      if (interimTranscript.trim()) {
-        setInputText((prev) => prev + (prev.endsWith(" ") ? "" : " ") + interimTranscript.trim());
+      // Read the ref, not the `interimTranscript` state. This handler is created once,
+      // when recognition starts, so it closes over whatever the state was at that
+      // moment — always "" — and the last partial phrase was silently dropped every
+      // time speech ended on a non-final result.
+      const pending = interimTranscriptRef.current.trim();
+      if (pending) {
+        setInputText((prev) => prev + (prev.endsWith(" ") ? "" : " ") + pending);
       }
       setInterimTranscript("");
+      interimTranscriptRef.current = "";
     };
     recognitionRef.current = recognition;
     recognition.start();
@@ -213,18 +227,41 @@ export default function CandidateInterviewPage() {
 
   useEffect(() => {
     return () => {
-      // Cleanup: stop all streams on unmount
+      // Every device resource this page acquires must be released here. Stopping the
+      // camera tracks alone left two things running after the user navigated away:
+      // speech recognition (the browser keeps the microphone open, and the OS recording
+      // indicator stays lit on a page that no longer exists) and queued TTS (the
+      // unmounted page keeps talking).
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 
   useEffect(() => {
     // "SpeechSynthesis" TTS: speak the latest AI question aloud, browser-native, no
     // audio persisted anywhere (doc 03 §3).
-    const last = messages[messages.length - 1];
-    if (last?.role === "ai" && "speechSynthesis" in window) {
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(last.text));
-    }
+    //
+    // Guarded by the index of the last message actually spoken. This effect depends on
+    // the whole `messages` array, so it re-ran on every append — including the
+    // candidate's own answers — and `speak()` *queues* rather than replaces, so each
+    // re-run stacked another reading of the same question on top of the one still
+    // playing. Tracking the index means each AI message is spoken exactly once.
+    const lastIndex = messages.length - 1;
+    const last = messages[lastIndex];
+    if (!last || last.role !== "ai") return;
+    if (lastIndex === lastSpokenIndexRef.current) return;
+    if (!("speechSynthesis" in window)) return;
+
+    lastSpokenIndexRef.current = lastIndex;
+    // Cancel anything still playing before starting the new question: a follow-up can
+    // arrive while the previous one is mid-sentence.
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(last.text));
   }, [messages]);
 
   if (hydrating) {

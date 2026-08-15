@@ -28,12 +28,19 @@ export default function CandidateJobsPage() {
     const token = await getToken();
     if (!token) throw new Error("No session token");
 
-    // My applications is candidate-role and always works — load it regardless so
-    // already-applied jobs can be marked even if the open-jobs list itself fails.
-    const applications = await fetchMyApplications(token).catch(() => []);
+    // Both requests are independent, so they go out together. Awaiting applications
+    // first put two full round trips in series for no reason — the second request did
+    // not need the first one's result.
+    //
+    // `fetchMyApplications` keeps its own catch: it is candidate-role and always
+    // available, so a failure there should still leave the job list usable (just without
+    // "already applied" markers). `fetchOpenJobs` rejecting is a real error and
+    // propagates to the caller's error state, exactly as before.
+    const [applications, result] = await Promise.all([
+      fetchMyApplications(token).catch(() => []),
+      fetchOpenJobs(token),
+    ]);
     setAppliedJobIds(new Set(applications.map((a) => a.job_id)));
-
-    const result = await fetchOpenJobs(token);
     setJobs(result);
   }, [getToken]);
 

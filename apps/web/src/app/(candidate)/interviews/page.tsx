@@ -6,6 +6,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { InterviewLobby } from "@/components/interview/InterviewLobby";
 import {
   fetchOpenInterviewDefinitions,
   generateDefinitionQuestions,
@@ -33,6 +34,15 @@ export default function CandidateInterviewsPage() {
   // Navigation
   const [startingSession, setStartingSession] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // The device-check lobby both entry points pass through. `definitionId` is null for a
+  // generated practice interview (which starts from a topic_plan instead).
+  const [lobby, setLobby] = useState<{
+    definitionId: string | null;
+    title: string;
+    roleTitle?: string;
+    topics: string[];
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,14 +89,49 @@ export default function CandidateInterviewsPage() {
     }
   }
 
-  async function handleStartDefinitionInterview(definitionId: string) {
-    setStartingSession(definitionId);
+  /** Opens the lobby for a recruiter-published definition. This used to call
+   * startInterview() directly on click, so the candidate was dropped into a live
+   * session with no chance to check their camera or mic first. */
+  function openDefinitionLobby(definition: InterviewDefinitionResponse) {
+    setError(null);
+    setLobby({
+      definitionId: definition.id,
+      title: definition.title,
+      roleTitle: definition.role_title,
+      topics: definition.questions.map((q) => q.topic),
+    });
+  }
+
+  function openPracticeLobby() {
+    if (practiceQuestions.length === 0) {
+      setError("No topics generated");
+      return;
+    }
+    setError(null);
+    setLobby({
+      definitionId: null,
+      title: "Practice interview",
+      roleTitle: practiceRole || undefined,
+      topics: practiceQuestions.map((q) => q.topic),
+    });
+  }
+
+  /** Single join path for both entry points — the session is only created once the
+   * candidate has actually passed the device check. */
+  async function handleJoinFromLobby() {
+    if (!lobby) return;
+    setStartingSession(lobby.definitionId ?? "practice");
     setError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
 
-      const result = await startInterview(token, { interview_definition_id: definitionId });
+      const result = await startInterview(
+        token,
+        lobby.definitionId
+          ? { interview_definition_id: lobby.definitionId }
+          : { topic_plan: lobby.topics },
+      );
       // router.push, not window.location.href: a full document reload throws away
       // the whole React tree and re-downloads the bundle just to change route.
       router.push(`/interview/${result.session_id}`);
@@ -96,28 +141,34 @@ export default function CandidateInterviewsPage() {
     }
   }
 
-  async function handleStartPracticeInterview() {
-    if (practiceQuestions.length === 0) {
-      setError("No topics generated");
-      return;
-    }
+  // The lobby takes over the page rather than rendering inside the browse list: it owns
+  // a live camera preview, and keeping the rest of the page mounted behind it invites
+  // the user to navigate away with the stream still running.
+  if (lobby) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Ready to join?</h1>
+          <p className="text-sm text-slate">
+            Check your camera and microphone before you start.
+          </p>
+        </div>
 
-    setStartingSession("practice");
-    setError(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("No session token");
+        {error && <p className="text-sm text-rose-flagged">{error}</p>}
 
-      const result = await startInterview(token, {
-        topic_plan: practiceQuestions.map((q) => q.topic),
-      });
-      // router.push, not window.location.href: a full document reload throws away
-      // the whole React tree and re-downloads the bundle just to change route.
-      router.push(`/interview/${result.session_id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start practice interview");
-      setStartingSession(null);
-    }
+        <InterviewLobby
+          topics={lobby.topics}
+          title={lobby.title}
+          roleTitle={lobby.roleTitle}
+          joining={startingSession !== null}
+          onJoin={handleJoinFromLobby}
+          onBack={() => {
+            setLobby(null);
+            setError(null);
+          }}
+        />
+      </div>
+    );
   }
 
   return (
@@ -151,13 +202,16 @@ export default function CandidateInterviewsPage() {
             >
               <div>
                 <h4 className="text-sm font-semibold text-ink dark:text-zinc-50">{def.title}</h4>
+                {/* "topics", not "questions": the count is how many areas the
+                    interviewer will cover, and each one can spawn a follow-up when an
+                    answer is thin, so the number of questions asked is not fixed. */}
                 <p className="text-xs text-slate mt-1">
-                  {def.role_title} · {def.question_count} questions · {def.years_experience ?? "Not specified"} years experience
+                  {def.role_title} · {def.question_count} topics · {def.years_experience ?? "Not specified"} years experience
                 </p>
               </div>
               <Button
                 size="sm"
-                onClick={() => handleStartDefinitionInterview(def.id)}
+                onClick={() => openDefinitionLobby(def)}
                 disabled={startingSession === def.id}
               >
                 {startingSession === def.id ? "Starting…" : "Start"}
@@ -266,10 +320,10 @@ export default function CandidateInterviewsPage() {
                     <Button
                       type="button"
                       className="flex-1"
-                      onClick={handleStartPracticeInterview}
+                      onClick={openPracticeLobby}
                       disabled={startingSession === "practice"}
                     >
-                      {startingSession === "practice" ? "Starting…" : "Start Interview"}
+                      {startingSession === "practice" ? "Starting…" : "Continue"}
                     </Button>
                   </div>
                 </div>

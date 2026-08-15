@@ -19,7 +19,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { AchievementsGridWrapper } from "@/components/achievements/AchievementsGridWrapper";
-import { CommitActivityChart } from "@/components/charts/CommitActivityChart";
+import { CommitActivityChartLazy } from "@/components/charts/CommitActivityChartLazy";
 import { ContributionHeatmap } from "@/components/charts/ContributionHeatmap";
 import { LanguageChart } from "@/components/charts/LanguageChart";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -112,7 +112,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
               <LanguageChart projects={github_summary.projects} />
             </Section>
             <Section title="Commit Activity (weekly)" index={2}>
-              <CommitActivityChart weeklyCounts={github_stats.commit_activity_weekly} />
+              <CommitActivityChartLazy weeklyCounts={github_stats.commit_activity_weekly} />
             </Section>
           </div>
 
