@@ -29,7 +29,7 @@ from arq.connections import RedisSettings
 from services.api.core.config import get_settings
 from services.workers.tasks import TASKS
 
-logger = logging.getLogger("overwatch.workers.runner")
+logger = logging.getLogger("trace.workers.runner")
 
 
 async def startup(ctx: dict) -> None:

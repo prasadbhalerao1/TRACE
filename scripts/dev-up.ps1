@@ -3,9 +3,11 @@
 # containers - there is no cloud dependency. Run from anywhere; paths are resolved
 # relative to this script's location.
 #
-# First-time setup also needs (once the containers are up):
-#   python -m alembic upgrade head
-#   python scripts\seed_db.py
+# First-time setup (see SETUP.md for the full walkthrough):
+#   uv sync                                      # creates .venv from pyproject.toml
+#   cd apps\web; npm install; cd ..\..
+#   .venv\Scripts\python.exe -m alembic upgrade head    # once containers are up
+#   .venv\Scripts\python.exe scripts\seed_db.py
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1
 
@@ -74,7 +76,16 @@ if ($dockerOk) {
 
 # --- 2. FastAPI backend --------------------------------------------------------
 Write-Host "Starting FastAPI backend (new window)..." -ForegroundColor Green
-$apiPython = Join-Path $root "services\api\.venv\Scripts\python.exe"
+# Root .venv, created by `uv sync` from pyproject.toml. Falls back to the older
+# services/api/.venv so an environment predating the uv migration still starts.
+$apiPython = Join-Path $root ".venv\Scripts\python.exe"
+if (-not (Test-Path $apiPython)) {
+    $apiPython = Join-Path $root "services\api\.venv\Scripts\python.exe"
+}
+if (-not (Test-Path $apiPython)) {
+    Write-Host "No Python environment found. Run 'uv sync' in the repo root first." -ForegroundColor Red
+    exit 1
+}
 Start-Process powershell -ArgumentList @(
     "-NoExit", "-Command",
     "cd '$root'; & '$apiPython' -m uvicorn services.api.main:app --reload --port 8000"
