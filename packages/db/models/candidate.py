@@ -115,6 +115,8 @@ class Certification(Base):
             "verification_status IN ('unverified','pending','verified','rejected')",
             name="ck_certifications_verification_status",
         ),
+        # Certificates are always listed per candidate.
+        Index("idx_certifications_candidate_id", "candidate_id"),
     )
 
 

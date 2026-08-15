@@ -99,6 +99,9 @@ class InterviewSession(Base):
         ),
         # The recruiter attempts list filters the whole table by definition.
         Index("idx_interview_sessions_definition", "interview_definition_id"),
+        # A candidate's own session history, and a job's sessions.
+        Index("idx_interview_sessions_candidate_id", "candidate_id"),
+        Index("idx_interview_sessions_job_id", "job_id"),
     )
 
 

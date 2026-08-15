@@ -44,6 +44,12 @@ class Job(Base):
     matching_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="idle")
     matching_error: Mapped[str | None] = mapped_column(Text)
 
+    __table_args__ = (
+        # A recruiter's own postings, and an org's postings, are both listed directly.
+        Index("idx_jobs_posted_by_user_id", "posted_by_user_id"),
+        Index("idx_jobs_organization_id", "organization_id"),
+    )
+
 
 class Application(Base):
     """FR-1.4 kanban pipeline. `source` isn't in either doc's SQL, but FR-4.3's "source-of-hire
@@ -103,6 +109,9 @@ class MatchScore(Base):
         # GET /jobs/{id}/matches filters by job_id and orders by match_percentage —
         # idx_match_scores_job_time's second column (computed_at) doesn't cover that sort.
         Index("idx_match_scores_job_percentage", "job_id", "match_percentage"),
+        # Candidate-side lookup: "which jobs matched me", which the job_id-leading
+        # indexes above cannot serve.
+        Index("idx_match_scores_candidate_id", "candidate_id"),
     )
 
 
@@ -123,6 +132,9 @@ class CopilotConversation(Base):
     updated_at: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    # Conversations are always listed for one recruiter.
+    __table_args__ = (Index("idx_copilot_conversations_recruiter_id", "recruiter_id"),)
 
 
 class SkillTaxonomyEntry(Base):

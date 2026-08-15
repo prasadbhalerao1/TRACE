@@ -145,8 +145,8 @@ class TrustedIssuer(Base):
     trust_tier: Mapped[str] = mapped_column(Text, nullable=False, server_default="platform")
     notes: Mapped[str | None] = mapped_column(Text)
     added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -177,7 +177,7 @@ class FraudDetectionConfig(Base):
     photo_hash_max_distance: Mapped[int] = mapped_column(Float, nullable=False, server_default="4")
     # AI-content heuristic perplexity threshold (lower = more AI-like, triggers flag)
     ai_content_perplexity_threshold: Mapped[float] = mapped_column(Float, nullable=False, server_default="50")
-    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         CheckConstraint("code_similarity_threshold >= 0 AND code_similarity_threshold <= 1", name="ck_code_sim_range"),
@@ -201,6 +201,12 @@ class Dispute(Base):
     )
     candidate_statement: Mapped[str | None] = mapped_column(Text)
     supporting_files: Mapped[list | None] = mapped_column(JSONB)
+    # Cached LLM reviewer-assist summary ({candidate_context_summary,
+    # points_of_agreement_or_conflict}). Previously regenerated on every GET of the flag
+    # detail page, so opening one flag twice cost two model calls — while holding a DB
+    # connection — for a summary of two fields that never change after submission.
+    # Written once, on first read; null means "not summarized yet".
+    review_assist: Mapped[dict | None] = mapped_column(JSONB)
     submitted_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("idx_disputes_flag", "fraud_flag_id"),)

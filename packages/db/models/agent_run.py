@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Text
+from sqlalchemy import Index, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -23,3 +23,10 @@ class AgentRun(Base):
     model_used: Mapped[str | None] = mapped_column(Text)
     langfuse_trace_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Provenance lookups are always "all runs for this subject" — every ingestion,
+        # scoring pass and fraud check appends here, so an unindexed table meant a
+        # sequential scan that grew with total platform activity.
+        Index("idx_agent_runs_subject", "subject_type", "subject_id"),
+    )
