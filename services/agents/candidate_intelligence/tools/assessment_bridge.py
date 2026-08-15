@@ -12,11 +12,16 @@ contribution_share are on different scales (a 1-10ish rating and a 0-1 share, no
 Left as a followup, not silently dropped.
 """
 
-from sqlalchemy import select
+from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
 from packages.db.models.assessment import Submission
+from services.agents.candidate_intelligence.tools.population import (
+    MIN_POPULATION,
+    cache_get,
+    cache_put,
+)
 
 
 async def latest_assessment_score(db: AsyncSession, candidate_id: str) -> float | None:
@@ -31,16 +36,30 @@ async def latest_assessment_score(db: AsyncSession, candidate_id: str) -> float 
 
 
 async def assessment_score_population(db: AsyncSession) -> list[float]:
-    """Latest Submission.score per candidate, across all candidates with a submission."""
-    ranked = (
-        select(
-            Submission.score.label("value"),
-            func.row_number()
-            .over(partition_by=Submission.candidate_id, order_by=Submission.submitted_at.desc())
-            .label("rn"),
-        )
-        .where(Submission.score.is_not(None))
-        .subquery()
+    """Latest Submission.score per candidate, across all candidates with a submission.
+
+    Guarded by a COUNT and cached on the same terms as population.py's queries: this runs
+    on every ingestion, and `percentile_normalize` throws the result away below
+    `MIN_POPULATION`, so the scan is pure waste on a small deployment. `DISTINCT ON`
+    replaces the `row_number()` window subquery — same result, no sort of the full table.
+    """
+    cached = cache_get("assessment_scores")
+    if cached is not None:
+        return list(cached)  # type: ignore[arg-type]
+
+    count_result = await db.execute(
+        select(func.count(distinct(Submission.candidate_id))).where(Submission.score.is_not(None))
     )
-    result = await db.execute(select(ranked.c.value).where(ranked.c.rn == 1))
-    return [row[0] for row in result.all()]
+    if int(count_result.scalar() or 0) < MIN_POPULATION:
+        cache_put("assessment_scores", [])
+        return []
+
+    result = await db.execute(
+        select(Submission.score)
+        .where(Submission.score.is_not(None))
+        .distinct(Submission.candidate_id)
+        .order_by(Submission.candidate_id, Submission.submitted_at.desc())
+    )
+    scores = [float(row[0]) for row in result.all()]
+    cache_put("assessment_scores", scores)
+    return scores

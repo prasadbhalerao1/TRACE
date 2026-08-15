@@ -16,7 +16,20 @@ async def run(state: InterviewState) -> dict:
     transcript = state["transcript"]
     answer_turn = transcript[-1]
     question_turn = transcript[-2] if len(transcript) >= 2 else {"text": ""}
-    topic = state["topic_plan"][state["current_topic_idx"]]
+
+    # Guarded the same way `question.run` guards it. Without this, an answer arriving
+    # when the topic index has already run past the end of the plan — an empty plan, or
+    # a client posting one more turn after the last topic — raised IndexError and became
+    # a 500 mid-interview, losing the turn.
+    topic_plan = state["topic_plan"]
+    idx = state["current_topic_idx"]
+    if idx >= len(topic_plan):
+        return {
+            "last_answer_verdict": "sufficient",
+            "interview_status": "completed",
+            "next_question": None,
+        }
+    topic = topic_plan[idx]
 
     evaluation = await evaluate_turn(topic, question_turn["text"], answer_turn["text"])
 

@@ -15,7 +15,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
 from fastapi.responses import RedirectResponse
 from github import Github
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.core.db import async_session
@@ -72,7 +72,7 @@ from services.agents.candidate_intelligence.tools.github_calendar import (
 )
 from services.agents.candidate_intelligence.tools.population import (
     commit_count_population,
-    latest_subscore_population,
+    latest_subscore_populations,
 )
 from services.agents.candidate_intelligence.tools.leetcode import (
     LeetcodeUnavailable,
@@ -102,6 +102,15 @@ _oauth_state_cache: dict[str, tuple[str, float, str]] = {}
 # Third-party stats (GitHub calendar, LeetCode) are cached, not fetched live per view —
 # this bounds how often a candidate can force a re-fetch of LeetCode's unofficial API.
 _STATS_REFRESH_COOLDOWN = timedelta(minutes=15)
+
+# Caps on the two unbounded collections in the dashboard payload. Both were returned in
+# full: every non-fork repo, and the entire append-only TalentScore history. The dashboard
+# cannot render until the whole response arrives, so payload size is felt directly as
+# time-to-first-paint.
+_MAX_DASHBOARD_PROJECTS = 50
+# The score chart plots a trend; older points are compressed to invisibility long before
+# this. `latest_score` is selected separately, so trimming history never affects it.
+_MAX_SCORE_HISTORY = 30
 
 logger = logging.getLogger(__name__)
 
@@ -308,10 +317,17 @@ async def _run_ingestion_and_persist(
     # Population/assessment data for Talent Score v2's percentile normalization —
     # fetched here (the router owns the DB session) and injected into graph state so the
     # talent_scoring node stays DB-free, same convention as the rest of this module.
+    # All three TalentScore-derived populations come from one DISTINCT ON query rather
+    # than three window-function scans of the append-only history table, and every
+    # population short-circuits below MIN_POPULATION (percentile_normalize discards them
+    # there anyway). This runs on every ingestion, so it sits on the visible wait.
+    subscore_populations = await latest_subscore_populations(
+        db, ("community_participation", "leadership", "open_source_contributions")
+    )
     commit_population = await commit_count_population(db)
-    star_population = await latest_subscore_population(db, "community_participation")
-    leadership_population = await latest_subscore_population(db, "leadership")
-    contribution_population = await latest_subscore_population(db, "open_source_contributions")
+    star_population = subscore_populations["community_participation"]
+    leadership_population = subscore_populations["leadership"]
+    contribution_population = subscore_populations["open_source_contributions"]
     assessment_score = await latest_assessment_score(db, profile.id)
     assessment_population = await assessment_score_population(db)
 
@@ -824,15 +840,41 @@ async def _compute_github_summary(db: AsyncSession, profile: CandidateProfile) -
     """Shared by `/me/dashboard`, `/me/github-summary`, and the public portfolio route
     (services/api/modules/public/router.py has its own copy scoped to published-only
     projects) — kept as one function here so the two never drift on aggregation logic."""
-    snapshot_result = await db.execute(select(GithubSnapshot).where(GithubSnapshot.candidate_id == profile.id))
-    snapshots = snapshot_result.scalars().all()
+    # Totals are aggregated in SQL over *all* snapshots, while only the top repos are
+    # materialized as rows. Loading every snapshot to sum five columns in Python meant a
+    # prolific candidate's dashboard transferred hundreds of rows to produce five
+    # integers, and then serialized every one of them into the response as well.
+    totals_row = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(GithubSnapshot.stars), 0),
+                func.coalesce(func.sum(GithubSnapshot.commit_count), 0),
+                func.coalesce(func.sum(GithubSnapshot.pr_count), 0),
+                func.coalesce(func.sum(GithubSnapshot.issue_count), 0),
+                func.coalesce(func.sum(GithubSnapshot.forks), 0),
+            ).where(GithubSnapshot.candidate_id == profile.id)
+        )
+    ).one()
+
+    # Bounded: nobody reads past the first few dozen repos on a profile, and the payload
+    # is what the dashboard blocks on. Ordered by stars with a NULL-safe fallback so the
+    # cut keeps the most substantial work rather than an arbitrary slice.
+    project_result = await db.execute(
+        select(GithubSnapshot)
+        .where(
+            GithubSnapshot.candidate_id == profile.id,
+            GithubSnapshot.is_fork.is_not(True),
+        )
+        .order_by(func.coalesce(GithubSnapshot.stars, 0).desc(), GithubSnapshot.pushed_at.desc())
+        .limit(_MAX_DASHBOARD_PROJECTS)
+    )
     github_stats = profile.github_stats or {}
     return GithubSummary(
-        total_stars=sum(s.stars or 0 for s in snapshots),
-        total_commits=sum(s.commit_count or 0 for s in snapshots),
-        total_prs=sum(s.pr_count or 0 for s in snapshots),
-        total_issues=sum(s.issue_count or 0 for s in snapshots),
-        total_forks=sum(s.forks or 0 for s in snapshots),
+        total_stars=totals_row[0],
+        total_commits=totals_row[1],
+        total_prs=totals_row[2],
+        total_issues=totals_row[3],
+        total_forks=totals_row[4],
         owned_repo_count=github_stats.get("owned_repo_count", 0),
         external_contributions=github_stats.get("external_contributions", 0),
         pr_review_count=github_stats.get("pr_review_count", 0),
@@ -849,8 +891,7 @@ async def _compute_github_summary(db: AsyncSession, profile: CandidateProfile) -
                 pr_count=s.pr_count,
                 issue_count=s.issue_count,
             )
-            for s in sorted(snapshots, key=lambda s: s.stars or 0, reverse=True)
-            if not s.is_fork
+            for s in project_result.scalars().all()
         ],
     )
 
@@ -884,10 +925,18 @@ async def get_my_dashboard(
 ) -> DashboardResponse:
     profile = await _get_or_create_profile(db, user)
 
+    # Newest-first with a LIMIT, then reversed for display. Selecting the whole history
+    # ascending just to take `scores[-1]` as the latest meant the payload grew without
+    # bound as a candidate was rescored — every ingestion appends a row.
     score_result = await db.execute(
-        select(TalentScore).where(TalentScore.candidate_id == profile.id).order_by(TalentScore.computed_at)
+        select(TalentScore)
+        .where(TalentScore.candidate_id == profile.id)
+        .order_by(TalentScore.computed_at.desc())
+        .limit(_MAX_SCORE_HISTORY)
     )
-    scores = [_to_score_response(s) for s in score_result.scalars().all()]
+    recent_scores = list(score_result.scalars().all())
+    latest_score = _to_score_response(recent_scores[0]) if recent_scores else None
+    scores = [_to_score_response(s) for s in reversed(recent_scores)]
 
     badge_result = await db.execute(select(Badge).where(Badge.candidate_id == profile.id))
     badges = [BadgeResponse.model_validate(b) for b in badge_result.scalars().all()]
@@ -896,7 +945,7 @@ async def get_my_dashboard(
 
     return DashboardResponse(
         profile=CandidateProfileResponse.model_validate(profile),
-        latest_score=scores[-1] if scores else None,
+        latest_score=latest_score,
         score_history=scores,
         badges=badges,
         github_summary=github_summary,

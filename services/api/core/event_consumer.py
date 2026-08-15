@@ -61,8 +61,16 @@ async def process_pending_events(db: AsyncSession) -> dict:
     record ("this event has been seen by the consumer at least once"), matching the
     `events` table's own `processed_at` column contract.
     """
+    # Served by the partial index `idx_events_unprocessed_type` (migration
+    # w8x9y0z1a2b3): without it this ran a sequential scan of the whole `events` table
+    # every 30 seconds, forever, and the cost grew with total event history even though
+    # the result set is almost always empty. `FOR UPDATE SKIP LOCKED` makes the claim
+    # safe if a second consumer is ever added — each row is handed to exactly one worker
+    # instead of both processing it.
     result = await db.execute(
-        select(Event).where(Event.event_type == _HACKATHON_RANKINGS_FINALIZED, Event.processed_at.is_(None))
+        select(Event)
+        .where(Event.event_type == _HACKATHON_RANKINGS_FINALIZED, Event.processed_at.is_(None))
+        .with_for_update(skip_locked=True)
     )
     pending = list(result.scalars().all())
 

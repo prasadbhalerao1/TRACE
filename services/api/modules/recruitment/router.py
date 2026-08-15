@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -398,10 +398,22 @@ async def list_jobs(
 
 @router.get("/jobs/open", response_model=list[JobResponse])
 async def list_open_jobs(
+    limit: int = 100,
+    offset: int = 0,
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> list[Job]:
-    result = await db.execute(select(Job).order_by(Job.created_at.desc()))
+    """Open jobs, newest first.
+
+    Paginated: this returned every Job row across every organization on a page any
+    candidate can open, so the payload grew with total platform history. Same
+    `max(1, min(limit, 500))` capping idiom as `get_audit_log`, so a client cannot ask
+    for an unbounded page by passing a huge limit.
+    """
+    capped_limit = max(1, min(limit, 500))
+    result = await db.execute(
+        select(Job).order_by(Job.created_at.desc()).limit(capped_limit).offset(max(0, offset))
+    )
     return list(result.scalars().all())
 
 
@@ -755,10 +767,16 @@ async def hiring_funnel(
     db: AsyncSession = Depends(get_db),
 ) -> HiringFunnelResponse:
     job_ids = await _recruiter_job_ids(db, user, job_id)
-    result = await db.execute(select(Application.stage).where(Application.job_id.in_(job_ids)))
-    counts: dict[str, int] = defaultdict(int)
-    for (stage,) in result.all():
-        counts[stage] += 1
+    # Counted in SQL, not in Python. This used to pull every application row for the
+    # recruiter's jobs across the wire purely to increment a defaultdict — so the payload
+    # grew with pipeline size while the answer stayed a handful of integers.
+    # `idx_applications_job_stage` covers (job_id, stage), so this is served index-only.
+    result = await db.execute(
+        select(Application.stage, func.count())
+        .where(Application.job_id.in_(job_ids))
+        .group_by(Application.stage)
+    )
+    counts: dict[str, int] = {stage: count for stage, count in result.all()}
 
     stages = []
     previous_count: int | None = None
@@ -813,10 +831,14 @@ async def source_breakdown(
     db: AsyncSession = Depends(get_db),
 ) -> SourceBreakdownResponse:
     job_ids = await _recruiter_job_ids(db, user, job_id)
-    result = await db.execute(select(Application.source).where(Application.job_id.in_(job_ids)))
-    counts: dict[str, int] = defaultdict(int)
-    for (source,) in result.all():
-        counts[source or "direct"] += 1
+    # Aggregated in SQL for the same reason as the funnel above. NULL source means
+    # "direct", so it is coalesced server-side rather than after transferring every row.
+    result = await db.execute(
+        select(func.coalesce(Application.source, "direct"), func.count())
+        .where(Application.job_id.in_(job_ids))
+        .group_by(func.coalesce(Application.source, "direct"))
+    )
+    counts: dict[str, int] = {source: count for source, count in result.all()}
 
     return SourceBreakdownResponse(
         job_id=job_id,

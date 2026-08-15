@@ -242,7 +242,21 @@ async def generate_definition_questions(
         max_tokens=512,
         agent_name="assessment.interview.definition_questions",
     )
-    return result["topics"]
+
+    # The JSON schema guarantees a list of strings; it cannot guarantee the list is
+    # non-empty or that entries are meaningful. An empty topic plan is not a degraded
+    # interview, it is an unrunnable one — every downstream node indexes into it — so
+    # fail here with a typed error rather than persisting a definition that breaks the
+    # moment a candidate opens it.
+    topics = [t.strip() for t in result.get("topics", []) if isinstance(t, str) and t.strip()]
+    if not topics:
+        raise AssessmentUnavailable(
+            "The model returned no usable interview topics. Try again, or give a more "
+            "detailed job description."
+        )
+    # The prompt asks for exactly `question_count`; models occasionally overshoot. Trim
+    # rather than reject — extra topics are still valid, just more than was asked for.
+    return topics[:question_count]
 
 
 async def generate_interview_report(transcript: list[dict], per_topic_scores: dict[str, float]) -> dict:

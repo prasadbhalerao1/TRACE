@@ -507,12 +507,19 @@ async def get_authenticity_score(
     )
     upheld_flags = [{"id": str(f.id), "flag_type": f.flag_type} for f in upheld_result.scalars().all()]
 
+    # Computed and returned, not persisted. This endpoint used to INSERT an
+    # AuthenticityScore row on every call — so the table grew with page views rather than
+    # with actual scoring events, and a candidate refreshing their flags page wrote
+    # history that no one asked for. The score is a pure function of the upheld flags
+    # (`compute_authenticity_score`), so recomputing on read is both cheap and always
+    # current, where a stored row goes stale the moment a flag is upheld or overturned.
     computed = compute_authenticity_score(upheld_flags)
-    score_row = AuthenticityScore(candidate_id=candidate_id, score=computed["score"], components=computed["components"])
-    db.add(score_row)
-    await db.commit()
-    await db.refresh(score_row)
-    return AuthenticityScoreResponse.model_validate(score_row)
+    return AuthenticityScoreResponse(
+        candidate_id=candidate_id,
+        score=computed["score"],
+        components=computed["components"],
+        computed_at=datetime.now(timezone.utc),
+    )
 
 
 @router.get("/candidates/{candidate_id}/flags", response_model=list[FraudFlagResponse])
@@ -606,15 +613,37 @@ async def get_flag_detail(
 
     assist = DisputeReviewAssist(available=False)
     if dispute is not None:
-        try:
-            summary = await summarize_dispute_for_reviewer(flag.evidence, dispute.candidate_statement or "")
+        summary = dispute.review_assist
+        if summary is None:
+            # Both values are read out of the ORM objects *before* the connection is
+            # released, per without_db_connection's contract — the closure must not
+            # trigger a lazy load once the session's connection is back in the pool.
+            evidence = flag.evidence
+            statement = dispute.candidate_statement or ""
+            try:
+                # Off the DB connection: this is a multi-second model call, and holding a
+                # pooled connection open across it starves every other request.
+                summary = await without_db_connection(
+                    db,
+                    lambda: summarize_dispute_for_reviewer(evidence, statement),
+                )
+                # Persisted so the next reviewer to open this flag reads it instead of
+                # paying for the same summary again. Both inputs are immutable after
+                # submission, so the cache can never go stale.
+                dispute.review_assist = summary
+                await db.commit()
+            except DisputeReviewUnavailable:
+                # No key configured, or the model declined — degrade to "unavailable"
+                # rather than fabricating a summary. Deliberately not cached: the next
+                # request should retry once a key exists.
+                summary = None
+
+        if summary is not None:
             assist = DisputeReviewAssist(
                 available=True,
                 candidate_context_summary=summary["candidate_context_summary"],
                 points_of_agreement_or_conflict=summary["points_of_agreement_or_conflict"],
             )
-        except DisputeReviewUnavailable:
-            assist = DisputeReviewAssist(available=False)
 
     return FraudFlagDetailResponse(
         flag=FraudFlagResponse.model_validate(flag),
