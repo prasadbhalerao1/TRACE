@@ -23,7 +23,7 @@ export default function SignInPage() {
     setError(null);
     try {
       await login(email, password);
-      router.replace("/dashboard");
+      router.replace("/home");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
       setSubmitting(false);

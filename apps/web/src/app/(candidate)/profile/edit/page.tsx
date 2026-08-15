@@ -14,7 +14,6 @@ import {
   connectLeetcode,
   fetchDashboard,
   fetchGithubOAuthUrl,
-  grantConsent,
   pollIngestionStatus,
   uploadCertificate,
   uploadResume,
@@ -169,7 +168,6 @@ export default function ProfileEditPage() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      await grantConsent(token, "github_ingestion");
       const authorizeUrl = await fetchGithubOAuthUrl(token);
       window.location.href = authorizeUrl;
     } catch (err) {
@@ -204,7 +202,6 @@ export default function ProfileEditPage() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      await grantConsent(token, "resume_parsing");
       await uploadResume(token, file);
       // Ingestion (parsing + Talent Score recompute) now runs in the background —
       // the upload response returns immediately with ingestion_status: "processing".
@@ -698,7 +695,7 @@ export default function ProfileEditPage() {
         </CardContent>
       </Card>
 
-      <Button variant="link" onClick={() => router.push("/dashboard")}>
+      <Button variant="link" onClick={() => router.push("/home")}>
         View your Talent Score →
       </Button>
     </div>

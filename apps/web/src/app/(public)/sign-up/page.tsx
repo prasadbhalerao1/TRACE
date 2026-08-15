@@ -51,7 +51,7 @@ export default function SignUpPage() {
           role === "candidate" && username.trim() ? username.trim() : undefined,
       };
       await signup(input);
-      router.replace("/dashboard");
+      router.replace("/home");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
       setSubmitting(false);

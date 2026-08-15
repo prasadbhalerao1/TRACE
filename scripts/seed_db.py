@@ -34,7 +34,7 @@ from packages.db.models import (
 from services.api.core.db import async_session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("overwatch.seed")
+logger = logging.getLogger("trace.seed")
 
 
 async def seed_relational_database(session: AsyncSession):
@@ -48,7 +48,7 @@ async def seed_relational_database(session: AsyncSession):
         org = Organization(
             id=uuid.uuid4(),
             name="Demo Tech Corp",
-            domain="overwatch.ai",
+            domain="trace.dev",
             org_type="company",
             created_at=datetime.now(timezone.utc),
         )
@@ -58,17 +58,17 @@ async def seed_relational_database(session: AsyncSession):
 
     # 2. Demo Users
     user_data = [
-        ("user_candidate_demo", "demo_candidate@overwatch.ai", "candidate", "Alex Rivera"),
-        ("user_recruiter_demo", "demo_recruiter@overwatch.ai", "recruiter", "Sarah Chen"),
-        ("user_organizer_demo", "demo_organizer@overwatch.ai", "organizer", "Marcus Vance"),
-        ("user_judge_demo", "demo_judge@overwatch.ai", "judge", "Dr. Elena Rostova"),
-        ("user_admin_demo", "demo_admin@overwatch.ai", "admin", "System Administrator"),
+        ("user_candidate_demo", "demo_candidate@trace.dev", "candidate", "Alex Rivera"),
+        ("user_recruiter_demo", "demo_recruiter@trace.dev", "recruiter", "Sarah Chen"),
+        ("user_organizer_demo", "demo_organizer@trace.dev", "organizer", "Marcus Vance"),
+        ("user_judge_demo", "demo_judge@trace.dev", "judge", "Dr. Elena Rostova"),
+        ("user_admin_demo", "demo_admin@trace.dev", "admin", "System Administrator"),
     ]
 
     users_map = {}
     from services.api.core.security import hash_password
 
-    for clerk_id, email, role, full_name in user_data:
+    for _legacy_id, email, role, full_name in user_data:
         user_stmt = select(User).where(User.email == email)
         u_res = await session.execute(user_stmt)
         user = u_res.scalar_one_or_none()
@@ -101,6 +101,16 @@ async def seed_relational_database(session: AsyncSession):
             github_username="alexrivera-demo",
             username="alexrivera",
             headline="Senior Fullstack & AI Engineer passionate about distributed systems and LangGraph agents.",
+            # location + education are what GET /me checks to decide whether onboarding
+            # is still outstanding. Without them the demo account is bounced into the
+            # /onboarding wizard on every sign-in.
+            location="Bengaluru, India",
+            education=[
+                {
+                    "institution": "Indian Institute of Technology, Bombay",
+                    "degree": "B.Tech in Computer Science",
+                }
+            ],
             skills=[
                 {"name": "Python", "source": "github_analysis", "confidence": 0.95},
                 {"name": "TypeScript", "source": "github_analysis", "confidence": 0.90},

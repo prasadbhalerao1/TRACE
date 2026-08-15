@@ -65,7 +65,7 @@ async def seed_db():
                 "role": "admin",
                 "label": "Admin",
                 "users": [
-                    {"email": "admin@overwatch.io", "password": "password123", "full_name": "Admin User", "username": "admin"},
+                    {"email": "admin@trace.dev", "password": "password123", "full_name": "Admin User", "username": "admin"},
                 ]
             },
         ]

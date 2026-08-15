@@ -19,12 +19,54 @@ from services.api.modules.candidates.router import _RESERVED_USERNAMES, _USERNAM
 router = APIRouter(tags=["User Authentication"])
 
 
+async def _candidate_onboarding_incomplete(db: AsyncSession, user: User) -> bool:
+    """Whether a candidate still owes us the fields the /onboarding wizard collects.
+
+    Read-only on purpose — `/me` is called on virtually every page load, so it must not
+    create a profile row as a side effect (`_get_or_create_profile` would).
+
+    College and degree are not columns: `PATCH /candidates/me` folds them into the first
+    entry of the `education` JSONB array as `institution`/`degree`, so they are read back
+    the same way.
+    """
+    if not user.full_name:
+        return True
+
+    result = await db.execute(
+        select(CandidateProfile).where(CandidateProfile.user_id == user.id)
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        return True
+    if not profile.headline or not profile.location:
+        return True
+
+    education = profile.education or []
+    first = education[0] if education else {}
+    return not (first.get("institution") and first.get("degree"))
+
+
 @router.get("/me", response_model=MeResponse)
-async def me(ctx: AuthContext = Depends(get_auth_context)) -> MeResponse:
+async def me(
+    ctx: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
     """Returns the current authenticated user profile."""
     if ctx.user is None:
         return MeResponse(onboarding_required=True)
-    return MeResponse(onboarding_required=False, profile=UserProfile.model_validate(ctx.user))
+
+    # Previously this was hardcoded False whenever a `users` row existed — a state
+    # signup makes unreachable, so `onboarding_required` was effectively always False
+    # and the /onboarding wizard could never be reached. Only candidates have profile
+    # fields to collect; the other roles are complete as soon as they have an account.
+    onboarding_required = False
+    if ctx.user.role == "candidate":
+        onboarding_required = await _candidate_onboarding_incomplete(db, ctx.user)
+
+    return MeResponse(
+        onboarding_required=onboarding_required,
+        profile=UserProfile.model_validate(ctx.user),
+    )
 
 
 @router.post("/auth/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

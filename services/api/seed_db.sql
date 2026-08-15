@@ -1,5 +1,5 @@
 -- Seed database with sample users for all 5 roles
--- Run with: psql -d overwatch_db -f seed_db.sql
+-- Run with: psql -d talent_platform -f seed_db.sql
 
 -- Contributor role users
 INSERT INTO users (id, email, password_hash, full_name, username, role, is_active, created_at, updated_at)
@@ -113,7 +113,7 @@ VALUES (
 INSERT INTO users (id, email, password_hash, full_name, username, role, is_active, created_at, updated_at)
 VALUES (
   '550e8400-e29b-41d4-a716-446655440401'::uuid,
-  'admin@overwatch.io',
+  'admin@trace.dev',
   '$2b$12$slYQmyNdGzin7olVyON1Je4Zlv8Z2xM8nGKmHXQM1Xs5d7i5vLDDW', -- password123
   'Admin User',
   'admin',
