@@ -34,12 +34,6 @@ export async function fetchMe(token: string): Promise<MeResponse> {
   return res.json();
 }
 
-// `completeOnboarding` used to live here, posting to POST /users/onboarding. That
-// endpoint has never existed on the API — only its `OnboardingRequest` schema does
-// (packages/shared_schemas/users.py) — so every call 404'd. The role is chosen at
-// signup and the profile fields are written by PATCH /candidates/me, which the
-// /onboarding wizard uses instead.
-
 // --- Candidate Intelligence (Module 1 core loop) ---
 
 export interface SubScore {
@@ -152,6 +146,35 @@ export interface IngestionStatusResponse {
   stage?: string | null;
 }
 
+/** Sleep for `ms`, then hold until the tab is visible again.
+ *
+ * Every poller in this file backs off on a timer, but browsers throttle timers in
+ * background tabs unpredictably rather than stopping them — so a user with the app open
+ * in a forgotten tab kept issuing requests for the whole poll window, against endpoints
+ * that hit the DB and (for matching) the job queue. Waiting for visibility means a
+ * hidden tab costs nothing, and resumes immediately when it is focused.
+ *
+ * SSR-safe: `document` is absent on the server, where this degrades to a plain sleep.
+ */
+async function pollDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+
+  if (typeof document === "undefined" || !document.hidden || signal?.aborted) return;
+
+  await new Promise<void>((resolve) => {
+    const onVisible = () => {
+      if (document.hidden && !signal?.aborted) return;
+      document.removeEventListener("visibilitychange", onVisible);
+      signal?.removeEventListener("abort", onVisible);
+      resolve();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    // Aborting while hidden must not strand the caller waiting on a tab that may never
+    // be focused again.
+    signal?.addEventListener("abort", onVisible, { once: true });
+  });
+}
+
 export async function fetchIngestionStatus(token: string): Promise<IngestionStatusResponse> {
   const res = await fetch(`${API_URL}/candidates/me/ingestion-status`, {
     headers: authHeaders(token),
@@ -213,7 +236,7 @@ export async function pollIngestionStatus(
       // Tolerate transient failures; give up only if they persist.
       if (++consecutiveErrors >= 5) throw err;
     }
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    await pollDelay(delay, signal);
     delay = Math.min(delay * 1.5, maxIntervalMs);
   }
   return last;
@@ -825,7 +848,7 @@ export async function pollMatchingStatus(
     } catch (err) {
       if (++consecutiveErrors >= 5) throw err;
     }
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    await pollDelay(delay, signal);
     delay = Math.min(delay * 1.5, maxIntervalMs);
   }
   return last;
@@ -1183,7 +1206,7 @@ export async function pollSubmissionGrading(
 
   while (Date.now() < deadline) {
     if (signal?.aborted) return last;
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    await pollDelay(delay, signal);
     delay = Math.min(delay * 1.5, maxIntervalMs);
     try {
       last = await fetchSubmission(token, submissionId);
@@ -1644,7 +1667,7 @@ export async function pollRankingStatus(
     } catch (err) {
       if (++consecutiveErrors >= 5) throw err;
     }
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    await pollDelay(delay, signal);
     delay = Math.min(delay * 1.5, maxIntervalMs);
   }
   return last;

@@ -30,7 +30,11 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   return null;
 };
 
-export function CommitActivityChart({ weeklyCounts }: { weeklyCounts: number[] | undefined }) {
+export interface CommitActivityChartProps {
+  weeklyCounts: number[] | undefined;
+}
+
+export function CommitActivityChart({ weeklyCounts }: CommitActivityChartProps) {
   const data = useMemo(() => (weeklyCounts ?? []).map((count, i) => ({ week: i + 1, commits: count })), [weeklyCounts]);
 
   if (data.length === 0) {

@@ -30,6 +30,16 @@ export default defineConfig({
         // this, a test that ends signed-in (or mid-redirect) changes the starting state
         // of the next one, and failures move around depending on execution order.
         storageState: { cookies: [], origins: [] },
+        launchOptions: {
+          args: [
+            // Synthetic camera/mic so the interview specs can exercise getUserMedia on
+            // a machine with no webcam (or with one that's switched off). Without these
+            // getUserMedia rejects with NotFoundError and the device-cleanup assertions
+            // silently have nothing to assert on.
+            "--use-fake-device-for-media-capture",
+            "--use-fake-ui-for-media-stream",
+          ],
+        },
       },
     },
   ],

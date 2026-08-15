@@ -21,7 +21,16 @@ function useCountdown(target: Date | null): string | null {
 
   useEffect(() => {
     if (!target) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    // Stop the moment the deadline passes. This interval used to keep firing at 1 Hz
+    // forever once the countdown hit zero — re-rendering the whole sidebar every second
+    // to display nothing, for as long as the page stayed open.
+    if (target.getTime() <= Date.now()) return;
+
+    const id = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (target.getTime() - current <= 0) clearInterval(id);
+    }, 1000);
     return () => clearInterval(id);
   }, [target]);
 

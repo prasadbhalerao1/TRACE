@@ -11,6 +11,7 @@ import { BadgeGrid } from "@/components/BadgeGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Section } from "@/components/common/Section";
 import { SectionError } from "@/components/common/SectionError";
+import { CardSkeleton } from "@/components/common/Skeleton";
 import { EvidenceReceipt } from "@/components/EvidenceReceipt";
 import { ProblemSolvingStats } from "@/components/ProblemSolvingStats";
 import { ProfileSidebar } from "@/components/profile/ProfileSidebar";
@@ -22,8 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
-  fetchDashboard,
   fetchGithubOAuthUrl,
+  fetchGithubSummary,
+  fetchMyBadges,
+  fetchMyLatestScore,
+  fetchMyProfile,
+  fetchMyScoreHistory,
   publishPortfolio,
   refreshStats,
   unpublishPortfolio,
@@ -65,45 +70,61 @@ export function CandidateDashboard() {
   const { getToken } = useAuth();
   const [refreshBusy, setRefreshBusy] = useState(false);
 
-  // Single batched fetch (one token read + one backend round trip instead of
-  // three) — /me/dashboard already computes profile, github_summary, and talent/badges
-  // together server-side, so there's no per-section partial-failure case to guard here:
-  // either the whole bundle loads or none of it does. Sections still render/error/retry
-  // independently at the UI level (below) so the layout doesn't change, but they all
-  // share this one request instead of issuing their own.
-  const dashboardFetcher = useCallback(async () => {
+  // Two independent fetches, deliberately not one.
+  //
+  // This was a single `/me/dashboard` call fanned out into three synthetic resource
+  // objects that all shared one `loading` flag — so the entire page waited on the
+  // slowest part of the payload (the GitHub summary, which scans every snapshot) before
+  // *anything* could render. That is the "connect GitHub, then stare at nothing"
+  // symptom.
+  //
+  // Splitting on the cheap/expensive boundary lets the profile, score and badges paint
+  // from indexed lookups while the GitHub aggregate is still in flight. Both fetchers
+  // are memoized on the now-stable `getToken`, so they are issued in parallel on mount
+  // rather than serialized.
+  const coreFetcher = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error("No session token");
-    return fetchDashboard(token);
+    // Parallel, not sequential: these are four independent indexed queries and awaiting
+    // them one at a time would stack four round trips into the critical path.
+    const [profile, latestScore, scoreHistory, badges] = await Promise.all([
+      fetchMyProfile(token),
+      fetchMyLatestScore(token),
+      fetchMyScoreHistory(token),
+      fetchMyBadges(token),
+    ]);
+    return { profile, latestScore, scoreHistory, badges };
   }, [getToken]);
+
+  const githubFetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchGithubSummary(token);
+  }, [getToken]);
+
   // cacheKey enables stale-while-revalidate: navigating away from the dashboard and back
   // shows the last-loaded data instantly instead of re-paying the backend round-trip
   // (which includes the DB's cold-connection latency on the first query of a session).
-  const dashboardResource = useAsyncResource(dashboardFetcher, "dashboard:bundle");
+  const coreResource = useAsyncResource(coreFetcher, "dashboard:core");
+  const githubResource = useAsyncResource(githubFetcher, "dashboard:github");
 
   const profileResource = {
-    data: dashboardResource.data?.profile ?? null,
-    loading: dashboardResource.loading,
-    error: dashboardResource.error,
-    retry: dashboardResource.retry,
-  };
-  const githubResource = {
-    data: dashboardResource.data?.github_summary ?? null,
-    loading: dashboardResource.loading,
-    error: dashboardResource.error,
-    retry: dashboardResource.retry,
+    data: coreResource.data?.profile ?? null,
+    loading: coreResource.loading,
+    error: coreResource.error,
+    retry: coreResource.retry,
   };
   const talentResource = {
-    data: dashboardResource.data
+    data: coreResource.data
       ? {
-          latestScore: dashboardResource.data.latest_score,
-          scoreHistory: dashboardResource.data.score_history,
-          badges: dashboardResource.data.badges,
+          latestScore: coreResource.data.latestScore,
+          scoreHistory: coreResource.data.scoreHistory,
+          badges: coreResource.data.badges,
         }
       : null,
-    loading: dashboardResource.loading,
-    error: dashboardResource.error,
-    retry: dashboardResource.retry,
+    loading: coreResource.loading,
+    error: coreResource.error,
+    retry: coreResource.retry,
   };
 
   // Optimistically-updatable local copy — publish/unpublish/refresh mutate this directly
@@ -165,13 +186,18 @@ export function CandidateDashboard() {
 
   const githubStats = profile?.github_stats ?? null;
   const githubUsername = profile?.github_username ?? null;
+  // Development Stats genuinely needs both resources — the charts read `github_stats`
+  // off the profile and the totals off the GitHub summary — so this section alone waits
+  // on the pair. Every other section below reads only the resource it actually needs.
   const devStatsLoading = profileResource.loading || githubResource.loading;
   const devStatsError = profileResource.error ?? githubResource.error;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start max-w-7xl mx-auto w-full px-4 py-8">
       {profileResource.loading && !profile ? (
-        <p className="text-sm text-zinc-500">Loading your profile…</p>
+        // Sized to the real ProfileSidebar so the two-column grid is laid out from the
+        // first paint and nothing jumps sideways when the profile lands.
+        <CardSkeleton className="h-105 w-full" />
       ) : profileResource.error && !profile ? (
         <SectionError message={profileResource.error} onRetry={profileResource.retry} retrying={profileResource.loading} />
       ) : profile ? (
@@ -186,11 +212,22 @@ export function CandidateDashboard() {
 
       <div className="space-y-6 flex-1 min-w-0">
         {devStatsLoading && !githubResource.data ? (
-          <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-            <CardContent className="p-6">
-              <EmptyState message="Loading Development Stats…" />
-            </CardContent>
-          </Card>
+          // Matches the real Development Stats block (stat cards + two charts) so this
+          // section reserves its final height instead of collapsing and pushing
+          // everything below it down when the data arrives.
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <CardSkeleton className="h-24" />
+              <CardSkeleton className="h-24" />
+              <CardSkeleton className="h-24" />
+              <CardSkeleton className="h-24" />
+            </div>
+            <CardSkeleton className="h-32" />
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <CardSkeleton className="h-56" />
+              <CardSkeleton className="h-56" />
+            </div>
+          </div>
         ) : devStatsError && !githubResource.data ? (
           <SectionError message={devStatsError} onRetry={() => {
             profileResource.retry();

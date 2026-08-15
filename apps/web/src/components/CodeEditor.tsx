@@ -1,6 +1,19 @@
 "use client";
 
-import Editor from "@monaco-editor/react";
+import dynamic from "next/dynamic";
+
+// Monaco is the single heaviest dependency in the app. Statically imported, it was
+// downloaded by every assessment page — including MCQ assessments, which never render an
+// editor at all. ssr: false because Monaco needs a DOM and cannot be server-rendered
+// anyway, so there is nothing lost by deferring it to the client.
+const Editor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex size-full items-center justify-center bg-zinc-900 text-sm text-zinc-400">
+      Loading editor…
+    </div>
+  ),
+});
 
 export function CodeEditor({
   value,
