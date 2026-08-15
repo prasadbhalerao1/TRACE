@@ -81,9 +81,15 @@ class Settings(BaseSettings):
     # sentry_sdk.init() is never called at all.
     sentry_dsn: str = ""
 
-    # In-memory rate-limit middleware (services/api/core/rate_limit.py). Hackathon-demo
-    # scale (<=20 users) — no Redis dependency added for this; see .agents/decisions.md.
-    rate_limit_per_minute: int = 60
+    # Rate-limit middleware (services/api/core/rate_limit.py), Redis-backed with an
+    # in-process fallback.
+    #
+    # Was 60/min, which a single user could exhaust just by using the app normally: one
+    # dashboard load issues ~6 requests, and the limit is per *user*, not per endpoint,
+    # so a handful of navigations inside one minute returned 429s that surfaced as raw
+    # errors in the UI. This is an abuse ceiling, not a usage budget — it needs to sit
+    # far above what an engaged human generates while still stopping a runaway client.
+    rate_limit_per_minute: int = 600
 
     # Durable background-job queue (services/api/core/queue.py, services/workers/runner.py).
     # Long AI pipelines (candidate ingestion, job matching, assessment grading, deck

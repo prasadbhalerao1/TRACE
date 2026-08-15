@@ -91,6 +91,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path in _EXEMPT_PATHS:
             return await call_next(request)
 
+        # CORS preflights carry no Authorization header, so they cannot be attributed to
+        # a user and fall through to the shared client-IP bucket. The browser issues one
+        # per cross-origin request, so counting them meant a page's real requests
+        # competed with their own preflights for the same allowance — and every user
+        # behind one NAT'd address shared it. They reach no application code, so there is
+        # nothing here worth rationing.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         limit = self._settings.rate_limit_per_minute
         if limit <= 0:
             # 0 or negative means "no limit" — an explicit opt-out, not a footgun.
