@@ -41,7 +41,7 @@ export default function GlobalErrorBoundary({
             <Button onClick={() => reset()} className="w-full sm:w-auto">
               Try Again
             </Button>
-            <Button render={<Link href="/dashboard" />} variant="outline" className="w-full sm:w-auto">
+            <Button render={<Link href="/home" />} variant="outline" className="w-full sm:w-auto">
               Return to Dashboard
             </Button>
           </div>

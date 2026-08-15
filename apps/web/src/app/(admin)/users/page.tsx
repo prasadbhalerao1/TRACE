@@ -71,7 +71,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-ink">User Role Management</h1>
-        <p className="text-sm text-slate">Audit user accounts, check Clerk sync statuses, and adjust RBAC role assignments.</p>
+        <p className="text-sm text-slate">Audit user accounts, review activity, and adjust RBAC role assignments.</p>
       </div>
 
       {error && <p className="text-sm text-rose-flagged">{error}</p>}
@@ -132,7 +132,7 @@ export default function AdminUsersPage() {
           <CardTitle className="text-base font-semibold">Technical Reference: doc/SRS/00-Master-Architecture-and-Analysis.md</CardTitle>
         </CardHeader>
         <CardContent className="text-xs text-slate space-y-2">
-          <p>**User Onboarding**: Links Clerk identities to system database rows. Initial assignments are completed during the onboarding step redirect flow.</p>
+          <p>**User Onboarding**: Accounts are created by signup and completed during the onboarding step redirect flow, where the initial role assignment is made.</p>
         </CardContent>
       </Card>
     </div>

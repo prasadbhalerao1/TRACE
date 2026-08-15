@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import {
   fetchOpenInterviewDefinitions,
   generateDefinitionQuestions,
-  grantConsent,
   startInterview,
   type InterviewDefinitionResponse,
   type InterviewDefinitionQuestion,
@@ -87,7 +86,6 @@ export default function CandidateInterviewsPage() {
       const token = await getToken();
       if (!token) throw new Error("No session token");
 
-      await grantConsent(token, "ai_interview");
       const result = await startInterview(token, { interview_definition_id: definitionId });
       // router.push, not window.location.href: a full document reload throws away
       // the whole React tree and re-downloads the bundle just to change route.
@@ -110,7 +108,6 @@ export default function CandidateInterviewsPage() {
       const token = await getToken();
       if (!token) throw new Error("No session token");
 
-      await grantConsent(token, "ai_interview");
       const result = await startInterview(token, {
         topic_plan: practiceQuestions.map((q) => q.topic),
       });

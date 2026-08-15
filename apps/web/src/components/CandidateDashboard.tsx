@@ -24,7 +24,6 @@ import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
   fetchDashboard,
   fetchGithubOAuthUrl,
-  grantConsent,
   publishPortfolio,
   refreshStats,
   unpublishPortfolio,
@@ -66,7 +65,7 @@ export function CandidateDashboard() {
   const { getToken } = useAuth();
   const [refreshBusy, setRefreshBusy] = useState(false);
 
-  // Single batched fetch (one Clerk-token round trip + one backend round trip instead of
+  // Single batched fetch (one token read + one backend round trip instead of
   // three) — /me/dashboard already computes profile, github_summary, and talent/badges
   // together server-side, so there's no per-section partial-failure case to guard here:
   // either the whole bundle loads or none of it does. Sections still render/error/retry
@@ -138,7 +137,6 @@ export function CandidateDashboard() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      await grantConsent(token, "github_ingestion");
       const authorizeUrl = await fetchGithubOAuthUrl(token);
       window.location.href = authorizeUrl;
     } catch (err) {

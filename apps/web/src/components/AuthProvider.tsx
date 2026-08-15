@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 import { API_URL } from "@/lib/api";
 
 export interface SignupInput {
@@ -38,11 +38,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  const getToken = async (): Promise<string | null> => {
+  // Every data fetcher in the app is memoized on `getToken` (useCallback deps), and
+  // useAsyncResource refetches whenever its `fetcher` identity changes. An unmemoized
+  // getToken therefore invalidated ~28 fetchers on every AuthProvider render and
+  // re-issued their requests. Stable identity here is what makes those useCallbacks
+  // actually hold.
+  const getToken = useCallback(async (): Promise<string | null> => {
     return localStorage.getItem("access_token");
-  };
+  }, []);
 
-  const login = async (email: string, password: string): Promise<void> => {
+  const login = useCallback(async (email: string, password: string): Promise<void> => {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -57,9 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await response.json();
     localStorage.setItem("access_token", data.access_token);
     setIsSignedIn(true);
-  };
+  }, []);
 
-  const signup = async (input: SignupInput): Promise<void> => {
+  const signup = useCallback(async (input: SignupInput): Promise<void> => {
     const response = await fetch(`${API_URL}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -74,21 +79,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await response.json();
     localStorage.setItem("access_token", data.access_token);
     setIsSignedIn(true);
-  };
+  }, []);
 
-  const logout = (): void => {
+  const logout = useCallback((): void => {
     localStorage.removeItem("access_token");
     setIsSignedIn(false);
-  };
+  }, []);
 
-  const value: AuthContextValue = {
-    isLoaded,
-    isSignedIn,
-    getToken,
-    login,
-    signup,
-    logout,
-  };
+  const value = useMemo<AuthContextValue>(
+    () => ({ isLoaded, isSignedIn, getToken, login, signup, logout }),
+    [isLoaded, isSignedIn, getToken, login, signup, logout],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

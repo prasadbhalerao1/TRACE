@@ -1,5 +1,5 @@
 // Client-side helpers only — per doc 00 §2.1, Next.js never runs business logic or
-// guards routes itself; components call FastAPI directly with the Clerk token they
+// guards routes itself; components call FastAPI directly with the bearer token they
 // already have client-side. No Server Actions, no app/api/* proxying.
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -34,25 +34,11 @@ export async function fetchMe(token: string): Promise<MeResponse> {
   return res.json();
 }
 
-export async function completeOnboarding(
-  token: string,
-  input: { role: Role; full_name?: string; username?: string },
-): Promise<UserProfile> {
-  const res = await fetch(`${API_URL}/users/onboarding`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
-    throw new Error(`POST /users/onboarding failed: ${detail}`);
-  }
-  return res.json();
-}
+// `completeOnboarding` used to live here, posting to POST /users/onboarding. That
+// endpoint has never existed on the API — only its `OnboardingRequest` schema does
+// (packages/shared_schemas/users.py) — so every call 404'd. The role is chosen at
+// signup and the profile fields are written by PATCH /candidates/me, which the
+// /onboarding wizard uses instead.
 
 // --- Candidate Intelligence (Module 1 core loop) ---
 
@@ -321,18 +307,19 @@ export async function fetchMyBadges(token: string): Promise<BadgeResponse[]> {
   return res.json();
 }
 
-export async function grantConsent(token: string, consentType: string): Promise<void> {
-  const res = await fetch(`${API_URL}/candidates/me/consents/${consentType}`, {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(`POST /candidates/me/consents/${consentType} failed: ${res.status}`);
-}
+/** `returnTo` selects where the OAuth callback drops the user back into the app. The
+ * API maps it through an allowlist (`_OAUTH_RETURN_PATHS`), so it's a key, not a URL —
+ * the value survives a round trip through github.com and can't be an open redirect. */
+export type GithubOAuthReturnTo = "profile_edit" | "onboarding";
 
-export async function fetchGithubOAuthUrl(token: string): Promise<string> {
-  const res = await fetch(`${API_URL}/candidates/github/oauth-url`, {
-    headers: authHeaders(token),
-  });
+export async function fetchGithubOAuthUrl(
+  token: string,
+  returnTo: GithubOAuthReturnTo = "profile_edit",
+): Promise<string> {
+  const res = await fetch(
+    `${API_URL}/candidates/github/oauth-url?return_to=${encodeURIComponent(returnTo)}`,
+    { headers: authHeaders(token) },
+  );
   if (!res.ok) throw new Error(`GET /candidates/github/oauth-url failed: ${res.status}`);
   const data = await res.json();
   return data.authorize_url;
@@ -1711,7 +1698,7 @@ export function fetchTopPerformersFeed(token: string): Promise<{ entries: TopPer
 }
 
 // Public reads (doc 05 §8's leaderboard/team pages) — these three router endpoints have
-// no `Depends(require_role(...))` at all, so no Clerk token is needed or sent.
+// no `Depends(require_role(...))` at all, so no bearer token is needed or sent.
 async function publicHackathonJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
   if (!res.ok) {

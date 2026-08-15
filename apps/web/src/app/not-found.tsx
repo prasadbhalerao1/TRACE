@@ -16,7 +16,7 @@ export default function NotFoundPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-2">
-          <Button render={<Link href="/dashboard" />} className="w-full">
+          <Button render={<Link href="/home" />} className="w-full">
             Back to Dashboard
           </Button>
         </CardContent>

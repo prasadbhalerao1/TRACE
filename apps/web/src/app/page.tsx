@@ -25,7 +25,7 @@ export default function Home() {
               Get Started / Sign In
             </Button>
           </Link>
-          <Link href="/dashboard">
+          <Link href="/home">
             <Button variant="outline" size="lg" className="px-8 cursor-pointer">
               Role Dashboard
             </Button>
