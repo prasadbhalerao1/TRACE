@@ -165,7 +165,12 @@ only shows `Up`.
 uv run alembic upgrade head
 ```
 
-Applies all migrations. Safe to re-run — it no-ops when already current.
+Applies the schema. Safe to re-run — it no-ops when already current.
+
+> The 33-revision chain was squashed to a **single baseline** on 2026-08-16. Alembic is
+> still in use; there is just one revision to replay instead of thirty-three. Verified by
+> building a fresh database from the baseline and diffing `pg_dump --schema-only` against
+> the live schema — identical.
 
 Verify:
 
@@ -182,10 +187,42 @@ uv run python scripts\seed_db.py
 uv run python scripts\seed_candidates_hardcoded.py
 ```
 
-> **The seed scripts are not idempotent.** Running them against an already-seeded
+> **These two seed scripts are not idempotent.** Running them against an already-seeded
 > database raises `UniqueViolationError` on a duplicate key. That is harmless — it means
 > the data is already there — but it is not a clean re-run. To start over, see
 > [Reset the database](#reset-the-database).
+
+### Populate the scoring population and vector DB
+
+```powershell
+uv run python scripts\seed_realistic_population.py
+```
+
+Generates 60 correlated, archetype-based candidates and writes real embeddings to
+Qdrant. Unlike the two scripts above this one **is** idempotent — it skips candidates
+whose email already exists, and vector point ids are deterministic — so re-running is
+safe.
+
+Two features are dark without it:
+
+| Without it | Why |
+| :--- | :--- |
+| Every sub-score is a fixed constant | `percentile_normalize` needs 30+ scored candidates before it ranks anything; below that it returns a flat fallback |
+| Job matching / Copilot search return "no evidence" | The Qdrant collections are empty, so project relevance is `None` for everyone |
+
+The data is deliberately correlated rather than random: candidates are drawn from six
+real stacks (backend, frontend, ML, infra, mobile, data), and seniority moves scores,
+repo count, stars and commit volume together. Uniformly random data would make every
+percentile ~50 and make semantic search look broken while working correctly.
+
+| Flag | Effect |
+| :--- | :--- |
+| `-n 100` | Generate a different number of candidates |
+| `--seed 42` | Change the RNG seed (default `20260816`, so runs are reproducible) |
+| `--no-vectors` | Skip Qdrant — Postgres rows only |
+
+Generated accounts use `<name>.<nnn>@synthetic.trace.dev` with the same
+`password123`, so they are easy to tell apart from the demo accounts above.
 
 ### Demo accounts
 
@@ -331,7 +368,11 @@ docker compose -f infra\docker-compose.yml up -d
 uv run alembic upgrade head
 uv run python scripts\seed_db.py
 uv run python scripts\seed_candidates_hardcoded.py
+uv run python scripts\seed_realistic_population.py
 ```
+
+`docker compose down -v` drops the Qdrant volume too, so the vector collections come
+back empty — `seed_realistic_population.py` repopulates them.
 
 ---
 
@@ -350,9 +391,13 @@ uv run python scripts\seed_candidates_hardcoded.py
 
 ### Known gaps
 
-- **`/onboarding` does not exist yet.** `GET /me` returns `onboarding_required` when no
-  profile resolves, and the route-group layouts redirect there — currently a dead end.
-  Not reachable with the seeded demo accounts, which are already onboarded.
+- **The interview lobby's permission branches are untested in a browser.** Grant both,
+  deny camera only, deny both, and no-devices are handled in code but have not been
+  exercised. `playwright.config.ts` already passes `--use-fake-device-for-media-capture`,
+  so testing this needs no webcam.
+- **The live LLM loop is only partly verified.** Question generation was observed working
+  end-to-end once; a full interview run (turn evaluation → follow-up → report) has not
+  been exercised against a real model.
 
 ---
 

@@ -801,7 +801,7 @@ Note the threshold asymmetry: gap detection uses $0.72$ while match scoring uses
 
 ## 6.1 Entity-Relationship Overview
 
-Thirty-three tables across seven functional domains, built up over 32 Alembic revisions in a linear chain from `14fb3de7e078` to `u6v7w8x9y0z1`.
+Forty-three tables across seven functional domains, created by a single Alembic baseline (`e8c387ea8123`). It was built up over 33 incremental revisions during development and squashed once the schema settled.
 
 ```
 organizations 1 --> N users
@@ -844,7 +844,9 @@ Three conventions run throughout. Primary keys are UUIDv4 generated application-
 
 The migrations are written in Alembic's Python DSL. What follows is the equivalent executable DDL, in dependency order.
 
-### 6.2.1 Core Shared Tables (revision `14fb3de7e078`)
+> The 33-revision chain that built this schema incrementally was squashed into a single baseline (`e8c387ea8123`) on 2026-08-16, once the models and the database were confirmed to match exactly. The groupings below are kept because they explain the schema by domain; they no longer correspond to separate migration files. The pre-squash chain is archived under `.archive/pre-squash-migrations/`.
+
+### 6.2.1 Core Shared Tables
 
 ```sql
 CREATE TABLE organizations (
@@ -909,7 +911,7 @@ CREATE TABLE events (
 );
 ```
 
-### 6.2.2 Candidate Intelligence (revisions `bfa4df0973c6`, `i4j5k6l7m8n9`, `t5u6v7w8x9y0`)
+### 6.2.2 Candidate Intelligence
 
 ```sql
 CREATE TABLE candidate_profiles (
@@ -1050,7 +1052,7 @@ CREATE INDEX idx_career_recs_candidate_time
     ON career_recommendations (candidate_id, generated_at);
 ```
 
-### 6.2.3 Recruitment (revision `ac395e67db4e`)
+### 6.2.3 Recruitment
 
 ```sql
 CREATE TABLE jobs (
@@ -1104,7 +1106,7 @@ CREATE INDEX idx_match_scores_job_sort ON match_scores (job_id, match_percentage
 
 The `uq_match_scores_job_candidate` constraint carries operational weight beyond integrity — it lets the matching pipeline use `INSERT ... ON CONFLICT DO UPDATE`, so a recompute overwrites in place instead of accumulating duplicate rows on every rerun.
 
-### 6.2.4 Trust & Fraud (revisions `54e04d937561`, `l7m8n9o0p1q2`)
+### 6.2.4 Trust & Fraud
 
 ```sql
 CREATE TABLE fraud_flags (
