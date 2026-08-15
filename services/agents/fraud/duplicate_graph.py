@@ -16,9 +16,7 @@ network calls), so there's no real latency reason to force the parallel branch h
 Invoked from `POST /verification/profiles/{id}/duplicate-check`. Router pre-fetches the
 candidate's own profile text + photo hash, plus a corpus of other candidates' profile
 text/photo hashes (Module 01's `candidate_profiles`/`files` tables, read-only) into
-`state["context"]`. Consent (`perceptual_photo_hash`, `resume_parsing`) is checked by the
-router BEFORE invoking this graph at all (doc 06 §8) — if either consent is missing, the
-router omits that signal's inputs from `context` entirely rather than half-running it.
+`state["context"]`.
 """
 
 from langgraph.graph import END, START, StateGraph

@@ -13,8 +13,7 @@ class CandidateProfile(Base):
     """Module 1 (Candidate Intelligence) — canonical merged profile.
 
     Schema follows doc/multi-agent-architecture/01 §7 (adds `score_version`-adjacent
-    provenance via merged_conflicts) over doc/SRS/01 §5 — same pick as Phase 0's
-    files/consents resolution in .agents/decisions.md.
+    provenance via merged_conflicts) over doc/SRS/01 §5.
     """
 
     __tablename__ = "candidate_profiles"

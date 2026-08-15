@@ -6,9 +6,8 @@ special-category-data territory (doc 06 §8, binding constraint). Plain center-c
 no face-detection/alignment step (doc 08 §9's explicit correction from an earlier draft
 that added one).
 
-Router MUST call `_require_consent(db, user_id, "perceptual_photo_hash")` before this
-tool ever runs (doc 06 §8) — this module has no DB access and cannot enforce that itself,
-same "nodes/tools stay DB-free, router enforces gates" convention as everywhere else.
+This module has no DB access and relies on the router for any gating, per the
+"nodes/tools stay DB-free, router enforces gates" convention used throughout.
 """
 
 import io

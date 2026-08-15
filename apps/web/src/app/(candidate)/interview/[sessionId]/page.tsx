@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { endInterview, getInterviewSession, grantConsent, interviewTurn, startInterview, type InterviewReportResponse } from "@/lib/api";
+import { endInterview, getInterviewSession, interviewTurn, startInterview, type InterviewReportResponse } from "@/lib/api";
 
 interface ChatMessage {
   role: "ai" | "user";
@@ -29,7 +29,8 @@ export default function CandidateInterviewPage() {
   const { getToken } = useAuth();
 
   const initialSessionId = params.sessionId !== "new" ? params.sessionId : null;
-  const [consentGiven, setConsentGiven] = useState(false);
+  // A session exists and the chat UI should render.
+  const [sessionStarted, setSessionStarted] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
   const [hydrating, setHydrating] = useState(initialSessionId !== null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -47,22 +48,30 @@ export default function CandidateInterviewPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  async function handleConsentAndStart() {
+  const handleStart = useCallback(async () => {
     setError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      await grantConsent(token, "ai_interview");
       const result = await startInterview(token);
       setSessionId(result.session_id);
       setStatus(result.status);
       if (result.question) setMessages([{ role: "ai", text: result.question }]);
-      setConsentGiven(true);
+      setSessionStarted(true);
       router.replace(`/interview/${result.session_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start interview");
     }
-  }
+  }, [getToken, router]);
+
+  // /interview/new has nothing to confirm before starting, so the session is created on
+  // arrival — the camera/mic check happens earlier, in the lobby on /interviews.
+  const startRequested = useRef(false);
+  useEffect(() => {
+    if (initialSessionId || startRequested.current) return;
+    startRequested.current = true;
+    void handleStart();
+  }, [initialSessionId, handleStart]);
 
   useEffect(() => {
     // Landing directly on /interview/{sessionId} (fresh navigation, reload, or a shared
@@ -81,7 +90,7 @@ export default function CandidateInterviewPage() {
           session.transcript.map((t) => ({ role: t.role === "agent" ? "ai" : "user", text: t.text }))
         );
         setStatus(session.status);
-        setConsentGiven(true);
+        setSessionStarted(true);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load interview session");
       } finally {
@@ -222,20 +231,23 @@ export default function CandidateInterviewPage() {
     return <div className="max-w-lg mx-auto p-8 text-sm text-slate">Loading interview…</div>;
   }
 
-  if (!consentGiven && !sessionId) {
+  // Landing on /interview/new with no session yet: the effect above creates one on
+  // mount, so this is purely the window before that request resolves.
+  if (!sessionStarted && !sessionId) {
     return (
       <div className="max-w-lg mx-auto p-8">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Consent to AI Interview</CardTitle>
-            <CardDescription>
-              This session is text-transcript based — no audio is recorded or stored, only the
-              transcript. Speech input (if used) is converted to text entirely in your browser.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {error && <p className="text-sm text-rose-flagged">{error}</p>}
-            <Button onClick={handleConsentAndStart} className="w-full">I Consent — Start Interview</Button>
+          <CardContent className="space-y-4 pt-6">
+            {error ? (
+              <>
+                <p className="text-sm text-rose-flagged">{error}</p>
+                <Button onClick={handleStart} className="w-full">
+                  Try again
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-slate">Starting your interview…</p>
+            )}
           </CardContent>
         </Card>
       </div>

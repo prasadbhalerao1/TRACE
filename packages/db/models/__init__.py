@@ -20,7 +20,6 @@ from packages.db.models.candidate import (
     GithubSnapshot,
     TalentScore,
 )
-from packages.db.models.consent import Consent
 from packages.db.models.event import Event
 from packages.db.models.file import File
 from packages.db.models.fraud import (
@@ -60,7 +59,6 @@ __all__ = [
     "Organization",
     "User",
     "File",
-    "Consent",
     "Event",
     "AgentRun",
     "AuditLog",

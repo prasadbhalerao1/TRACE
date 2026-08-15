@@ -13,7 +13,7 @@ async def run(state: FraudCheckState) -> dict:
             "signal_type": "photo_hash",
             "score": None,
             "confidence_label": "low",
-            "evidence": "No profile photo available to hash (candidate has not uploaded one, or consent was not granted).",
+            "evidence": "No profile photo available to hash (candidate has not uploaded one).",
         }
         return {"signals": [signal], "context": {**ctx, "photo_hash_results": []}}
 

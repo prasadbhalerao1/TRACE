@@ -72,9 +72,7 @@ class Submission(Base):
 
 
 class InterviewSession(Base):
-    """`consent_id` is the ONLY consent reference (architecture doc §8's finalized schema
-    — no duplicate `consent_given`/`consent_timestamp` columns, see
-    .agents/DOCUMENTATION_MAP.md's Known Differences)."""
+    """A single AI interview run and its turn-by-turn working state."""
 
     __tablename__ = "interview_sessions"
 
@@ -85,9 +83,6 @@ class InterviewSession(Base):
     job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.id"))
     interview_definition_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("interview_definitions.id")
-    )
-    consent_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("consents.consent_id"), nullable=False
     )
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="in_progress")
     # Server-side working state for the turn-based graph (topic_plan, current_topic_idx,

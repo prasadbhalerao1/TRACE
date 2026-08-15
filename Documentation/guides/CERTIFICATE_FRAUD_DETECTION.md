@@ -804,7 +804,7 @@ fraud_metrics = {
 ## References
 
 - **doc 06 §4:** Certificate verification architecture
-- **doc 06 §8:** Consent, GDPR/BIPA constraints (no facial recognition)
+- **doc 06 §8:** GDPR/BIPA constraints (no facial recognition)
 - **services/agents/fraud/cert_graph.py:** LangGraph pipeline
 - **services/agents/fraud/tools/issuer_lookup.py:** Registry lookup
 - **services/agents/fraud/tools/auto_verify.py:** URL-based verification

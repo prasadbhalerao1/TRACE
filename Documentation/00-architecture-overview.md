@@ -138,7 +138,6 @@ other 5 are invoked directly by their own FastAPI routers. Full explanation in
 | `organization.py` | `Organization` |
 | `user.py` | `User` |
 | `file.py` | `File` |
-| `consent.py` | `Consent` |
 | `event.py` | `Event` |
 | `agent_run.py` | `AgentRun` |
 | `audit_log.py` | `AuditLog` |

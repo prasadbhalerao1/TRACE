@@ -54,7 +54,6 @@ from services.api.core.config import get_settings
 from services.api.core.db import get_db, without_db_connection
 from services.api.core.rbac import require_role
 from services.api.core.tracing import start_agent_trace
-from services.api.modules.candidates.router import _require_consent
 
 router = APIRouter(tags=["Trust & Fraud Prevention"])
 
@@ -375,62 +374,47 @@ async def check_profile_duplicate(
     profile = await _candidate_profile_or_404(db, candidate_id)
     profile_text = _profile_text(profile)
 
-    has_resume_consent = True
-    try:
-        await _require_consent(db, profile.user_id, "resume_parsing")
-    except HTTPException:
-        has_resume_consent = False
-
-    has_photo_consent = True
-    try:
-        await _require_consent(db, profile.user_id, "perceptual_photo_hash")
-    except HTTPException:
-        has_photo_consent = False
-
     other_profiles_result = await db.execute(select(CandidateProfile).where(CandidateProfile.id != candidate_id))
     other_profiles = list(other_profiles_result.scalars().all())
 
-    text_corpus: list[tuple[str, str]] = []
-    if has_resume_consent:
-        text_corpus = [(str(p.id), _profile_text(p)) for p in other_profiles]
+    text_corpus: list[tuple[str, str]] = [(str(p.id), _profile_text(p)) for p in other_profiles]
 
     target_photo_hash = None
     photo_corpus: list[tuple[str, str]] = []
-    if has_photo_consent:
-        # All photo rows (subject + entire corpus) in ONE query — this used to be a
-        # separate lookup per other candidate, and each of those preceded its own
-        # sequential image download.
-        photo_by_user = await _latest_photo_files(
-            db, [profile.user_id] + [p.user_id for p in other_profiles]
-        )
-        subject_photo = photo_by_user.get(profile.user_id)
+    # All photo rows (subject + entire corpus) in ONE query — this used to be a
+    # separate lookup per other candidate, and each of those preceded its own
+    # sequential image download.
+    photo_by_user = await _latest_photo_files(
+        db, [profile.user_id] + [p.user_id for p in other_profiles]
+    )
+    subject_photo = photo_by_user.get(profile.user_id)
 
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            if subject_photo and subject_photo.public_url:
-                target_photo_hash = await _fetch_and_hash_photo(client, subject_photo.public_url)
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        if subject_photo and subject_photo.public_url:
+            target_photo_hash = await _fetch_and_hash_photo(client, subject_photo.public_url)
 
-            if target_photo_hash:
-                corpus_targets = [
-                    (str(other.id), photo_by_user[other.user_id].public_url)
-                    for other in other_profiles
-                    if other.user_id in photo_by_user and photo_by_user[other.user_id].public_url
-                ]
-                # Fetch the corpus concurrently rather than one blocking download at a
-                # time — this loop was the dominant cost of the whole check and scaled
-                # linearly with the number of candidates on the platform. Bounded so a
-                # large corpus can't open hundreds of sockets at once.
-                semaphore = asyncio.Semaphore(_PHOTO_FETCH_CONCURRENCY)
+        if target_photo_hash:
+            corpus_targets = [
+                (str(other.id), photo_by_user[other.user_id].public_url)
+                for other in other_profiles
+                if other.user_id in photo_by_user and photo_by_user[other.user_id].public_url
+            ]
+            # Fetch the corpus concurrently rather than one blocking download at a
+            # time — this loop was the dominant cost of the whole check and scaled
+            # linearly with the number of candidates on the platform. Bounded so a
+            # large corpus can't open hundreds of sockets at once.
+            semaphore = asyncio.Semaphore(_PHOTO_FETCH_CONCURRENCY)
 
-                async def _bounded(url: str) -> str | None:
-                    async with semaphore:
-                        return await _fetch_and_hash_photo(client, url)
+            async def _bounded(url: str) -> str | None:
+                async with semaphore:
+                    return await _fetch_and_hash_photo(client, url)
 
-                hashes = await asyncio.gather(*(_bounded(url) for _, url in corpus_targets))
-                photo_corpus = [
-                    (candidate_id, photo_hash)
-                    for (candidate_id, _), photo_hash in zip(corpus_targets, hashes)
-                    if photo_hash
-                ]
+            hashes = await asyncio.gather(*(_bounded(url) for _, url in corpus_targets))
+            photo_corpus = [
+                (candidate_id, photo_hash)
+                for (candidate_id, _), photo_hash in zip(corpus_targets, hashes)
+                if photo_hash
+            ]
 
     dup_state = {
         "subject_type": "profile",

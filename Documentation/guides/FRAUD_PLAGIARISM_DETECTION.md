@@ -326,7 +326,6 @@ END
 Router pre-fetches:
 - candidate's text + photo hash
 - corpus of other candidates' text + photo hashes
-- consent status (perceptual_photo_hash required)
 ```
 
 ### **Project Plagiarism Detection Pipeline**
@@ -360,11 +359,6 @@ START
   ↓
 END
 ```
-
-**Consent Gates:** Router checks `_require_consent()` before invoking graph:
-- `perceptual_photo_hash` required for photo hashing
-- `resume_parsing` required for text fingerprinting
-- If consent missing → omit that signal's inputs from context entirely
 
 ---
 
@@ -452,18 +446,16 @@ VerificationRecord(
 
 ---
 
-## Security & Consent
+## Security
 
-### **Photo Hashing Consent**
+### **Photo Hashing**
 
-`perceptual_photo_hash` consent required (doc 06 §8):
-- Not facial recognition (no GDPR special-category data)
+Perceptual hashing, not facial recognition (doc 06 §8):
+- No GDPR special-category data
 - Only detects image reuse, not identity
-- Still requires explicit consent (transparency)
 
-### **Resume Text Consent**
+### **Resume Text**
 
-`resume_parsing` consent required:
 - Text is personally identifiable
 - Used for near-duplicate detection
 - Stored in verification_records for audit trail
@@ -553,7 +545,7 @@ fraud_metrics = {
 
 - **doc 06 §4:** Fraud check framework & signals
 - **doc 06 §7:** Evidence requirement ("every flag cites specific evidence")
-- **doc 06 §8:** Consent & GDPR/BIPA constraints (perceptual hash, no facial recog)
+- **doc 06 §8:** GDPR/BIPA constraints (perceptual hash, no facial recog)
 - **doc 08 §3:** Code structural similarity threshold (0.75)
 - **doc 08 §9:** Photo perceptual hash algorithm & blacklist
 - **copydetect:** https://github.com/getdozer/copydetect (Dolos-style AST winnowing)

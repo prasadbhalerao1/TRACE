@@ -82,6 +82,39 @@ what they're allowed to do:
   assessments, fraud, hackathons, etc.) — there's no central route table, each endpoint
   states its own required role(s) inline.
 
+### Onboarding
+
+`GET /me` returns `onboarding_required`, and every workspace layout redirects to
+`/onboarding` when it is true. Two distinct situations set it:
+
+- **No `users` row for a valid token.** Shouldn't happen with self-hosted signup, but
+  `get_auth_context` guards it.
+- **A candidate whose profile is incomplete** (`_candidate_onboarding_incomplete` in
+  `services/api/modules/users/router.py`): missing `full_name`, `headline`, `location`,
+  or a first `education` entry carrying both `institution` and `degree`.
+
+The second check is what makes the flag meaningful. It previously returned `False`
+whenever a `users` row existed — a state signup makes unreachable — so the flag was
+effectively always false and `/onboarding` was unreachable. The check is deliberately
+read-only: `/me` is called on nearly every page load and must not create a profile row
+as a side effect.
+
+Only candidates are gated. Other roles have no profile fields to collect and are
+complete as soon as the account exists.
+
+The wizard itself (`apps/web/src/components/onboarding/OnboardingWizard.tsx`) is three
+steps — identity, background, connect — and writes through `PATCH /candidates/me` after
+each one, so a refresh or an OAuth detour never loses typed answers. College and degree
+are not columns: that endpoint folds them into the first entry of the `education` JSONB
+array as `institution`/`degree`.
+
+GitHub is required-but-skippable. A hard block would strand users whenever OAuth is
+misconfigured or rate-limited, so skipping is allowed and the gap keeps surfacing on the
+`/home` hub's profile-completeness meter until it's connected.
+
+`/onboarding` deliberately lives outside every route group. Those layouts are what
+redirect *to* it, so a route inside one would redirect to itself.
+
 ### Frontend
 
 `apps/web/src/components/AuthProvider.tsx` calls `${API_URL}/auth/login` and
@@ -161,10 +194,10 @@ it signals the frontend to route the user into an onboarding flow rather than ba
 - Rate limiting is per-process, in-memory — doesn't survive a restart and doesn't coordinate
   across multiple API processes if the deployment ever scaled horizontally.
 - No refresh-token rotation; a single long-lived (7-day) access token is the only credential.
-- A handful of stray UI copy strings / code comments elsewhere in the repo still reference
-  "Clerk" as leftover naming from an earlier iteration of the project. They are cosmetic and
-  not wired to any functional code path — there is no Clerk SDK, no Clerk API call, and no
-  Clerk dependency in `package.json` or `requirements`/`pyproject` in the live app.
+- Auth is entirely self-hosted: bcrypt hashing plus HS256 JWTs issued by this API. There
+  is no external identity provider, no SDK, and no third-party call in the sign-in path.
+  (Stray "Clerk" naming from an earlier iteration was removed on 2026-08-16, along with
+  the e2e tests that had been written against a hosted Clerk sign-in widget.)
 
 ## Where this lives
 
@@ -178,5 +211,8 @@ it signals the frontend to route the user into an onboarding flow rather than ba
 | Rate limiting middleware | `services/api/core/rate_limit.py` |
 | Frontend auth provider (login/signup, token storage) | `apps/web/src/components/AuthProvider.tsx` |
 | Frontend shared current-user cache | `apps/web/src/components/CurrentUserProvider.tsx` |
+| Onboarding completeness check | `services/api/modules/users/router.py::_candidate_onboarding_incomplete` |
+| Onboarding wizard | `apps/web/src/components/onboarding/OnboardingWizard.tsx`, `apps/web/src/app/onboarding/page.tsx` |
+| Shared sidebar + role gate | `apps/web/src/components/common/WorkspaceShell.tsx` |
 | Client-side route guards (UX only, per role) | `apps/web/src/app/(admin)/layout.tsx`, `(recruiter)/layout.tsx`, `(candidate)/layout.tsx`, `(organizer)/layout.tsx`, `(judge)/layout.tsx` |
 | DB model | `packages/db/models/user.py::User` |

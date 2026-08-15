@@ -18,7 +18,7 @@
 10. Candidate applies to jobs, or gets discovered by a recruiter through search.
 11. If a recruiter assigns an assessment, candidate takes it (code editor + MCQ, all in-browser).
 12. If a recruiter schedules an AI interview, candidate does it by voice, in the browser, after
-    confirming consent.
+    a camera/mic check in the interview lobby.
 13. Candidate can view any flags raised against their profile and submit a dispute with supporting
     evidence.
 14. Candidate joins an in-platform hackathon, submits a project (repo + deck) directly.

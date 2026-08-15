@@ -18,7 +18,6 @@ from packages.db.models import (
     AgentRun,
     Assessment,
     CandidateProfile,
-    Consent,
     ContributionReport,
     InterviewDefinition,
     InterviewReport,
@@ -62,7 +61,7 @@ from services.api.core.db import async_session, get_db, without_db_connection
 from services.api.core.queue import TASK_GRADE_SUBMISSION, enqueue
 from services.api.core.rbac import require_role
 from services.api.core.tracing import start_agent_trace
-from services.api.modules.candidates.router import _get_or_create_profile, _require_consent
+from services.api.modules.candidates.router import _get_or_create_profile
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +161,6 @@ async def submit_assessment(
     re-render once `grading_status` is no longer "processing" — same pattern as
     presentation upload and job matching.
     """
-    await _require_consent(db, user.id, "ai_assessment")
     profile = await _get_or_create_profile(db, user)
 
     result = await db.execute(select(Assessment).where(Assessment.id == assessment_id))
@@ -526,15 +524,6 @@ async def start_interview(
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(
-        select(Consent).where(
-            Consent.candidate_id == user.id, Consent.consent_type == "ai_interview", Consent.status == "granted"
-        ).order_by(Consent.granted_at.desc())
-    )
-    consent = result.scalars().first()
-    if consent is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="consent_required:ai_interview")
-
     profile = await _get_or_create_profile(db, user)
 
     # Derive topic_plan and job_context from definition if provided
@@ -557,7 +546,6 @@ async def start_interview(
         candidate_id=profile.id,
         job_id=body.job_id,
         interview_definition_id=body.interview_definition_id,
-        consent_id=consent.consent_id,
         state={
             "topic_plan": topic_plan,
             "current_topic_idx": 0,

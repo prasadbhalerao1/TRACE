@@ -9,7 +9,7 @@ This guide provides step-by-step instructions on how to acquire and configure ea
 2. [Database Connection (PostgreSQL / Neon)](#2-database-connection-postgresql--neon)
 3. [Redis Cache & Queue](#3-redis-cache--queue)
 4. [Qdrant Vector Database](#4-qdrant-vector-database)
-5. [Clerk Authentication](#5-clerk-authentication)
+5. [Authentication (self-hosted JWT)](#5-authentication-self-hosted-jwt)
 6. [GitHub OAuth Application](#6-github-oauth-application)
 7. [Cloudinary File Storage](#7-cloudinary-file-storage)
 8. [Langfuse Observability](#8-langfuse-observability)
@@ -83,26 +83,33 @@ No external secrets required.
 
 ---
 
-## 5. Clerk Authentication
+## 5. Authentication (self-hosted JWT)
+
+There is **no external identity provider**. Auth is bcrypt password hashing plus HS256
+JWTs issued by this API, so there is no dashboard to visit and no third-party key to
+obtain — you generate the signing secret yourself.
 
 * **Variables**:
-  * `AUTH_PROVIDER=clerk`
-  * `AUTH_PUBLISHABLE_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-  * `AUTH_SECRET_KEY` / `CLERK_SECRET_KEY`
-  * `CLERK_JWKS_URL`
-  * `CLERK_ISSUER`
-* **Purpose**: User management, authentication flows, and JWT session validation.
+  * `JWT_SECRET_KEY` — **required**, no default. The API will not start without it.
+  * `JWT_ALGORITHM` — defaults to `HS256`.
+  * `JWT_EXPIRY_SECONDS` — defaults to `604800` (7 days).
+
+These are the only three settings `services/api/core/config.py` reads for auth.
 
 ### How to get it:
-1. Go to the [Clerk Dashboard](https://dashboard.clerk.com/) and sign in.
-2. Click **Add application** (or choose your existing project).
-3. Select authentication methods (Email, Google, GitHub, etc.) and create the application.
-4. In the left navigation, click **API Keys**:
-   * Copy **Publishable key** (`pk_test_...`) $\rightarrow$ Set to `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (and `AUTH_PUBLISHABLE_KEY`).
-   * Copy **Secret key** (`sk_test_...`) $\rightarrow$ Set to `CLERK_SECRET_KEY` (and `AUTH_SECRET_KEY`).
-5. Find your **Frontend API URL** (e.g. `https://your-app-domain.clerk.accounts.dev`):
-   * `CLERK_ISSUER`: `https://<your-app-domain>.clerk.accounts.dev`
-   * `CLERK_JWKS_URL`: `https://<your-app-domain>.clerk.accounts.dev/.well-known/jwks.json`
+
+Generate a strong random secret:
+
+```powershell
+uv run python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Put the output in `JWT_SECRET_KEY`. Treat it like a password — anyone holding it can
+mint valid tokens for any user. Use a different value in each environment, and rotate it
+if it leaks (which invalidates all existing sessions, forcing users to sign in again).
+
+> Tokens are stateless: there is no server-side session to revoke. Shortening
+> `JWT_EXPIRY_SECONDS` is the only way to bound the window on a leaked token.
 
 ---
 

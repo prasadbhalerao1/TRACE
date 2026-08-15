@@ -33,10 +33,9 @@ logger = logging.getLogger(__name__)
 _PLACEHOLDER_VALUES = {"", "changeme", "placeholder", "your-key-here", "your-public-key", "your-secret-key"}
 
 # Candidate resumes, interview transcripts, and cover letters routinely contain the
-# candidate's own contact details in free text (e.g. "reach me at jane@x.com"). This is
-# separate from the `consents` table (which governs whether we may *process* that data at
-# all) — this is a floor on what leaves the process boundary to a third party (Langfuse
-# Cloud) for observability, regardless of consent status.
+# candidate's own contact details in free text (e.g. "reach me at jane@x.com"). This is a
+# floor on what leaves the process boundary to a third party (Langfuse Cloud) for
+# observability.
 _EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 _PHONE_PATTERN = re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
 

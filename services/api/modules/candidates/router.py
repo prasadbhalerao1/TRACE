@@ -26,7 +26,6 @@ from packages.db.models import (
     CandidateProfile,
     CareerRecommendation,
     Certification,
-    Consent,
     CourseCatalogEntry,
     File,
     GeneratedDocument,
@@ -95,7 +94,11 @@ from services.api.core.tracing import start_agent_trace
 
 _CAREER_RECOMMENDATION_TTL = timedelta(hours=24)
 _GITHUB_OAUTH_STATE_TTL_SECONDS = 600
-_oauth_state_cache: dict[str, tuple[str, float]] = {}
+# state -> (user_id, expires_at, return_path_key). The return key rides along in this
+# same entry rather than a parallel dict so it is discarded by the same `.pop()` that
+# consumes the state — a second map would leak an entry for every OAuth flow a user
+# abandoned before GitHub redirected back.
+_oauth_state_cache: dict[str, tuple[str, float, str]] = {}
 # Third-party stats (GitHub calendar, LeetCode) are cached, not fetched live per view —
 # this bounds how often a candidate can force a re-fetch of LeetCode's unofficial API.
 _STATS_REFRESH_COOLDOWN = timedelta(minutes=15)
@@ -238,20 +241,6 @@ async def _get_or_create_profile(db: AsyncSession, user: User) -> CandidateProfi
         await db.commit()
         await db.refresh(profile)
     return profile
-
-
-async def _require_consent(db: AsyncSession, user_id, consent_type: str) -> None:
-    result = await db.execute(
-        select(Consent).where(
-            Consent.candidate_id == user_id,
-            Consent.consent_type == consent_type,
-            Consent.status == "granted",
-        )
-    )
-    if result.scalars().first() is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"consent_required:{consent_type}"
-        )
 
 
 # Maps a graph node name to the phrase shown to the candidate while it runs. Keys must
@@ -560,26 +549,6 @@ async def get_my_profile(
     return await _get_or_create_profile(db, user)
 
 
-@router.post("/me/consents/{consent_type}", status_code=status.HTTP_201_CREATED)
-async def grant_consent(
-    consent_type: str,
-    user: User = Depends(require_role("candidate")),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    if consent_type not in (
-        "resume_parsing",
-        "linkedin_export",
-        "github_ingestion",
-        "ai_assessment",
-        "ai_interview",
-        "perceptual_photo_hash",
-    ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_consent_type")
-    db.add(Consent(candidate_id=user.id, consent_type=consent_type, status="granted"))
-    await db.commit()
-    return {"granted": True, "consent_type": consent_type}
-
-
 @router.post("/me/ingest/resume", response_model=CandidateProfileResponse)
 async def ingest_resume(
     file: UploadFile,
@@ -587,7 +556,6 @@ async def ingest_resume(
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> CandidateProfile:
-    await _require_consent(db, user.id, "resume_parsing")
     profile = await _get_or_create_profile(db, user)
     file_bytes = await file.read()
     profile.ingestion_status = "processing"
@@ -644,15 +612,33 @@ async def get_ingestion_status(
     }
 
 
+# Where the OAuth callback may send the browser back to. GitHub returns the user to a
+# fixed registered redirect URI, so the *final* in-app destination has to be carried
+# through `state`. An allowlist rather than an arbitrary URL: `state` survives a full
+# round trip through github.com, so echoing an attacker-supplied value back into a
+# redirect would be an open-redirect primitive.
+_OAUTH_RETURN_PATHS = {"profile_edit": "/profile/edit", "onboarding": "/onboarding"}
+_DEFAULT_OAUTH_RETURN = "profile_edit"
+
+
+def _oauth_return_path(key: str | None) -> str:
+    return _OAUTH_RETURN_PATHS.get(key or "", _OAUTH_RETURN_PATHS[_DEFAULT_OAUTH_RETURN])
+
+
 @router.get("/github/oauth-url")
 async def github_oauth_url(
+    return_to: str = _DEFAULT_OAUTH_RETURN,
     user: User = Depends(require_role("candidate")),
-    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await _require_consent(db, user.id, "github_ingestion")
     settings = get_settings()
     state = secrets.token_urlsafe(24)
-    _oauth_state_cache[state] = (str(user.id), time.monotonic() + _GITHUB_OAUTH_STATE_TTL_SECONDS)
+    # Normalized at issue time, so the callback only ever reads a key it put there.
+    return_key = return_to if return_to in _OAUTH_RETURN_PATHS else _DEFAULT_OAUTH_RETURN
+    _oauth_state_cache[state] = (
+        str(user.id),
+        time.monotonic() + _GITHUB_OAUTH_STATE_TTL_SECONDS,
+        return_key,
+    )
     authorize_url = (
         "https://github.com/login/oauth/authorize"
         f"?client_id={settings.github_client_id}"
@@ -673,8 +659,13 @@ async def github_oauth_callback(
     settings = get_settings()
     cached = _oauth_state_cache.pop(state, None)
     if cached is None or cached[1] < time.monotonic():
-        return RedirectResponse(f"{settings.frontend_url}/profile/edit?github=invalid_state")
+        # No usable state means no recorded destination either, so this one falls back
+        # to the default rather than reading from the (absent) entry.
+        return RedirectResponse(
+            f"{settings.frontend_url}{_oauth_return_path(None)}?github=invalid_state"
+        )
     user_id = cached[0]
+    return_path = _oauth_return_path(cached[2])
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         token_response = await client.post(
@@ -690,7 +681,9 @@ async def github_oauth_callback(
     token_data = token_response.json()
     access_token = token_data.get("access_token")
     if not access_token:
-        return RedirectResponse(f"{settings.frontend_url}/profile/edit?github=token_exchange_failed")
+        return RedirectResponse(
+            f"{settings.frontend_url}{return_path}?github=token_exchange_failed"
+        )
 
     # Github(...).get_user() is a blocking PyGithub HTTP call — off-thread so it doesn't
     # stall the event loop for every other in-flight request (same as github_analysis.py).
@@ -716,7 +709,7 @@ async def github_oauth_callback(
         job_id=f"ingest:{profile.id}",
     )
 
-    return RedirectResponse(f"{settings.frontend_url}/profile/edit?github=connected")
+    return RedirectResponse(f"{settings.frontend_url}{return_path}?github=connected")
 
 
 @router.post("/me/leetcode", response_model=CandidateProfileResponse)

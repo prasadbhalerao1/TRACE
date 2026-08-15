@@ -152,9 +152,7 @@ These weights are explicitly called out in the code as tunable defaults, not val
 
 ## Key design decisions and why
 
-- **Nodes are DB-free; the router does all persistence and gating.** Every detection tool/node takes plain data in `context` and returns signals/verdicts — no node ever queries or writes the database itself. This keeps detection logic pure and unit-testable in isolation, and it means consent checks (see below) and the review-queue mechanics live in exactly one place (the router) instead of being re-implemented per subgraph.
-
-- **Consent is checked before the pipeline runs, not inside it.** In `check_profile_duplicate`, the router calls `_require_consent(db, profile.user_id, "resume_parsing")` and `"perceptual_photo_hash"` *before* invoking `duplicate_graph`. If consent is missing, the corresponding corpus is omitted from `context` entirely — the graph runs with less data rather than the router trying to half-run a check and hope the tool ignores it. This means a candidate who withheld photo consent literally cannot have a photo-hash comparison happen against them, at the data layer, not just as an application-level courtesy.
+- **Nodes are DB-free; the router does all persistence and gating.** Every detection tool/node takes plain data in `context` and returns signals/verdicts — no node ever queries or writes the database itself. This keeps detection logic pure and unit-testable in isolation, and it means the review-queue mechanics live in exactly one place (the router) instead of being re-implemented per subgraph.
 
 - **Every signal is recorded, not just the ones that cross a flag threshold.** `verification_records` is a row-per-signal-per-check log, independent of whether a `FraudFlag` was created. This is the actual audit trail — an admin (or a future compliance review) can see exactly what was checked and what it found for any subject, including all the checks that came back clean. Without this, "clean" candidates would have no evidence they were checked at all.
 
