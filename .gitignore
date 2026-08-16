@@ -27,8 +27,8 @@ __pycache__/
 .env
 .env.local
 .env.*.local
-# Real credentials for the managed cloud services, kept so `.env` can be switched
-# back from the local-Docker default. Never commit.
+# Dormant credentials for a hosted deployment. Not used by the local setup — see the
+# header inside the file. Never commit.
 .env.cloud
 apps/web/.env.test
 
