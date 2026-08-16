@@ -6,7 +6,7 @@ This guide provides step-by-step instructions on how to acquire and configure ea
 
 ## Table of Contents
 1. [Anthropic API Key](#1-anthropic-api-key)
-2. [Database Connection (PostgreSQL / Neon)](#2-database-connection-postgresql--neon)
+2. [Database Connection (PostgreSQL)](#2-database-connection-postgresql)
 3. [Redis Cache & Queue](#3-redis-cache--queue)
 4. [Qdrant Vector Database](#4-qdrant-vector-database)
 5. [Authentication (self-hosted JWT)](#5-authentication-self-hosted-jwt)
@@ -31,23 +31,24 @@ This guide provides step-by-step instructions on how to acquire and configure ea
 
 ---
 
-## 2. Database Connection (PostgreSQL / Neon)
+## 2. Database Connection (PostgreSQL)
 
 * **Variables**: `DATABASE_URL`, `DATABASE_SSL_REQUIRED`
 * **Purpose**: Primary relational database storage.
 
-### Option A: Local Development (Docker - Recommended for Dev)
-No external secrets required.
+Postgres runs as a local Docker container (`trace_postgres`) defined in
+`infra/docker-compose.yml`. **No external secrets are required** — the `dev`/`dev`
+credentials are throwaway values set by the compose file itself.
+
 * `DATABASE_URL=postgresql+asyncpg://dev:dev@localhost:5432/talent_platform`
 * `DATABASE_SSL_REQUIRED=false`
 
-### Option B: Cloud Database (Neon Serverless Postgres)
-1. Sign up or log in at [Neon Console](https://console.neon.tech/).
-2. Create a new project (e.g. `talent-platform-db`).
-3. On the **Dashboard**, locate **Connection Details**.
-4. Change the dialect dropdown to **SQLAlchemy / asyncpg** (or construct it as `postgresql+asyncpg://<user>:<password>@<ep-hostname>/<dbname>`).
-5. Copy the connection string into `DATABASE_URL`.
-6. Set `DATABASE_SSL_REQUIRED=true`.
+Apply the schema with `alembic upgrade head` once the container is healthy.
+
+> If the database is ever hosted off this machine, use the same
+> `postgresql+asyncpg://<user>:<password>@<host>/<dbname>` form and set
+> `DATABASE_SSL_REQUIRED=true` — that flag also disables asyncpg's prepared-statement
+> cache, which is required against a PgBouncer-style transaction pooler.
 
 ---
 
@@ -56,13 +57,9 @@ No external secrets required.
 * **Variables**: `REDIS_URL`
 * **Purpose**: Background task queuing, caching, and rate limiting (via `slowapi`).
 
-### Option A: Local Development (Docker - Recommended for Dev)
-* `REDIS_URL=redis://localhost:6379`
+Redis runs as a local Docker container (`trace_redis`). No secrets required.
 
-### Option B: Managed Cloud (Upstash Redis Free Tier)
-1. Sign up or log in at [Upstash Console](https://console.upstash.com/).
-2. Click **Create Database**, choose Redis, select a region, and choose the Free plan.
-3. Copy the **redis://** connection URI under the **Details** tab into `REDIS_URL`.
+* `REDIS_URL=redis://localhost:6379`
 
 ---
 
@@ -71,15 +68,13 @@ No external secrets required.
 * **Variables**: `QDRANT_URL`, `QDRANT_API_KEY`
 * **Purpose**: High-performance vector database storing candidate embedding vectors for semantic searching and RAG matching.
 
-### Option A: Local Development (Docker - Recommended for Dev)
-* `QDRANT_URL=http://localhost:6333`
-* `QDRANT_API_KEY=` *(leave blank for local Docker)*
+Qdrant runs as a local Docker container (`trace_qdrant`). No secrets required.
 
-### Option B: Cloud (Qdrant Cloud Free Cluster)
-1. Go to [Qdrant Cloud](https://cloud.qdrant.io/) and create an account.
-2. Create a free cluster under **Clusters**.
-3. Copy the cluster endpoint URL (e.g., `https://<cluster-id>.us-east4-0.gcp.cloud.qdrant.io:6333`) into `QDRANT_URL`.
-4. Go to **API Keys** -> **Generate API Key**, copy the key into `QDRANT_API_KEY`.
+* `QDRANT_URL=http://localhost:6333`
+* `QDRANT_API_KEY=` *(blank — no key needed locally)*
+
+Collections are created on demand by the app and by the seed scripts. Browse them at
+http://localhost:6333/dashboard.
 
 ---
 

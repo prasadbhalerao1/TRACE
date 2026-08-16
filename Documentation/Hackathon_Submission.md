@@ -1515,7 +1515,7 @@ npm install
 | `LLM_MODEL_FAST` | No | `claude-haiku-4-5-20251001` | Classification and extraction |
 | `LLM_MODEL_JUDGMENT` | No | `claude-sonnet-4-6` | Evaluation and synthesis |
 | `QDRANT_URL` | No | `http://localhost:6333` | Matches the compose file |
-| `QDRANT_API_KEY` | No | `""` | Only for Qdrant Cloud |
+| `QDRANT_API_KEY` | No | `""` | Blank for the local container; only needed for a hosted cluster |
 | `EMBEDDING_MODEL` | No | `BAAI/bge-large-en-v1.5` | Auto-downloaded from HuggingFace |
 | `GITHUB_CLIENT_ID` | No | `""` | github.com/settings/developers → New OAuth App |
 | `GITHUB_CLIENT_SECRET` | No | `""` | Same OAuth App |

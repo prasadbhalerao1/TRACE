@@ -56,12 +56,11 @@ See §"Background job queue" below.
 
 Seed logins are `alice@example.com` … `evan@example.com`, password `password123`.
 
-> **Why local rather than managed cloud:** the app previously pointed at Neon
-> (AWS us-east-2) and Qdrant Cloud (AWS us-east-1) while running on localhost, so every
-> query on every page paid a cross-region public-internet round trip before any
-> application logic ran. That was the dominant cause of uniform slowness across the whole
-> app. Loopback containers remove it entirely. See
-> [guides/BACKEND_LATENCY_AUDIT.md](guides/BACKEND_LATENCY_AUDIT.md).
+> **Why everything is local:** running the database and vector store on loopback means
+> a query costs what it costs to execute, with no network in the path. Hosting them
+> elsewhere makes every query on every page pay a round trip before any application
+> logic runs, which shows up as uniform slowness across the whole app and is invisible
+> to a query profiler. See [guides/BACKEND_LATENCY_AUDIT.md](guides/BACKEND_LATENCY_AUDIT.md).
 
 ## Services and URLs
 
@@ -86,12 +85,13 @@ API key, or network access.
 | Qdrant | `localhost:6333` (REST), `6334` (gRPC) | `QDRANT_URL=http://localhost:6333`, `QDRANT_API_KEY` empty. Data persists in the `qdrantdata` volume. Dashboard at http://localhost:6333/dashboard. |
 | Redis | `localhost:6379` | `REDIS_URL=redis://localhost:6379`. |
 
-### Switching back to managed cloud services
+### Hosting the data tier elsewhere
 
 Nothing in the code is local-only — only `.env` decides. Point `DATABASE_URL` /
-`QDRANT_URL` / `QDRANT_API_KEY` at the managed endpoints and set
-`DATABASE_SSL_REQUIRED=true`. If you previously ran against the cloud, those values were
-preserved in `.env.cloud` (gitignored) when the default was switched to local.
+`QDRANT_URL` / `QDRANT_API_KEY` at the hosted endpoints and set
+`DATABASE_SSL_REQUIRED=true`, which also disables asyncpg's prepared-statement cache
+for PgBouncer-style poolers. Expect materially higher per-query latency unless the app
+is deployed in the same region as the database.
 
 ## Stopping everything
 
@@ -132,7 +132,7 @@ services (an LLM provider, and optionally GitHub OAuth / Cloudinary / Langfuse).
   `DATABASE_URL=postgresql+asyncpg://dev:dev@localhost:5432/talent_platform`,
   `DATABASE_SSL_REQUIRED=false`. Credentials are the throwaway `dev`/`dev` pair defined in
   `infra/docker-compose.yml`.
-- **Managed Postgres instead (optional)**: put the provider's connection string in
+- **Hosted Postgres instead (optional)**: put the provider's connection string in
   SQLAlchemy/asyncpg form
   (`postgresql+asyncpg://<user>:<password>@<host>/<dbname>`) into `DATABASE_URL` and set
   `DATABASE_SSL_REQUIRED=true`. Expect materially higher per-query latency unless the app
@@ -177,9 +177,8 @@ is unreachable the limiter degrades to a bounded per-process counter.
 - **Default (local Docker, no secrets required)**: `QDRANT_URL=http://localhost:6333`,
   `QDRANT_API_KEY=` (blank). Collections are created on demand by the app and by
   `scripts/seed_db.py`; browse them at http://localhost:6333/dashboard.
-- **Qdrant Cloud instead (optional)**: create a cluster at
-  [Qdrant Cloud](https://cloud.qdrant.io/), then set `QDRANT_URL` to the cluster endpoint
-  and `QDRANT_API_KEY` to a cluster API key.
+- **Hosted Qdrant instead (optional)**: set `QDRANT_URL` to the cluster endpoint and
+  `QDRANT_API_KEY` to a cluster API key.
 
 ### 5. GitHub OAuth application
 

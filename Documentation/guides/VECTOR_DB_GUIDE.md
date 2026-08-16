@@ -2,7 +2,7 @@
 
 **Updated:** 2026-08-01  
 **Scope:** Complete vector DB integration across all modules  
-**Dependencies:** Qdrant Cloud, `sentence-transformers` (BAAI/bge-large-en-v1.5)
+**Dependencies:** Qdrant (local Docker), `sentence-transformers` (BAAI/bge-large-en-v1.5)
 
 ---
 
@@ -305,7 +305,7 @@ except QdrantUnavailable:
 | Operation | Latency | Notes |
 |-----------|---------|-------|
 | `embed_texts()` (1 item) | ~1ms | Cached model, single CPU |
-| `search()` (1 query) | ~10ms | HNSW index, Qdrant Cloud |
+| `search()` (1 query) | ~10ms | HNSW index, loopback round trip |
 | `search_batch()` (100 queries) | ~50ms | One round-trip, not 100×10ms |
 | `upsert()` (1 point) | ~20ms | Immediate index update |
 | Skill centroid (10 skills) | ~5ms | NumPy mean, no Qdrant call |
@@ -326,9 +326,10 @@ batch_relevance = batch_candidate_project_relevance(
 
 ## Qdrant Configuration
 
-**Deployment:** Cloud (AWS, Vercel-hosted)  
-**URL:** `https://504476de-4330-462e-9d03-bfc42422fc6c.us-east-1-1.aws.cloud.qdrant.io`  
-**API Key:** Stored in `.env` as `QDRANT_API_KEY`  
+**Deployment:** Local Docker container (`trace_qdrant`, `infra/docker-compose.yml`)  
+**URL:** `http://localhost:6333` — set as `QDRANT_URL` in `.env`  
+**API Key:** none needed locally; `QDRANT_API_KEY` is blank  
+**Data:** persists in the `qdrantdata` Docker volume  
 **Timeout:** 5 seconds (connection + first query)
 
 **Collections Auto-Created:**
@@ -342,9 +343,9 @@ batch_relevance = batch_candidate_project_relevance(
 
 ### Check Qdrant Health
 ```bash
-curl -H "api-key: $QDRANT_API_KEY" \
-  https://504476de-...-1.aws.cloud.qdrant.io/health
+curl http://localhost:6333/healthz
 ```
+Or open the dashboard at http://localhost:6333/dashboard.
 
 ### List Collections
 ```bash

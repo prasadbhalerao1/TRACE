@@ -32,7 +32,7 @@ directly into recruiter pipelines.
           invokes graphs│           │reads/writes
                         ▼           ▼
         ┌───────────────────┐  ┌─────────────────────┐
-        │ LangGraph agents    │  │ PostgreSQL (Neon)    │
+        │ LangGraph agents    │  │ PostgreSQL (local)   │
         │ services/agents/    │  │ packages/db models   │
         │ 7 modules, 12 graphs│  │ + Alembic migrations │
         │ (DB-free nodes)     │  └─────────────────────┘
@@ -41,7 +41,7 @@ directly into recruiter pipelines.
             ▼           ▼
    ┌────────────────┐ ┌──────────────┐    ┌───────────┐
    │ Qdrant (vector)  │ │ LLM gateway   │    │ Redis      │
-   │ Qdrant Cloud     │ │ Anthropic/    │    │ local      │
+   │ local Docker     │ │ Anthropic/    │    │ local      │
    │                  │ │ OpenAI/Groq/  │    │ Docker     │
    │                  │ │ Gemini        │    │ container  │
    └────────────────┘ └──────────────┘    └───────────┘
@@ -67,8 +67,8 @@ nodes, own every database read/write — see
 | LLM gateway | `services/api/core/llm.py::get_llm_client()` | multi-provider: anthropic (default/production) / openai / groq / gemini / openai_compatible |
 | Default models | fast tier `claude-haiku-4-5-20251001`, judgment tier `claude-sonnet-4-6` | `config.py:40-41` |
 | Embeddings | `sentence-transformers`, `BAAI/bge-large-en-v1.5` | cached singleton, see [11-vector-search-and-llm-gateway.md](11-vector-search-and-llm-gateway.md) |
-| Relational database | PostgreSQL via SQLAlchemy async + asyncpg | production = managed Neon Cloud Postgres (AWS us-east-2, Ohio) |
-| Vector database | Qdrant | production = managed Qdrant Cloud (AWS us-east-1, Virginia) |
+| Relational database | PostgreSQL via SQLAlchemy async + asyncpg | local Docker container, always-on |
+| Vector database | Qdrant | local Docker container, always-on |
 | Cache | Redis | local Docker container, always-on |
 | File storage | Cloudinary | `services/api/core/storage.py`, `services/api/integrations/storage/cloudinary_adapter.py` |
 | Background work | FastAPI `BackgroundTasks`, in-process | see "Task queue" note below — not a real distributed queue |
@@ -154,11 +154,11 @@ This runs today as local development servers, not a deployed production stack:
 
 - **Backend**: `uvicorn services.api.main:app --reload --port 8000` from the repo root.
 - **Frontend**: `npm run dev` in `apps/web`, served on `:3000`.
-- **Data layer**: production-shaped but not production-deployed — the app talks to real
-  managed cloud services (Neon Postgres, Qdrant Cloud) even in local dev, per
-  `infra/docker-compose.yml`'s comments; only Redis runs as a local Docker container by
-  default, with Postgres/Qdrant available as local `profiles: ["offline"]` fallback
-  containers if someone wants to run fully offline.
+- **Data layer**: Postgres, Qdrant and Redis all run as local Docker containers,
+  brought up together by `docker compose -f infra/docker-compose.yml up -d`. No
+  account, API key or network access is needed for any of them. The only outbound
+  calls the app makes are to the LLM provider, GitHub and Cloudinary — none of which
+  hold application state.
 
 There is **no committed deployment manifest** in this repository — no `Dockerfile`, no
 `render.yaml`, no `vercel.json` anywhere in the working tree. This is a factual statement,

@@ -8,11 +8,13 @@
 
 > **Update 2026-08-02 (deployment/environment sweep):** A third investigation looked past
 > code-level bugs at *why the entire app feels uniformly slow, not just AI-heavy pages*.
-> Verdict: the dominant cause is **not code** — it's that the app runs as a single-worker
-> dev server on localhost, talking to managed cloud Postgres/Qdrant in different AWS regions
-> over the public internet, with no real deployment anywhere. See **"Tier 0 — Deployment and
-> Environment"** below. This is the root cause finding; the Tier 1/Tier 2 code bugs are real
-> but secondary until Tier 0 is fixed.
+> Verdict: the dominant cause was **not code** — it was that the app ran as a single-worker
+> dev server on localhost while its database and vector store were hosted remotely, so
+> every query on every page paid a public-internet round trip. See **"Tier 0"** below.
+>
+> **RESOLVED 2026-08-16.** Postgres, Qdrant and Redis now all run as local Docker
+> containers on loopback (`infra/docker-compose.yml`), which removes the network from the
+> query path entirely. Tier 0 is kept below as the record of the diagnosis.
 
 Date: 2026-08-02
 
@@ -26,19 +28,22 @@ Three problem classes below: **Tier 0** (deployment/environment — the actual r
 
 ## Tier 0 — Deployment and environment (root cause of "everything is slow")
 
-**This app has never actually been deployed.** It runs as a local dev server on whatever
-machine is running `uvicorn`, talking to two remote managed cloud services over the public
-internet, for every single request, on every page, for every user:
+> **Fixed 2026-08-16 — the data tier is now entirely local.** Recorded as diagnosed.
 
-- **Postgres (Neon)** — `.env` `DATABASE_URL` points at `...aws.neon.tech`, region **AWS us-east-2 (Ohio)**.
-- **Qdrant Cloud** — `.env` `QDRANT_URL` points at `...aws.cloud.qdrant.io`, region **AWS us-east-1 (Virginia)**.
+**This app has never actually been deployed.** It runs as a local dev server on whatever
+machine is running `uvicorn`, and at the time of this audit it talked to two *remotely
+hosted* data services over the public internet, for every single request, on every page,
+for every user:
+
+- **Postgres** — hosted in a different AWS region than the machine running the app.
+- **Vector store (Qdrant)** — hosted in a *third* region, different again from both.
 - **Backend process** — started per `README.md` as `uvicorn services.api.main:app --reload --port 8000`: single-process, single-worker, dev auto-reload mode. No `gunicorn`, no `--workers`, no process manager.
 - **No deployment config exists for this app.** The only `render.yaml` in the repo lives under `TEMP/` and belongs to a completely unrelated project (`backend-axle`, different stack, different env vars) — it is not wired to this codebase at all.
 
 Why this explains *uniform* slowness (not just AI pages): `GET /me` fires on every
 authenticated route-group navigation (`CurrentUserProvider`), dashboard endpoints fire on
-every dashboard visit, login/signup happen constantly — every one of these pays a full
-public-internet round trip to Ohio or Virginia before any application logic even runs.
+every dashboard visit, login/signup happen constantly — every one of these paid a full
+cross-region public-internet round trip before any application logic even ran.
 Everything else in the request path was checked and is clean:
 
 - DB pooling is correctly configured (`services/api/core/db.py`: `create_async_engine` with `asyncpg`, `pool_size=20`, `max_overflow=20`, `pool_pre_ping=True`, sessions properly scoped/closed via `async with` in `get_db()`). No leak, no `NullPool` misconfig, no per-request engine creation.
@@ -48,11 +53,15 @@ Everything else in the request path was checked and is clean:
 - The embedding model is `@lru_cache`d and pre-warmed at startup (`main.py:110-129`), not reloaded per request.
 - Redis is intentionally unused at this scale (rate limiting is in-memory by design, per its own docstring) — not a caching gap, since nothing expensive is actually recomputed per-request in the hot paths checked.
 
-**A local offline profile already exists but isn't being used**: `infra/docker-compose.yml`
-defines `postgres` and `qdrant` services under `profiles: ["offline"]` (plus a non-profiled
-`redis` service that's presumably already running). The `.env` currently points at the cloud
-services instead, meaning dev work is unnecessarily paying full cloud round-trip latency on
-every single query even when nothing about the demo/data needs to be shared or persistent.
+**A local offline profile already exists but isn't being used**: at the time of the audit
+`infra/docker-compose.yml` defined `postgres` and `qdrant` under an opt-in
+`profiles: ["offline"]` while `.env` pointed at remotely hosted equivalents, so dev work
+paid full round-trip latency on every query even though nothing about the data needed to
+be shared or persistent.
+
+> *Since fixed:* the opt-in profile is gone. `postgres`, `qdrant` and `redis` are all
+> plain services that come up together with `docker compose up -d`, and `.env` points at
+> loopback.
 
 ### Three compounding issues, not one
 
@@ -236,21 +245,24 @@ blocking calls (Phase 2) matters far less if the app is still single-worker on a
 
 ### Phase 0 — Deployment/environment (do this first; nothing else matters until this is done)
 
-**What:** stop running the "real" version of this app as a localhost dev server hitting cross-region cloud databases.
+**What:** stop paying a cross-region network round trip on every query.
 
-**How**, pick based on what you're optimizing for:
+**Done 2026-08-16.** Postgres, Qdrant and Redis are now first-class services in
+`infra/docker-compose.yml`, all reached over loopback:
 
-- **For day-to-day dev iteration (fastest, cheapest, do this immediately):**
-  1. `docker compose -f infra/docker-compose.yml --profile offline up -d` — brings up local Postgres + Qdrant containers (already defined, just unused).
-  2. Point `.env` `DATABASE_URL`/`QDRANT_URL` at the local containers (`localhost:5432` / `localhost:6333`) instead of Neon/Qdrant Cloud. Keep a separate `.env.cloud` or similar for when you actually need to test against shared/persistent data.
-  3. Run `alembic upgrade head` against the local DB, then re-run whatever seed script populates demo data (`scripts/seed_candidates_hardcoded.py` or similar).
-  4. This alone should make every page feel dramatically faster in dev, since it removes the cross-region round trip entirely — same-machine loopback instead of Ohio/Virginia over the public internet.
+1. `docker compose -f infra/docker-compose.yml up -d` brings up all three.
+2. `.env` points `DATABASE_URL` at `localhost:5432` and `QDRANT_URL` at `localhost:6333`,
+   with `DATABASE_SSL_REQUIRED=false`.
+3. `alembic upgrade head`, then the seed scripts in `scripts/`.
 
-- **For a real deployed environment (demo, staging, prod):**
-  1. Deploy the FastAPI app to a real host (Render, Fly.io, AWS, etc.) in **the same AWS region as Neon and Qdrant** — ideally `us-east-2` to match Neon, since Neon is likely the harder one to move; Qdrant Cloud region can usually be changed/re-provisioned to match.
-  2. Run it with a real process manager, not `--reload`: e.g. `uvicorn services.api.main:app --workers 4` (tune worker count to instance CPU count) behind `gunicorn -k uvicorn.workers.UvicornWorker`, or equivalent on your host of choice.
-  3. Deploy the Next.js frontend to Vercel/similar, pointed at the deployed API's real URL, not `localhost:8000`.
-  4. Only once this exists does worker-count/instance-sizing tuning or CDN/edge-caching become relevant — no evidence yet that it's needed beyond "have a real deployment at all."
+This removed the network from the query path entirely, which was the single largest
+latency win available.
+
+**If this app is ever actually deployed**, the remaining Tier 0 items still apply: run it
+with a real process manager rather than a single dev worker (`--workers N` behind
+`gunicorn -k uvicorn.workers.UvicornWorker`), deploy the Next.js frontend pointed at the
+real API URL rather than `localhost:8000`, and co-locate the app with its database in one
+region. Worker-count and CDN tuning only become meaningful after that exists.
 
 ### Phase 1 — Highest-frequency single-line fixes (ship immediately, trivial risk)
 

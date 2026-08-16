@@ -166,7 +166,7 @@ posture instead of the client forcing one globally.
 | Operation | Typical latency | Notes |
 |---|---|---|
 | `embed_texts()` (1 item) | ~1ms | Cached model, CPU inference |
-| `search()` (1 query) | ~10ms | HNSW index, Qdrant Cloud round trip |
+| `search()` (1 query) | ~10ms | HNSW index, loopback round trip |
 | `search_batch()` (100 queries) | ~50ms | One round trip instead of 100 sequential ones |
 | `upsert()` (1 point) | ~20ms | Immediate index update |
 | Skill centroid (10 skills) | ~5ms | NumPy mean, no Qdrant call involved |
@@ -178,9 +178,8 @@ when it's in the request path of a recruiter loading a matches page.
 
 ## Qdrant configuration notes
 
-- Production Qdrant is a managed Qdrant Cloud cluster (region: AWS us-east-1, Virginia).
-  The actual cluster URL is a secret read from `QDRANT_URL`/`QDRANT_API_KEY` in `.env` — not
-  reproduced here.
+- Qdrant runs as a local Docker container (`trace_qdrant`) on `http://localhost:6333`,
+  read from `QDRANT_URL` in `.env`. No API key is needed; `QDRANT_API_KEY` is blank.
 - Collections are auto-created on first upsert; vector size is inferred from the first point
   written, and distance metric is COSINE across every collection (not L2/Manhattan).
 - Point IDs are deterministic (`uuid5(namespace, seed_string)`, e.g. `uuid5(..., f"job:{job_id}")`)
