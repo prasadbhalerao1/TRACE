@@ -7,14 +7,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str
-    # True for managed/pooled Postgres (e.g. Neon) — enables TLS and disables asyncpg's
+    # True for a TLS/pooled Postgres endpoint — enables TLS and disables asyncpg's
     # server-side prepared-statement caching, which breaks against PgBouncer-style
-    # transaction poolers. False (default) for local docker-compose Postgres.
+    # transaction poolers. False (the default, and what this project runs) for the
+    # local docker-compose Postgres.
     database_ssl_required: bool = False
     # SQLAlchemy async engine pool — defaults (5 + 10 overflow) were too small once
-    # matching/copilot/dashboard requests run concurrently against a remote pooled
-    # Postgres (Neon); each round-trip pays real network latency, so starving the pool
-    # queues requests behind each other instead of running them in parallel.
+    # matching/copilot/dashboard requests run concurrently: starving the pool queues
+    # requests behind each other instead of running them in parallel.
     #
     # 20 + 20 overflow is ample now that no request holds a connection across a slow AI
     # call: handlers that invoke a LangGraph/LLM pipeline wrap it in

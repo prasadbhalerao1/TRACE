@@ -13,8 +13,9 @@ settings = get_settings()
 _connect_args = {}
 if settings.database_ssl_required:
     # asyncpg's `ssl` kwarg, not libpq's `sslmode` query param (asyncpg doesn't parse that).
-    # statement_cache_size=0 avoids "prepared statement already exists" errors against
-    # Neon's pooled (PgBouncer-style) endpoint.
+    # statement_cache_size=0 avoids "prepared statement already exists" errors against a
+    # PgBouncer-style transaction pooler. Unused by the local setup, which sets
+    # DATABASE_SSL_REQUIRED=false; kept for a future TLS/pooled deployment.
     _connect_args = {"ssl": True, "statement_cache_size": 0}
 
 engine = create_async_engine(

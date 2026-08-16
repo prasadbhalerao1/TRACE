@@ -1,12 +1,8 @@
 # TRACE — Local Infrastructure
 #
 # Everything the app depends on for data/state runs locally in Docker: Postgres,
-# Qdrant, and Redis. There is no cloud dependency in the default development setup.
-#
-# Previously Postgres and Qdrant sat behind a `profiles: ["offline"]` opt-in while
-# `.env` pointed at managed Neon (AWS us-east-2) and Qdrant Cloud (AWS us-east-1), so
-# every query on every page paid a cross-region public-internet round trip. They are
-# now first-class services that come up with a plain:
+# Qdrant, and Redis. There is no cloud dependency — this compose file is the whole
+# data tier, and it comes up with a plain:
 #
 #   docker compose -f infra/docker-compose.yml up -d
 #
