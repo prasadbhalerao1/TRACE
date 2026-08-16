@@ -14,10 +14,13 @@ import type { CommitActivityChartProps } from "@/components/charts/CommitActivit
  * The fallback reserves the chart's real height, so deferring it costs no layout shift.
  */
 const CommitActivityChart = dynamic(
-  () => import("@/components/charts/CommitActivityChart").then((m) => m.CommitActivityChart),
+  () =>
+    import("@/components/charts/CommitActivityChart").then(
+      (m) => m.CommitActivityChart,
+    ),
   {
     ssr: false,
-    loading: () => <div className="h-56 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-900" />,
+    loading: () => <div className="h-56 animate-pulse rounded-md bg-muted" />,
   },
 );
 

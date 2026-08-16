@@ -8,7 +8,10 @@ import { ArrowLeft, ArrowRight, Check, GitBranch, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { Field } from "@/components/onboarding/Field";
-import { OnboardingProgress, type WizardStep } from "@/components/onboarding/OnboardingProgress";
+import {
+  OnboardingProgress,
+  type WizardStep,
+} from "@/components/onboarding/OnboardingProgress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -21,8 +24,16 @@ import {
 
 const STEPS: readonly WizardStep[] = [
   { id: "identity", title: "Identity", blurb: "How you appear to recruiters." },
-  { id: "background", title: "Background", blurb: "Where you studied and where you're based." },
-  { id: "connect", title: "Connect", blurb: "Evidence that powers your Talent Score." },
+  {
+    id: "background",
+    title: "Background",
+    blurb: "Where you studied and where you're based.",
+  },
+  {
+    id: "connect",
+    title: "Connect",
+    blurb: "Evidence that powers your Talent Score.",
+  },
 ];
 
 type Values = {
@@ -77,7 +88,9 @@ export function OnboardingWizard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(
-    githubParam === "connected" ? "GitHub connected — analyzing your repositories in the background." : null,
+    githubParam === "connected"
+      ? "GitHub connected — analyzing your repositories in the background."
+      : null,
   );
   const [seeded, setSeeded] = useState(false);
 
@@ -104,7 +117,10 @@ export function OnboardingWizard() {
         if (!token || cancelled) return;
         const existing = await fetchMyProfile(token);
         if (cancelled) return;
-        const edu = (existing.education?.[0] ?? {}) as { institution?: string; degree?: string };
+        const edu = (existing.education?.[0] ?? {}) as {
+          institution?: string;
+          degree?: string;
+        };
         setProfile(existing);
         setValues({
           fullName,
@@ -138,7 +154,10 @@ export function OnboardingWizard() {
 
   // Non-candidates have no /candidates/me to write to, so the background and connect
   // steps don't apply — they only confirm their name.
-  const steps = useMemo(() => (isCandidate ? STEPS : STEPS.slice(0, 1)), [isCandidate]);
+  const steps = useMemo(
+    () => (isCandidate ? STEPS : STEPS.slice(0, 1)),
+    [isCandidate],
+  );
 
   const missing = useMemo(() => {
     const required = REQUIRED_BY_STEP[step] ?? [];
@@ -165,11 +184,17 @@ export function OnboardingWizard() {
     try {
       if (isCandidate) {
         await saveProfile();
-        if (values.leetcode.trim() && values.leetcode.trim() !== profile?.leetcode_username) {
+        if (
+          values.leetcode.trim() &&
+          values.leetcode.trim() !== profile?.leetcode_username
+        ) {
           // Optional and best-effort: a typo'd or private LeetCode handle must not
           // block someone from finishing onboarding.
           const token = await getToken();
-          if (token) await connectLeetcode(token, values.leetcode.trim()).catch(() => undefined);
+          if (token)
+            await connectLeetcode(token, values.leetcode.trim()).catch(
+              () => undefined,
+            );
         }
       }
       // /me is what every layout gates on, so it has to be refetched before leaving —
@@ -177,10 +202,20 @@ export function OnboardingWizard() {
       reloadMe();
       router.replace("/home");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save your profile");
+      setError(
+        err instanceof Error ? err.message : "Could not save your profile",
+      );
       setBusy(null);
     }
-  }, [getToken, isCandidate, profile, reloadMe, router, saveProfile, values.leetcode]);
+  }, [
+    getToken,
+    isCandidate,
+    profile,
+    reloadMe,
+    router,
+    saveProfile,
+    values.leetcode,
+  ]);
 
   const next = useCallback(async () => {
     setTouched(true);
@@ -199,7 +234,9 @@ export function OnboardingWizard() {
       setTouched(false);
       setStep((s) => s + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save your details");
+      setError(
+        err instanceof Error ? err.message : "Could not save your details",
+      );
     } finally {
       setBusy(null);
     }
@@ -217,7 +254,11 @@ export function OnboardingWizard() {
       const authorizeUrl = await fetchGithubOAuthUrl(token, "onboarding");
       window.location.href = authorizeUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start GitHub connection");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not start GitHub connection",
+      );
       setBusy(null);
     }
   }, [getToken, saveProfile]);
@@ -225,8 +266,8 @@ export function OnboardingWizard() {
   if (!isLoaded || !me?.profile) {
     return (
       <div className="space-y-4">
-        <div className="h-1.5 w-full animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800" />
-        <div className="h-64 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-900" />
+        <div className="h-1.5 w-full animate-pulse rounded-full bg-muted" />
+        <div className="h-64 animate-pulse rounded-xl bg-muted" />
       </div>
     );
   }
@@ -238,10 +279,10 @@ export function OnboardingWizard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold text-ink dark:text-zinc-50">
+        <h1 className="font-heading text-2xl font-semibold text-foreground">
           Set up your profile
         </h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           {isCandidate
             ? "This is what recruiters see, and what your Talent Score is built from."
             : "Just one detail before you get started."}
@@ -253,10 +294,10 @@ export function OnboardingWizard() {
       <Card>
         <CardContent className="space-y-5 pt-6">
           <div>
-            <h2 className="font-heading text-base font-semibold text-ink dark:text-zinc-50">
+            <h2 className="font-heading text-base font-semibold text-foreground">
               {active.title}
             </h2>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">{active.blurb}</p>
+            <p className="text-sm text-muted-foreground">{active.blurb}</p>
           </div>
 
           {step === 0 && (
@@ -268,7 +309,11 @@ export function OnboardingWizard() {
                 placeholder="e.g. Jane Doe"
                 required
                 autoFocus
-                error={touched && !values.fullName.trim() ? "Your name is required." : null}
+                error={
+                  touched && !values.fullName.trim()
+                    ? "Your name is required."
+                    : null
+                }
               />
               <Field
                 label={LABELS.headline}
@@ -277,7 +322,11 @@ export function OnboardingWizard() {
                 placeholder="e.g. Final-year CS student — backend & distributed systems"
                 required
                 hint="One line on who you are and what you build."
-                error={touched && !values.headline.trim() ? "A headline is required." : null}
+                error={
+                  touched && !values.headline.trim()
+                    ? "A headline is required."
+                    : null
+                }
               />
             </>
           )}
@@ -291,7 +340,11 @@ export function OnboardingWizard() {
                 placeholder="e.g. Stanford University"
                 required
                 autoFocus
-                error={touched && !values.college.trim() ? "Your college is required." : null}
+                error={
+                  touched && !values.college.trim()
+                    ? "Your college is required."
+                    : null
+                }
               />
               <Field
                 label={LABELS.degree}
@@ -299,7 +352,11 @@ export function OnboardingWizard() {
                 onChange={(v) => set("degree", v)}
                 placeholder="e.g. B.S. in Computer Science"
                 required
-                error={touched && !values.degree.trim() ? "Your degree is required." : null}
+                error={
+                  touched && !values.degree.trim()
+                    ? "Your degree is required."
+                    : null
+                }
               />
               <Field
                 label={LABELS.location}
@@ -307,27 +364,31 @@ export function OnboardingWizard() {
                 onChange={(v) => set("location", v)}
                 placeholder="e.g. Bengaluru, India"
                 required
-                error={touched && !values.location.trim() ? "Your location is required." : null}
+                error={
+                  touched && !values.location.trim()
+                    ? "Your location is required."
+                    : null
+                }
               />
             </>
           )}
 
           {step === 2 && (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-sm font-medium text-ink dark:text-zinc-50">
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                     <GitBranch className="size-4" />
                     GitHub
                   </p>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {githubConnected
                       ? `Connected as ${profile?.github_username}`
                       : "The strongest signal in your Talent Score — we analyze your real commits."}
                   </p>
                 </div>
                 {githubConnected ? (
-                  <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                  <span className="flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
                     <Check className="size-3.5" strokeWidth={3} />
                     Connected
                   </span>
@@ -354,18 +415,17 @@ export function OnboardingWizard() {
               />
 
               {!githubConnected && (
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  You can skip GitHub for now — we&apos;ll keep reminding you on your dashboard,
-                  and your Talent Score stays incomplete until it&apos;s connected.
+                <p className="text-xs text-muted-foreground">
+                  You can skip GitHub for now — we&apos;ll keep reminding you on
+                  your dashboard, and your Talent Score stays incomplete until
+                  it&apos;s connected.
                 </p>
               )}
             </>
           )}
 
-          {error && <p className="text-sm text-rose-600">{error}</p>}
-          {notice && !error && (
-            <p className="text-sm text-emerald-700 dark:text-emerald-400">{notice}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {notice && !error && <p className="text-sm text-success">{notice}</p>}
 
           <div className="flex items-center justify-between gap-3 pt-1">
             <Button
@@ -388,7 +448,11 @@ export function OnboardingWizard() {
                   Saving…
                 </>
               ) : isLast ? (
-                githubConnected ? "Finish" : "Skip for now & finish"
+                githubConnected ? (
+                  "Finish"
+                ) : (
+                  "Skip for now & finish"
+                )
               ) : (
                 <>
                   Continue

@@ -9,7 +9,7 @@ import dynamic from "next/dynamic";
 const Editor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="flex size-full items-center justify-center bg-zinc-900 text-sm text-zinc-400">
+    <div className="flex size-full items-center justify-center bg-foreground text-sm text-muted-foreground">
       Loading editor…
     </div>
   ),
@@ -27,14 +27,21 @@ export function CodeEditor({
   height?: string;
 }) {
   return (
-    <div className="rounded-md border border-zinc-800 overflow-hidden" style={{ height }}>
+    <div
+      className="rounded-md border border-border overflow-hidden"
+      style={{ height }}
+    >
       <Editor
         height={height}
         language={language}
         theme="vs-dark"
         value={value}
         onChange={(v) => onChange(v ?? "")}
-        options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
+        options={{
+          minimap: { enabled: false },
+          fontSize: 13,
+          scrollBeyondLastLine: false,
+        }}
       />
     </div>
   );

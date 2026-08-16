@@ -1,6 +1,13 @@
 "use client";
 
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDraggable, useDroppable } from "@dnd-kit/core";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  useDraggable,
+  useDroppable,
+} from "@dnd-kit/core";
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
@@ -18,12 +25,20 @@ import {
 // Report link routing (QA finding "Recruiter #3"): prefer whichever report actually
 // exists for this candidate — submission, then interview, then contribution — display
 // only, doesn't affect card order.
-function reportLinkFor(application: ApplicationWithCandidateResponse): { href: string; label: string } | null {
+function reportLinkFor(
+  application: ApplicationWithCandidateResponse,
+): { href: string; label: string } | null {
   if (application.latest_submission_id) {
-    return { href: `/reports/submission/${application.latest_submission_id}`, label: "View Report" };
+    return {
+      href: `/reports/submission/${application.latest_submission_id}`,
+      label: "View Report",
+    };
   }
   if (application.latest_interview_session_id) {
-    return { href: `/reports/interview/${application.latest_interview_session_id}`, label: "View Report" };
+    return {
+      href: `/reports/interview/${application.latest_interview_session_id}`,
+      label: "View Report",
+    };
   }
   if (application.latest_contribution_repo_full_name) {
     return {
@@ -34,7 +49,10 @@ function reportLinkFor(application: ApplicationWithCandidateResponse): { href: s
   return null;
 }
 
-const FRAUD_BADGE_LABEL: Record<NonNullable<ApplicationWithCandidateResponse["fraud_flag_status"]>, string> = {
+const FRAUD_BADGE_LABEL: Record<
+  NonNullable<ApplicationWithCandidateResponse["fraud_flag_status"]>,
+  string
+> = {
   raised: "Flag Raised",
   under_review: "Flag Under Review",
   upheld: "Fraud Flag Upheld",
@@ -50,7 +68,9 @@ function AssignAssessmentDialog({
   onClose: () => void;
 }) {
   const { getToken } = useAuth();
-  const [type, setType] = useState<"coding" | "mcq" | "project_analysis">("coding");
+  const [type, setType] = useState<"coding" | "mcq" | "project_analysis">(
+    "coding",
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -64,11 +84,18 @@ function AssignAssessmentDialog({
       // Minimal default spec per type — the recruiter refines the real spec later via
       // the assessment's own edit flow (out of scope for this fix); this call just
       // proves the assignment loop end-to-end (QA finding "Recruiter #1").
-      const spec = type === "mcq" ? { questions: [] } : type === "coding" ? { prompt: "", hidden_tests: [] } : {};
+      const spec =
+        type === "mcq"
+          ? { questions: [] }
+          : type === "coding"
+            ? { prompt: "", hidden_tests: [] }
+            : {};
       await assignAssessment(token, { jobId, candidateId, type, spec });
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to assign assessment");
+      setError(
+        err instanceof Error ? err.message : "Failed to assign assessment",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -81,19 +108,21 @@ function AssignAssessmentDialog({
     >
       <Card className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Assign Assessment</CardTitle>
+          <CardTitle className="text-base font-semibold">
+            Assign Assessment
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {done ? (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            <p className="text-sm text-success">
               Assessment assigned — the candidate will see it in their inbox.
             </p>
           ) : (
             <>
-              <label className="flex flex-col gap-1 text-xs text-slate">
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                 Type
                 <select
-                  className="border rounded px-2 py-1.5 text-sm bg-background text-foreground"
+                  className="border rounded-md px-2 py-1.5 text-sm bg-background text-foreground"
                   value={type}
                   onChange={(e) => setType(e.target.value as typeof type)}
                 >
@@ -102,8 +131,12 @@ function AssignAssessmentDialog({
                   <option value="project_analysis">Project Analysis</option>
                 </select>
               </label>
-              {error && <p className="text-sm text-rose-flagged">{error}</p>}
-              <Button className="w-full" disabled={submitting} onClick={handleAssign}>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button
+                className="w-full"
+                disabled={submitting}
+                onClick={handleAssign}
+              >
                 {submitting ? "Assigning…" : "Assign"}
               </Button>
             </>
@@ -124,12 +157,16 @@ function CandidateCard({
   application: ApplicationWithCandidateResponse;
   onAdvance?: (nextStage: ApplicationStage) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: application.id,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: application.id,
+    });
   const [assigning, setAssigning] = useState(false);
   const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 10 }
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: 10,
+      }
     : undefined;
   const currentIndex = APPLICATION_STAGES.indexOf(application.stage);
   const nextStage = APPLICATION_STAGES[currentIndex + 1];
@@ -141,11 +178,13 @@ function CandidateCard({
       style={style}
       {...listeners}
       {...attributes}
-      className={`p-3 bg-white dark:bg-zinc-800 shadow-sm cursor-grab active:cursor-grabbing hover:border-primary ${isDragging ? "opacity-50" : ""}`}
+      className={`p-3 bg-card shadow-flat cursor-grab active:cursor-grabbing hover:border-primary ${isDragging ? "opacity-50" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold text-ink dark:text-zinc-50">
-          {application.candidate_headline ?? application.candidate_github_username ?? "Candidate"}
+        <p className="text-sm font-semibold text-foreground">
+          {application.candidate_headline ??
+            application.candidate_github_username ??
+            "Candidate"}
         </p>
         {application.fraud_flag_status && (
           <Badge variant="destructive" className="text-[9px] shrink-0">
@@ -154,7 +193,7 @@ function CandidateCard({
         )}
       </div>
       {application.candidate_overall_talent_score !== null && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+        <p className="text-xs text-success font-semibold mt-1">
           Talent Score: {application.candidate_overall_talent_score.toFixed(0)}
         </p>
       )}
@@ -163,7 +202,7 @@ function CandidateCard({
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => onAdvance(nextStage)}
-            className="text-[10px] text-blue-600 font-semibold hover:underline"
+            className="text-[10px] text-primary font-semibold hover:underline"
           >
             Advance to {APPLICATION_STAGE_LABELS[nextStage]} →
           </button>
@@ -172,7 +211,7 @@ function CandidateCard({
           <Link
             href={report.href}
             onPointerDown={(e) => e.stopPropagation()}
-            className="text-[10px] text-blue-600 font-semibold hover:underline"
+            className="text-[10px] text-primary font-semibold hover:underline"
           >
             {report.label}
           </Link>
@@ -180,7 +219,7 @@ function CandidateCard({
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => setAssigning(true)}
-          className="text-[10px] text-blue-600 font-semibold hover:underline"
+          className="text-[10px] text-primary font-semibold hover:underline"
         >
           Assign Assessment
         </button>
@@ -209,12 +248,14 @@ function StageColumn({
   return (
     <Card
       ref={setNodeRef}
-      className={`bg-slate-50 dark:bg-zinc-900 border-dashed ${isOver ? "border-primary" : ""}`}
+      className={`bg-card border-dashed ${isOver ? "border-primary" : ""}`}
     >
       <CardHeader className="p-3">
         <CardTitle className="text-sm font-semibold flex justify-between">
           <span>{APPLICATION_STAGE_LABELS[stage]}</span>
-          <Badge variant="secondary" className="text-xs">{applications.length}</Badge>
+          <Badge variant="secondary" className="text-xs">
+            {applications.length}
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2 space-y-2 min-h-16">

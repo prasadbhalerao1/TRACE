@@ -35,10 +35,12 @@ export function Field({
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+      <Label htmlFor={id} className="text-xs font-medium text-foreground">
         {label}
         {!required && (
-          <span className="ml-1.5 text-[11px] font-normal text-zinc-400">optional</span>
+          <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+            optional
+          </span>
         )}
       </Label>
       <Input
@@ -47,16 +49,18 @@ export function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
+        // The Input primitive already styles its own aria-invalid state, so the
+        // error appearance follows from the ARIA attribute rather than a parallel
+        // set of colour classes that could drift from it.
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={error ? "border-rose-400 focus-visible:ring-rose-400/30" : undefined}
       />
       {error ? (
-        <p id={`${id}-error`} className="text-xs text-rose-600">
+        <p id={`${id}-error`} className="text-xs text-destructive">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="text-xs text-zinc-400">
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
           {hint}
         </p>
       ) : null}

@@ -3,7 +3,11 @@ import type { SlideOut } from "@/lib/api";
 
 export function SlideViewer({ slides }: { slides: SlideOut[] }) {
   if (slides.length === 0) {
-    return <p className="text-sm text-muted-foreground">No slide content could be extracted from this deck.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No slide content could be extracted from this deck.
+      </p>
+    );
   }
 
   return (
@@ -17,7 +21,11 @@ export function SlideViewer({ slides }: { slides: SlideOut[] }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            {slide.body && <p className="whitespace-pre-wrap text-foreground">{slide.body}</p>}
+            {slide.body && (
+              <p className="whitespace-pre-wrap text-foreground">
+                {slide.body}
+              </p>
+            )}
             {slide.notes && (
               <p className="whitespace-pre-wrap text-xs text-muted-foreground">
                 <span className="font-medium">Speaker notes: </span>
@@ -31,7 +39,9 @@ export function SlideViewer({ slides }: { slides: SlideOut[] }) {
               </p>
             )}
             {!slide.body && !slide.notes && !slide.ocr_text && (
-              <p className="text-xs text-muted-foreground">No text extracted from this slide.</p>
+              <p className="text-xs text-muted-foreground">
+                No text extracted from this slide.
+              </p>
             )}
           </CardContent>
         </Card>

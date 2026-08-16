@@ -28,17 +28,17 @@ export function OnboardingProgress({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Step {current + 1} of {steps.length}
         </p>
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+        <p className="text-xs text-muted-foreground">
           {Math.round(pct)}% complete
         </p>
       </div>
 
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className="h-full rounded-full bg-indigo-600 transition-[width] duration-500 ease-out"
+          className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -53,10 +53,10 @@ export function OnboardingProgress({
               className={cn(
                 "flex items-center gap-2 text-xs",
                 active
-                  ? "font-semibold text-ink dark:text-zinc-50"
+                  ? "font-semibold text-foreground"
                   : done
-                    ? "text-zinc-500 dark:text-zinc-400"
-                    : "text-zinc-400 dark:text-zinc-600",
+                    ? "text-muted-foreground"
+                    : "text-muted-foreground",
               )}
             >
               <span
@@ -64,10 +64,10 @@ export function OnboardingProgress({
                 className={cn(
                   "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
                   done
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-success text-white"
                     : active
-                      ? "bg-indigo-600 text-white"
-                      : "border border-dashed border-zinc-300 dark:border-zinc-700",
+                      ? "bg-primary text-white"
+                      : "border border-dashed border-border",
                 )}
               >
                 {done ? <Check className="size-3" strokeWidth={3} /> : i + 1}

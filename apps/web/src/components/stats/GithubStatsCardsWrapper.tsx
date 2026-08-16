@@ -8,9 +8,11 @@ interface GithubStatsCardsWrapperProps {
   summary: GithubSummary;
 }
 
-export function GithubStatsCardsWrapper({ summary }: GithubStatsCardsWrapperProps) {
+export function GithubStatsCardsWrapper({
+  summary,
+}: GithubStatsCardsWrapperProps) {
   return (
-    <Section title="GitHub Stats" index={3}>
+    <Section title="GitHub Stats">
       <GithubStatsCards summary={summary} />
     </Section>
   );

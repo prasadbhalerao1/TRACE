@@ -19,22 +19,49 @@ interface CompletenessItem {
  * College/degree are not top-level columns — `PATCH /candidates/me` folds them into
  * the first entry of the `education` JSONB array as `institution`/`degree`
  * (services/api/modules/candidates/router.py), so they're read back the same way. */
-export function buildChecklist(profile: CandidateProfileResponse | null): CompletenessItem[] {
+export function buildChecklist(
+  profile: CandidateProfileResponse | null,
+): CompletenessItem[] {
   const education = (profile?.education?.[0] ?? {}) as Record<string, unknown>;
-  const hasEducation = Boolean(education.institution) && Boolean(education.degree);
+  const hasEducation =
+    Boolean(education.institution) && Boolean(education.degree);
 
   return [
-    { label: "Add your headline", done: Boolean(profile?.headline), href: "/profile/edit" },
-    { label: "Set your location", done: Boolean(profile?.location), href: "/profile/edit" },
-    { label: "Add college & degree", done: hasEducation, href: "/profile/edit" },
-    { label: "Connect GitHub", done: Boolean(profile?.github_username), href: "/profile/edit" },
-    { label: "Connect LeetCode", done: Boolean(profile?.leetcode_username), href: "/profile/edit" },
+    {
+      label: "Add your headline",
+      done: Boolean(profile?.headline),
+      href: "/profile/edit",
+    },
+    {
+      label: "Set your location",
+      done: Boolean(profile?.location),
+      href: "/profile/edit",
+    },
+    {
+      label: "Add college & degree",
+      done: hasEducation,
+      href: "/profile/edit",
+    },
+    {
+      label: "Connect GitHub",
+      done: Boolean(profile?.github_username),
+      href: "/profile/edit",
+    },
+    {
+      label: "Connect LeetCode",
+      done: Boolean(profile?.leetcode_username),
+      href: "/profile/edit",
+    },
   ];
 }
 
 /** Progress meter shown on the candidate hub. Hidden entirely once everything is
  * done — a permanent "100%" badge is just noise after the first week. */
-export function ProfileCompleteness({ profile }: { profile: CandidateProfileResponse | null }) {
+export function ProfileCompleteness({
+  profile,
+}: {
+  profile: CandidateProfileResponse | null;
+}) {
   const items = buildChecklist(profile);
   const completed = items.filter((i) => i.done).length;
   const pct = Math.round((completed / items.length) * 100);
@@ -44,14 +71,15 @@ export function ProfileCompleteness({ profile }: { profile: CandidateProfileResp
   const nextUp = items.find((i) => !i.done);
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-5 dark:border-amber-900/50 dark:bg-amber-950/20">
+    <div className="rounded-lg bg-warning/10 p-5 shadow-flat">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-heading text-sm font-semibold text-ink dark:text-zinc-50">
+          <h2 className="font-heading text-sm font-semibold text-foreground">
             Complete your profile
           </h2>
-          <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-            Recruiters rank verified profiles higher — {items.length - completed} step
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Recruiters rank verified profiles higher —{" "}
+            {items.length - completed} step
             {items.length - completed === 1 ? "" : "s"} left.
           </p>
         </div>
@@ -63,9 +91,9 @@ export function ProfileCompleteness({ profile }: { profile: CandidateProfileResp
         )}
       </div>
 
-      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-amber-200/70 dark:bg-amber-900/40">
+      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-amber-200/70">
         <div
-          className="h-full rounded-full bg-amber-500 transition-[width] duration-500"
+          className="h-full rounded-full bg-warning transition-[width] duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -76,15 +104,15 @@ export function ProfileCompleteness({ profile }: { profile: CandidateProfileResp
             key={item.label}
             className={
               item.done
-                ? "flex items-center gap-1.5 text-xs text-zinc-500 line-through dark:text-zinc-500"
-                : "flex items-center gap-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                ? "flex items-center gap-1.5 text-xs text-muted-foreground line-through"
+                : "flex items-center gap-1.5 text-xs font-medium text-foreground"
             }
           >
             <span
               className={
                 item.done
-                  ? "flex size-4 items-center justify-center rounded-full bg-emerald-500 text-white"
-                  : "size-4 rounded-full border border-dashed border-zinc-400 dark:border-zinc-600"
+                  ? "flex size-4 items-center justify-center rounded-full bg-success text-white"
+                  : "size-4 rounded-full border border-dashed border-border"
               }
             >
               {item.done && <Check className="size-2.5" strokeWidth={3} />}

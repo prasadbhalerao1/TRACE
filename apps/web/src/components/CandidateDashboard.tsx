@@ -8,10 +8,10 @@ import { toast } from "sonner";
 
 import { AchievementsGrid } from "@/components/achievements/AchievementsGrid";
 import { BadgeGrid } from "@/components/BadgeGrid";
-import { EmptyState } from "@/components/common/EmptyState";
 import { Section } from "@/components/common/Section";
 import { SectionError } from "@/components/common/SectionError";
 import { CardSkeleton } from "@/components/common/Skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EvidenceReceipt } from "@/components/EvidenceReceipt";
 import { ProblemSolvingStats } from "@/components/ProblemSolvingStats";
 import { ProfileSidebar } from "@/components/profile/ProfileSidebar";
@@ -42,24 +42,46 @@ import {
 // these only ever render after client-side data resolves, so there's nothing to
 // server-render for them anyway.
 const ContributionHeatmap = dynamic(
-  () => import("@/components/charts/ContributionHeatmap").then((m) => m.ContributionHeatmap),
-  { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-md bg-zinc-100" /> },
+  () =>
+    import("@/components/charts/ContributionHeatmap").then(
+      (m) => m.ContributionHeatmap,
+    ),
+  {
+    ssr: false,
+    loading: () => <div className="h-32 animate-pulse rounded-md bg-muted" />,
+  },
 );
 const LanguageChart = dynamic(
-  () => import("@/components/charts/LanguageChart").then((m) => m.LanguageChart),
-  { ssr: false, loading: () => <div className="h-56 animate-pulse rounded-md bg-zinc-100" /> },
+  () =>
+    import("@/components/charts/LanguageChart").then((m) => m.LanguageChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-56 animate-pulse rounded-md bg-muted" />,
+  },
 );
 const CommitActivityChart = dynamic(
-  () => import("@/components/charts/CommitActivityChart").then((m) => m.CommitActivityChart),
-  { ssr: false, loading: () => <div className="h-56 animate-pulse rounded-md bg-zinc-100" /> },
+  () =>
+    import("@/components/charts/CommitActivityChart").then(
+      (m) => m.CommitActivityChart,
+    ),
+  {
+    ssr: false,
+    loading: () => <div className="h-56 animate-pulse rounded-md bg-muted" />,
+  },
 );
 const ScoreRadarChart = dynamic(
   () => import("@/components/ScoreRadarChart").then((m) => m.ScoreRadarChart),
-  { ssr: false, loading: () => <div className="h-72 animate-pulse rounded-md bg-zinc-100" /> },
+  {
+    ssr: false,
+    loading: () => <div className="h-72 animate-pulse rounded-md bg-muted" />,
+  },
 );
 const ScoreTrendLine = dynamic(
   () => import("@/components/ScoreTrendLine").then((m) => m.ScoreTrendLine),
-  { ssr: false, loading: () => <div className="h-56 animate-pulse rounded-md bg-zinc-100" /> },
+  {
+    ssr: false,
+    loading: () => <div className="h-56 animate-pulse rounded-md bg-muted" />,
+  },
 );
 
 // Mirrors the backend's `_STATS_REFRESH_COOLDOWN` (services/api/modules/candidates/router.py)
@@ -130,7 +152,8 @@ export function CandidateDashboard() {
   // Optimistically-updatable local copy — publish/unpublish/refresh mutate this directly
   // via their own response payload rather than re-fetching the whole bundle.
   const [profile, setProfile] = useState<CandidateProfileResponse | null>(null);
-  const [prevProfileData, setPrevProfileData] = useState<CandidateProfileResponse | null>(null);
+  const [prevProfileData, setPrevProfileData] =
+    useState<CandidateProfileResponse | null>(null);
 
   if (profileResource.data !== prevProfileData) {
     setPrevProfileData(profileResource.data);
@@ -142,11 +165,15 @@ export function CandidateDashboard() {
     const token = await getToken();
     if (!token) return;
     try {
-      const updated = published ? await publishPortfolio(token) : await unpublishPortfolio(token);
+      const updated = published
+        ? await publishPortfolio(token)
+        : await unpublishPortfolio(token);
       setProfile(updated);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : `Failed to ${published ? "publish" : "unpublish"} portfolio`,
+        err instanceof Error
+          ? err.message
+          : `Failed to ${published ? "publish" : "unpublish"} portfolio`,
       );
     }
   }
@@ -161,7 +188,11 @@ export function CandidateDashboard() {
       const authorizeUrl = await fetchGithubOAuthUrl(token);
       window.location.href = authorizeUrl;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not start GitHub connection");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Could not start GitHub connection",
+      );
       setBusyConnect(false);
     }
   }
@@ -174,14 +205,19 @@ export function CandidateDashboard() {
       const updated = await refreshStats(token);
       setProfile(updated);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to refresh stats");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to refresh stats",
+      );
     } finally {
       setRefreshBusy(false);
     }
   }
 
   const refreshCooldownUntil = profile?.stats_refreshed_at
-    ? new Date(new Date(profile.stats_refreshed_at).getTime() + STATS_REFRESH_COOLDOWN_MS)
+    ? new Date(
+        new Date(profile.stats_refreshed_at).getTime() +
+          STATS_REFRESH_COOLDOWN_MS,
+      )
     : null;
 
   const githubStats = profile?.github_stats ?? null;
@@ -199,7 +235,11 @@ export function CandidateDashboard() {
         // first paint and nothing jumps sideways when the profile lands.
         <CardSkeleton className="h-105 w-full" />
       ) : profileResource.error && !profile ? (
-        <SectionError message={profileResource.error} onRetry={profileResource.retry} retrying={profileResource.loading} />
+        <SectionError
+          message={profileResource.error}
+          onRetry={profileResource.retry}
+          retrying={profileResource.loading}
+        />
       ) : profile ? (
         <ProfileSidebar
           profile={profile}
@@ -229,20 +269,25 @@ export function CandidateDashboard() {
             </div>
           </div>
         ) : devStatsError && !githubResource.data ? (
-          <SectionError message={devStatsError} onRetry={() => {
-            profileResource.retry();
-            githubResource.retry();
-          }} retrying={devStatsLoading} />
+          <SectionError
+            message={devStatsError}
+            onRetry={() => {
+              profileResource.retry();
+              githubResource.retry();
+            }}
+            retrying={devStatsLoading}
+          />
         ) : !githubUsername || !githubStats || !githubResource.data ? (
-          <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
+          <Card className="border-border bg-card text-foreground shadow-flat ">
             <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-4">
-              <p className="text-sm text-zinc-500 font-medium">
-                Connect GitHub to unlock Development Stats, achievements, and repository analytics.
+              <p className="text-sm text-muted-foreground font-medium">
+                Connect GitHub to unlock Development Stats, achievements, and
+                repository analytics.
               </p>
               <Button
                 onClick={handleConnectGithub}
                 disabled={busyConnect}
-                className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium px-6 py-2"
+                className="bg-foreground hover:bg-foreground text-white font-medium px-6 py-2"
               >
                 {busyConnect ? "Connecting..." : "Connect GitHub"}
               </Button>
@@ -254,16 +299,25 @@ export function CandidateDashboard() {
             <StatsGrid stats={githubStats} />
 
             {/* Row 1: Contribution Activity (Full-width) */}
-            <Section title="Contribution Activity" index={0}>
-              <div className="mb-4 flex flex-wrap items-center gap-6 text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono select-none">
+            <Section title="Contribution Activity">
+              <div className="mb-4 flex flex-wrap items-center gap-6 text-meta font-medium text-muted-foreground select-none">
                 <span>
-                  Contributions: <span className="font-extrabold text-zinc-700">{githubStats.total_contributions}</span>
+                  Contributions:{" "}
+                  <span className="font-extrabold text-foreground">
+                    {githubStats.total_contributions}
+                  </span>
                 </span>
                 <span>
-                  Max Streak: <span className="font-extrabold text-zinc-700">{githubStats.longest_streak}d</span>
+                  Max Streak:{" "}
+                  <span className="font-extrabold text-foreground">
+                    {githubStats.longest_streak}d
+                  </span>
                 </span>
                 <span>
-                  Current Streak: <span className="font-extrabold text-zinc-700">{githubStats.current_streak}d</span>
+                  Current Streak:{" "}
+                  <span className="font-extrabold text-foreground">
+                    {githubStats.current_streak}d
+                  </span>
                 </span>
               </div>
               <ContributionHeatmap days={githubStats.days} />
@@ -271,54 +325,77 @@ export function CandidateDashboard() {
 
             {/* Row 2: Languages and Commit Activity (Side by Side) */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <Section title="Languages" index={1}>
+              <Section title="Languages">
                 <LanguageChart projects={githubResource.data.projects} />
               </Section>
-              <Section title="Commit Activity (weekly)" index={2}>
-                <CommitActivityChart weeklyCounts={githubStats.commit_activity_weekly} />
+              <Section title="Commit Activity (weekly)">
+                <CommitActivityChart
+                  weeklyCounts={githubStats.commit_activity_weekly}
+                />
               </Section>
             </div>
 
             {/* Row 3: Talent Score and Score History (Side by Side) */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {talentResource.loading && !talentResource.data ? (
-                <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-                  <CardContent className="p-6">
-                    <EmptyState message="Loading your Talent Score…" />
+                <Card>
+                  <CardContent className="space-y-3 p-6">
+                    {/* A skeleton, not an empty state: the score is loading, not absent. */}
+                    <Skeleton className="h-8 w-24" />
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="h-3 w-32" />
                   </CardContent>
                 </Card>
               ) : talentResource.error && !talentResource.data ? (
-                <SectionError message={talentResource.error} onRetry={talentResource.retry} retrying={talentResource.loading} />
+                <SectionError
+                  message={talentResource.error}
+                  onRetry={talentResource.retry}
+                  retrying={talentResource.loading}
+                />
               ) : !talentResource.data?.latestScore ? (
-                <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-                  <CardHeader className="pb-3 border-b border-zinc-100">
-                    <CardTitle className="font-heading text-xs font-bold tracking-wider text-zinc-400 uppercase">Connect evidence to get Talent Score</CardTitle>
+                <Card className="border-border bg-card text-foreground shadow-flat ">
+                  <CardHeader className="pb-3 border-b border-border">
+                    <CardTitle className="text-section font-semibold text-foreground">
+                      Connect evidence to get Talent Score
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <p className="mb-4 text-xs text-zinc-500">
-                      Connect GitHub and upload a resume to compute your first Talent Score.
+                    <p className="mb-4 text-xs text-muted-foreground">
+                      Connect GitHub and upload a resume to compute your first
+                      Talent Score.
                     </p>
-                    <Button className="w-full bg-zinc-900 hover:bg-zinc-800 text-white font-medium" render={<Link href="/profile/edit" />}>Get started</Button>
+                    <Button
+                      className="w-full bg-foreground hover:bg-foreground text-white font-medium"
+                      render={<Link href="/profile/edit" />}
+                    >
+                      Get started
+                    </Button>
                   </CardContent>
                 </Card>
               ) : (
                 <>
-                  <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-                    <CardHeader className="pb-3 border-b border-zinc-100 mb-4 flex flex-row items-center justify-between">
-                      <CardTitle className="font-heading text-xs font-bold tracking-wider text-zinc-400 uppercase">
+                  <Card className="border-border bg-card text-foreground shadow-flat ">
+                    <CardHeader className="pb-3 border-b border-border mb-4 flex flex-row items-center justify-between">
+                      <CardTitle className="text-section font-semibold text-foreground">
                         Talent Score
                       </CardTitle>
-                      <span className="font-heading text-xl font-extrabold text-indigo-600 font-mono">
-                        {talentResource.data.latestScore.overall !== null ? talentResource.data.latestScore.overall.toFixed(1) : "—"}
+                      <span className="font-heading text-xl font-extrabold text-primary font-mono">
+                        {talentResource.data.latestScore.overall !== null
+                          ? talentResource.data.latestScore.overall.toFixed(1)
+                          : "—"}
                       </span>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      <ScoreRadarChart subScores={talentResource.data.latestScore.sub_scores} />
+                      <ScoreRadarChart
+                        subScores={talentResource.data.latestScore.sub_scores}
+                      />
                     </CardContent>
                   </Card>
 
-                  <Section title="Score history" index={3}>
-                    <ScoreTrendLine history={talentResource.data.scoreHistory} />
+                  <Section title="Score history">
+                    <ScoreTrendLine
+                      history={talentResource.data.scoreHistory}
+                    />
                   </Section>
                 </>
               )}
@@ -329,10 +406,10 @@ export function CandidateDashboard() {
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <EvidenceReceipt score={talentResource.data.latestScore} />
                 <div className="space-y-6">
-                  <Section title="Badges" index={4}>
+                  <Section title="Badges">
                     <BadgeGrid badges={talentResource.data.badges} />
                   </Section>
-                  <Section title="Skills Matrix" index={5}>
+                  <Section title="Skills Matrix">
                     <SkillsSection projects={githubResource.data.projects} />
                   </Section>
                 </div>
@@ -340,39 +417,62 @@ export function CandidateDashboard() {
             )}
 
             {/* Row 5: GitHub Stats (Full Width) */}
-            <Section title="GitHub Stats" index={6}>
+            <Section title="GitHub Stats">
               <GithubStatsCards summary={githubResource.data} />
             </Section>
 
             {/* Row 6: Repository Analytics (Full Width) */}
-            <Section title="Repository Analytics" index={7}>
+            <Section title="Repository Analytics">
               <RepositoryGrid projects={githubResource.data.projects} />
             </Section>
 
             {/* Row 7: Problem Solving Stats (Full Width) */}
             {profile && (
-              <ProblemSolvingStats leetcodeUsername={profile.leetcode_username} leetcodeStats={profile.leetcode_stats} />
+              <ProblemSolvingStats
+                leetcodeUsername={profile.leetcode_username}
+                leetcodeStats={profile.leetcode_stats}
+              />
             )}
 
             {/* Row 8: Achievements Portfolio (Full Width) */}
-            <Section title="Achievements Portfolio" index={8}>
-              <AchievementsGrid githubStats={githubStats} githubSummary={githubResource.data} projects={githubResource.data.projects} />
+            <Section title="Achievements Portfolio">
+              <AchievementsGrid
+                githubStats={githubStats}
+                githubSummary={githubResource.data}
+                projects={githubResource.data.projects}
+              />
             </Section>
           </>
         )}
 
         {/* Quick Actions Grid */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 pt-6 border-t border-zinc-200">
-          <Button variant="outline" className="border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 text-zinc-700 font-medium transition-colors" render={<Link href="/profile/edit" />}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 pt-6 border-t border-border">
+          <Button
+            variant="outline"
+            className="border-border hover:bg-card hover:text-foreground text-foreground font-medium transition-colors"
+            render={<Link href="/profile/edit" />}
+          >
             {githubUsername ? "Update evidence" : "Connect evidence"}
           </Button>
-          <Button variant="outline" className="border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 text-zinc-700 font-medium transition-colors" render={<Link href="/resume-builder" />}>
+          <Button
+            variant="outline"
+            className="border-border hover:bg-card hover:text-foreground text-foreground font-medium transition-colors"
+            render={<Link href="/resume-builder" />}
+          >
             Build resume & portfolio
           </Button>
-          <Button variant="outline" className="border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 text-zinc-700 font-medium transition-colors" render={<Link href="/career" />}>
+          <Button
+            variant="outline"
+            className="border-border hover:bg-card hover:text-foreground text-foreground font-medium transition-colors"
+            render={<Link href="/career" />}
+          >
             AI Career Guidance
           </Button>
-          <Button variant="outline" className="border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 text-zinc-700 font-medium transition-colors" render={<Link href="/pitch-deck" />}>
+          <Button
+            variant="outline"
+            className="border-border hover:bg-card hover:text-foreground text-foreground font-medium transition-colors"
+            render={<Link href="/pitch-deck" />}
+          >
             Pitch Deck Analyzer
           </Button>
         </div>

@@ -10,7 +10,7 @@ interface SkillsSectionWrapperProps {
 
 export function SkillsSectionWrapper({ projects }: SkillsSectionWrapperProps) {
   return (
-    <Section title="Skills" index={5}>
+    <Section title="Skills">
       <SkillsSection projects={projects} />
     </Section>
   );

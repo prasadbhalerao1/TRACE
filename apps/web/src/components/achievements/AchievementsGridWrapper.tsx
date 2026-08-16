@@ -2,7 +2,11 @@
 
 import { Section } from "@/components/common/Section";
 import { AchievementsGrid } from "@/components/achievements/AchievementsGrid";
-import type { GithubProjectSummary, GithubStats, GithubSummary } from "@/lib/api";
+import type {
+  GithubProjectSummary,
+  GithubStats,
+  GithubSummary,
+} from "@/lib/api";
 
 interface AchievementsGridWrapperProps {
   githubStats: GithubStats;
@@ -10,10 +14,18 @@ interface AchievementsGridWrapperProps {
   projects: GithubProjectSummary[];
 }
 
-export function AchievementsGridWrapper({ githubStats, githubSummary, projects }: AchievementsGridWrapperProps) {
+export function AchievementsGridWrapper({
+  githubStats,
+  githubSummary,
+  projects,
+}: AchievementsGridWrapperProps) {
   return (
-    <Section title="Achievements" index={6}>
-      <AchievementsGrid githubStats={githubStats} githubSummary={githubSummary} projects={projects} />
+    <Section title="Achievements">
+      <AchievementsGrid
+        githubStats={githubStats}
+        githubSummary={githubSummary}
+        projects={projects}
+      />
     </Section>
   );
 }

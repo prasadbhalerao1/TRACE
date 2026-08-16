@@ -8,9 +8,11 @@ interface RepositoryGridWrapperProps {
   projects: GithubProjectSummary[];
 }
 
-export function RepositoryGridWrapper({ projects }: RepositoryGridWrapperProps) {
+export function RepositoryGridWrapper({
+  projects,
+}: RepositoryGridWrapperProps) {
   return (
-    <Section title="Repository Analytics" index={4}>
+    <Section title="Repository Analytics">
       <RepositoryGrid projects={projects} />
     </Section>
   );

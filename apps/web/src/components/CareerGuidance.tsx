@@ -39,18 +39,28 @@ export function CareerGuidance() {
         if (!token) throw new Error("No session token");
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Career guidance request timed out after 60 seconds. Please try again.")), 60000)
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Career guidance request timed out after 60 seconds. Please try again.",
+                ),
+              ),
+            60000,
+          ),
         );
 
         const result = await Promise.race([
           fetchCareerGuidance(token, { targetRole: role, refresh }),
-          timeoutPromise
+          timeoutPromise,
         ]);
 
         setGuidance(result);
         setTargetRole(result.target_role ?? role ?? "");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load career guidance");
+        setError(
+          err instanceof Error ? err.message : "Failed to load career guidance",
+        );
       } finally {
         setLoading(false);
       }
@@ -70,19 +80,32 @@ export function CareerGuidance() {
         if (!token) throw new Error("No session token");
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Career guidance request timed out after 60 seconds. Please try again.")), 60000)
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Career guidance request timed out after 60 seconds. Please try again.",
+                ),
+              ),
+            60000,
+          ),
         );
 
         const result = await Promise.race([
           fetchCareerGuidance(token, {}),
-          timeoutPromise
+          timeoutPromise,
         ]);
 
         if (cancelled) return;
         setGuidance(result);
         setTargetRole(result.target_role ?? "");
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load career guidance");
+        if (!cancelled)
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load career guidance",
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -138,7 +161,9 @@ export function CareerGuidance() {
             </div>
           )}
           {loading && !guidance && (
-            <p className="text-sm text-muted-foreground">Analyzing your skill gaps…</p>
+            <p className="text-sm text-muted-foreground">
+              Analyzing your skill gaps…
+            </p>
           )}
         </CardContent>
       </Card>
@@ -148,18 +173,23 @@ export function CareerGuidance() {
           <Card>
             <CardHeader>
               <CardTitle className="font-heading">
-                Skill Gaps {guidance.target_role ? `— ${guidance.target_role}` : ""}
+                Skill Gaps{" "}
+                {guidance.target_role ? `— ${guidance.target_role}` : ""}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {guidance.skill_gaps.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No significant gaps found for this role — your skill set already covers it well.
+                  No significant gaps found for this role — your skill set
+                  already covers it well.
                 </p>
               ) : (
                 <ol className="space-y-2">
                   {guidance.skill_gaps.map((gap) => (
-                    <li key={gap.skill} className="flex items-center justify-between gap-4 text-sm">
+                    <li
+                      key={gap.skill}
+                      className="flex items-center justify-between gap-4 text-sm"
+                    >
                       <span className="flex items-center gap-2">
                         <Badge variant="outline">#{gap.priority}</Badge>
                         {gap.skill}
@@ -185,11 +215,15 @@ export function CareerGuidance() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-heading">Recommended Courses</CardTitle>
+              <CardTitle className="font-heading">
+                Recommended Courses
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {guidance.recommended_courses.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No matching courses for your current gaps.</p>
+                <p className="text-sm text-muted-foreground">
+                  No matching courses for your current gaps.
+                </p>
               ) : (
                 <ul className="space-y-2">
                   {guidance.recommended_courses.map((course) => (
@@ -205,7 +239,9 @@ export function CareerGuidance() {
                       <span className="text-xs text-muted-foreground">
                         {course.provider}
                         {course.is_free ? " · free" : ""}
-                        {course.estimated_hours ? ` · ~${course.estimated_hours}h` : ""}
+                        {course.estimated_hours
+                          ? ` · ~${course.estimated_hours}h`
+                          : ""}
                       </span>
                     </li>
                   ))}
@@ -219,16 +255,23 @@ export function CareerGuidance() {
               <CardTitle className="font-heading">Salary Estimate</CardTitle>
             </CardHeader>
             <CardContent>
-              {guidance.salary_estimate_low !== null && guidance.salary_estimate_high !== null ? (
+              {guidance.salary_estimate_low !== null &&
+              guidance.salary_estimate_high !== null ? (
                 <>
-                  <SalaryRangeChart low={guidance.salary_estimate_low} high={guidance.salary_estimate_high} />
+                  <SalaryRangeChart
+                    low={guidance.salary_estimate_low}
+                    high={guidance.salary_estimate_high}
+                  />
                   {guidance.salary_rationale && (
-                    <p className="mt-1 text-xs text-muted-foreground">{guidance.salary_rationale}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {guidance.salary_rationale}
+                    </p>
                   )}
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {guidance.salary_rationale ?? "Salary estimate not available yet."}
+                  {guidance.salary_rationale ??
+                    "Salary estimate not available yet."}
                 </p>
               )}
             </CardContent>

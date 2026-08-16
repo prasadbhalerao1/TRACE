@@ -16,7 +16,8 @@ interface InterviewLobbyProps {
   joining: boolean;
 }
 
-type PermissionState = "prompt" | "granted" | "denied" | "no-device" | "unsupported";
+type PermissionState =
+  "prompt" | "granted" | "denied" | "no-device" | "unsupported";
 
 /** Pre-interview device check, Google-Meet style: camera/mic preview on one side, the
  * topic outline on the other.
@@ -67,7 +68,10 @@ export function InterviewLobby({
     let cancelled = false;
 
     (async () => {
-      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.mediaDevices?.getUserMedia
+      ) {
         setPermission("unsupported");
         return;
       }
@@ -75,7 +79,10 @@ export function InterviewLobby({
       try {
         // Audio as well as video, unlike the interview page's camera-only toggle — the
         // whole point of a lobby is to catch a dead mic before the interview starts.
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -86,7 +93,8 @@ export function InterviewLobby({
 
         const AudioCtor =
           window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          (window as unknown as { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext;
         if (!AudioCtor) return;
 
         const context = new AudioCtor();
@@ -114,7 +122,10 @@ export function InterviewLobby({
         // Distinguish "you said no" from "there is nothing to use" — the fixes differ.
         if (name === "NotFoundError" || name === "DevicesNotFoundError") {
           setPermission("no-device");
-        } else if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        } else if (
+          name === "NotAllowedError" ||
+          name === "PermissionDeniedError"
+        ) {
           setPermission("denied");
         } else {
           setPermission("denied");
@@ -167,7 +178,7 @@ export function InterviewLobby({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Left — device preview */}
         <div className="space-y-3">
-          <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900">
+          <div className="relative aspect-video overflow-hidden rounded-xl bg-foreground">
             {permission === "granted" && cameraOn ? (
               <video
                 ref={videoRef}
@@ -178,8 +189,8 @@ export function InterviewLobby({
               />
             ) : (
               <div className="flex size-full flex-col items-center justify-center gap-2 px-6 text-center">
-                <VideoOff className="size-8 text-zinc-500" />
-                <p className="text-sm font-medium text-zinc-300">
+                <VideoOff className="size-8 text-muted-foreground" />
+                <p className="text-sm font-medium text-muted-foreground">
                   {permission === "granted" && !cameraOn
                     ? "Camera is off"
                     : permission === "denied"
@@ -191,18 +202,20 @@ export function InterviewLobby({
                           : "Starting camera…"}
                 </p>
                 {permission === "denied" && (
-                  <p className="max-w-xs text-xs text-zinc-500">
-                    Allow access in your browser&apos;s address bar to see yourself. You can
-                    still join and answer by typing.
+                  <p className="max-w-xs text-xs text-muted-foreground">
+                    Allow access in your browser&apos;s address bar to see
+                    yourself. You can still join and answer by typing.
                   </p>
                 )}
                 {permission === "no-device" && (
-                  <p className="max-w-xs text-xs text-zinc-500">
+                  <p className="max-w-xs text-xs text-muted-foreground">
                     You can still join — this interview works entirely by text.
                   </p>
                 )}
                 {errorDetail && (
-                  <p className="max-w-xs text-xs text-zinc-600">{errorDetail}</p>
+                  <p className="max-w-xs text-xs text-muted-foreground">
+                    {errorDetail}
+                  </p>
                 )}
               </div>
             )}
@@ -216,8 +229,14 @@ export function InterviewLobby({
               onClick={toggleCamera}
               disabled={permission !== "granted"}
             >
-              {cameraOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
-              <span className="ml-1.5">{cameraOn ? "Camera on" : "Camera off"}</span>
+              {cameraOn ? (
+                <Video className="size-4" />
+              ) : (
+                <VideoOff className="size-4" />
+              )}
+              <span className="ml-1.5">
+                {cameraOn ? "Camera on" : "Camera off"}
+              </span>
             </Button>
 
             <Button
@@ -227,18 +246,22 @@ export function InterviewLobby({
               onClick={toggleMic}
               disabled={permission !== "granted"}
             >
-              {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+              {micOn ? (
+                <Mic className="size-4" />
+              ) : (
+                <MicOff className="size-4" />
+              )}
               <span className="ml-1.5">{micOn ? "Mic on" : "Mic off"}</span>
             </Button>
 
             {/* Level meter — the only way to tell a working mic from a silent one
-                before the interview starts. */}
+ before the interview starts. */}
             <div
-              className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
               aria-hidden="true"
             >
               <div
-                className="h-full rounded-full bg-emerald-500 transition-[width] duration-75"
+                className="h-full rounded-full bg-success transition-[width] duration-75"
                 style={{ width: `${Math.round(micLevel * 100)}%` }}
               />
             </div>
@@ -249,22 +272,22 @@ export function InterviewLobby({
         <Card className="flex flex-col">
           <CardContent className="flex-1 space-y-3 pt-6">
             <div>
-              <h3 className="font-heading text-base font-semibold text-ink dark:text-zinc-50">
+              <h3 className="font-heading text-base font-semibold text-foreground">
                 {title}
               </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 {roleTitle ? `${roleTitle} · ` : ""}
                 {topics.length} topic{topics.length === 1 ? "" : "s"}
               </p>
               {/* Deliberately describes topics as an outline, not a question list. The
-                  interviewer generates each question live from the topic and adapts to
-                  the answer — a weak answer earns one follow-up before moving on
-                  (services/agents/assessment/interview_graph.py), so the number of
-                  questions is not fixed and the wording is never pre-written. */}
-              <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                This outline sets the agenda — it isn&apos;t a script. Every question is
-                written live from your answers, and a thin answer earns a follow-up on
-                the same topic before moving on.
+ interviewer generates each question live from the topic and adapts to
+ the answer — a weak answer earns one follow-up before moving on
+ (services/agents/assessment/interview_graph.py), so the number of
+ questions is not fixed and the wording is never pre-written. */}
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                This outline sets the agenda — it isn&apos;t a script. Every
+                question is written live from your answers, and a thin answer
+                earns a follow-up on the same topic before moving on.
               </p>
             </div>
 
@@ -272,12 +295,14 @@ export function InterviewLobby({
               {topics.map((topic, index) => (
                 <li
                   key={`${index}-${topic}`}
-                  className="flex gap-3 rounded-md border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+                  className="flex gap-3 rounded-md border border-border bg-card p-3"
                 >
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[11px] font-bold text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
                     {index + 1}
                   </span>
-                  <span className="text-sm font-medium text-ink dark:text-zinc-100">{topic}</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {topic}
+                  </span>
                 </li>
               ))}
             </ol>
@@ -286,14 +311,19 @@ export function InterviewLobby({
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <Button type="button" variant="ghost" onClick={onBack} disabled={joining}>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onBack}
+          disabled={joining}
+        >
           <ArrowLeft className="mr-1.5 size-4" />
           Back
         </Button>
 
         {/* Never blocked on device permission: the interview is fully answerable by
-            text, so refusing to start without a camera would strand people whose
-            hardware or browser settings we can't fix for them. */}
+ text, so refusing to start without a camera would strand people whose
+ hardware or browser settings we can't fix for them. */}
         <Button type="button" onClick={handleJoin} disabled={joining}>
           {joining ? (
             <>

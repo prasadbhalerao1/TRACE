@@ -11,7 +11,11 @@ import {
 
 import { PITCH_SCORE_LABELS, type RubricScore } from "@/lib/api";
 
-export function PitchScoreRadarChart({ scores }: { scores: Record<string, RubricScore> }) {
+export function PitchScoreRadarChart({
+  scores,
+}: {
+  scores: Record<string, RubricScore>;
+}) {
   const data = Object.entries(PITCH_SCORE_LABELS).map(([key, label]) => ({
     subject: label,
     value: scores[key]?.value ?? 0,
