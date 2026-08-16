@@ -6,7 +6,13 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { fetchOpenHackathons, type HackathonResponse } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 
@@ -18,7 +24,9 @@ import { CardListSkeleton } from "@/components/CardListSkeleton";
 // organizer-scoped `GET /hackathons` — see .agents/decisions.md for the full rationale.
 export default function CandidateHackathonsPage() {
   const { getToken } = useAuth();
-  const [hackathons, setHackathons] = useState<HackathonResponse[] | null>(null);
+  const [hackathons, setHackathons] = useState<HackathonResponse[] | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,7 +38,10 @@ export default function CandidateHackathonsPage() {
         const result = await fetchOpenHackathons(token);
         if (!cancelled) setHackathons(result);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load hackathons");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to load hackathons",
+          );
       }
     })();
     return () => {
@@ -41,16 +52,21 @@ export default function CandidateHackathonsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Hackathons</h1>
-        <p className="text-sm text-slate">
-          Join an open hackathon and submit your team&apos;s project — recruiters watch top-ranked teams for hiring.
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Hackathons
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Join an open hackathon and submit your team&apos;s project —
+          recruiters watch top-ranked teams for hiring.
         </p>
       </div>
 
-      {error && <p className="text-sm text-rose-flagged">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       {!error && hackathons === null && <CardListSkeleton />}
       {hackathons !== null && hackathons.length === 0 && (
-        <p className="text-sm text-slate">No open hackathons right now — check back later.</p>
+        <p className="text-sm text-muted-foreground">
+          No open hackathons right now — check back later.
+        </p>
       )}
 
       <div className="space-y-4">
@@ -59,14 +75,19 @@ export default function CandidateHackathonsPage() {
             <CardHeader>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <CardTitle className="text-base font-semibold">{hackathon.name}</CardTitle>
+                  <CardTitle className="text-base font-semibold">
+                    {hackathon.name}
+                  </CardTitle>
                   <CardDescription>
                     {hackathon.start_date && hackathon.end_date
                       ? `${new Date(hackathon.start_date).toLocaleDateString()} – ${new Date(hackathon.end_date).toLocaleDateString()}`
                       : "Dates to be announced"}
                   </CardDescription>
                 </div>
-                <Button size="sm" render={<Link href={`/hackathons/${hackathon.id}/join`} />}>
+                <Button
+                  size="sm"
+                  render={<Link href={`/hackathons/${hackathon.id}/join`} />}
+                >
                   Submit Project
                 </Button>
               </div>
@@ -75,7 +96,9 @@ export default function CandidateHackathonsPage() {
               <CardContent>
                 <div className="flex flex-wrap gap-1.5">
                   {hackathon.tracks.map((track) => (
-                    <Badge key={track} variant="outline">{track}</Badge>
+                    <Badge key={track} variant="outline">
+                      {track}
+                    </Badge>
                   ))}
                 </div>
               </CardContent>

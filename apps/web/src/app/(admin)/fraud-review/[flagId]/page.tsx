@@ -10,60 +10,95 @@
 // (`.agents/decisions.md`'s Module 06 entry) — this is a UX nicety on top of a real
 // server-side guarantee, not a substitute for it.
 
-import { useAuth } from "@/components/AuthProvider";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
+
+import { useAuth } from "@/components/AuthProvider";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import Link from "next/link";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchFraudFlagDetail, FraudFlagDetailResponse, reviewFraudFlag } from "@/lib/api";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  fetchFraudFlagDetail,
+  reviewFraudFlag,
+} from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 export default function AdminFlagAuditPage() {
   const params = useParams<{ flagId: string }>();
   const { getToken } = useAuth();
 
-  const [detail, setDetail] = useState<FraudFlagDetailResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
-  const [submitting, setSubmitting] = useState<"upheld" | "dismissed" | null>(null);
+  const [submitting, setSubmitting] = useState<"upheld" | "dismissed" | null>(
+    null,
+  );
   const [resolution, setResolution] = useState<string | null>(null);
 
-  async function load() {
+  // Migrated off a hand-rolled useEffect + load() pair; the dependency array had to be
+  // eslint-disabled because load() was redefined every render. useAsyncResource owns
+  // the fetch, the retry and the cancellation, and `retry()` replaces the manual
+  // re-read after a review decision.
+  const fetcher = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error("No session token");
-    setDetail(await fetchFraudFlagDetail(token, params.flagId));
-  }
+    return fetchFraudFlagDetail(token, params.flagId);
+  }, [getToken, params.flagId]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        await load();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load flag detail");
-      } finally {
-        setLoading(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.flagId]);
+  const {
+    data: detail,
+    error: loadError,
+    loading,
+    retry,
+  } = useAsyncResource(fetcher, `admin:flag:${params.flagId}`);
+
+  const error = actionError ?? loadError;
 
   async function handleAction(status: "upheld" | "dismissed") {
     if (status === "upheld" && !reviewNotes.trim()) {
-      setError("Review notes are required to uphold a flag.");
+      setActionError("Review notes are required to uphold a flag.");
       return;
     }
     setSubmitting(status);
-    setError(null);
+    setActionError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      await reviewFraudFlag(token, params.flagId, { status, review_notes: reviewNotes || null });
+      await reviewFraudFlag(token, params.flagId, {
+        status,
+        review_notes: reviewNotes || null,
+      });
       setResolution(status);
-      await load();
+      toast.success(status === "upheld" ? "Flag upheld" : "Flag dismissed", {
+        description:
+          status === "upheld"
+            ? "This now counts toward the candidate's authenticity score."
+            : "No effect on the candidate's profile.",
+      });
+      retry();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit review");
+      const message =
+        err instanceof Error ? err.message : "Failed to submit review";
+      setActionError(message);
+      toast.error(message);
     } finally {
       setSubmitting(null);
     }
@@ -73,17 +108,47 @@ export default function AdminFlagAuditPage() {
     ? (detail!.flag.evidence.signal_evidence as string[])
     : [];
   const reportSummary =
-    typeof detail?.flag.evidence?.report_summary === "string" ? (detail!.flag.evidence.report_summary as string) : null;
+    typeof detail?.flag.evidence?.report_summary === "string"
+      ? (detail!.flag.evidence.report_summary as string)
+      : null;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Fraud Flag Review</h1>
-        <p className="text-sm text-slate">Audit evidence and make a resolution choice on flag {params.flagId}.</p>
-      </div>
+    <Page>
+      <PageHeader
+        // Titled by what is being reviewed rather than by the page's own name, and
+        // no longer prints the raw flag UUID at a reviewer.
+        title={
+          detail
+            ? detail.flag.flag_type.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
+            : "Flag review"
+        }
+        description="Nothing counts against the candidate until you uphold it."
+        breadcrumb={
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/fraud-review" />}>
+                  Fraud review
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Flag</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        }
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {loading && <CardListSkeleton />}
+      {error ? (
+        <SectionError
+          message={error}
+          onRetry={actionError ? () => setActionError(null) : retry}
+          retrying={loading}
+          className="mb-4"
+        />
+      ) : null}
+      {loading && !detail ? <CardListSkeleton /> : null}
 
       {detail && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -92,17 +157,26 @@ export default function AdminFlagAuditPage() {
               <CardTitle className="text-base font-semibold capitalize">
                 {detail.flag.flag_type.replace(/_/g, " ")}
               </CardTitle>
-              <CardDescription>Review the evidence trail and the candidate&apos;s dispute, if any.</CardDescription>
+              <CardDescription>
+                Review the evidence trail and the candidate&apos;s dispute, if
+                any.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate">
+            <CardContent className="space-y-4 text-sm text-muted-foreground">
               <div className="border-b pb-3">
-                <span className="font-semibold text-ink dark:text-zinc-50">Fraud Risk Report:</span>
-                <p className="text-xs text-slate mt-1">{reportSummary ?? "No narrative available."}</p>
+                <span className="font-semibold text-foreground">
+                  Fraud Risk Report:
+                </span>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {reportSummary ?? "No narrative available."}
+                </p>
               </div>
 
               <div className="border-b pb-3">
-                <span className="font-semibold text-ink dark:text-zinc-50">Cited Evidence:</span>
-                <ul className="text-xs text-slate mt-1 list-disc list-inside space-y-1">
+                <span className="font-semibold text-foreground">
+                  Cited Evidence:
+                </span>
+                <ul className="text-xs text-muted-foreground mt-1 list-disc list-inside space-y-1">
                   {evidenceItems.length > 0 ? (
                     evidenceItems.map((item, i) => <li key={i}>{item}</li>)
                   ) : (
@@ -113,32 +187,42 @@ export default function AdminFlagAuditPage() {
 
               {detail.dispute && (
                 <div className="border-b pb-3">
-                  <span className="font-semibold text-ink dark:text-zinc-50">Candidate Dispute Statement:</span>
-                  <p className="text-xs text-slate mt-1">&quot;{detail.dispute.candidate_statement}&quot;</p>
+                  <span className="font-semibold text-foreground">
+                    Candidate Dispute Statement:
+                  </span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    &quot;{detail.dispute.candidate_statement}&quot;
+                  </p>
                 </div>
               )}
 
               {detail.dispute_review_assist.available && (
-                <div className="border-b pb-3 bg-slate-50 dark:bg-slate-900/40 -mx-2 px-2 py-2 rounded">
-                  <span className="font-semibold text-ink dark:text-zinc-50">
-                    Dispute Review Agent (assistive summary — not a recommendation):
+                <div className="border-b pb-3 bg-card -mx-2 px-2 py-2 rounded-md">
+                  <span className="font-semibold text-foreground">
+                    Dispute Review Agent (assistive summary — not a
+                    recommendation):
                   </span>
-                  <p className="text-xs text-slate mt-1">{detail.dispute_review_assist.candidate_context_summary}</p>
-                  <ul className="text-xs text-slate mt-1 list-disc list-inside space-y-1">
-                    {detail.dispute_review_assist.points_of_agreement_or_conflict.map((point, i) => (
-                      <li key={i}>{point}</li>
-                    ))}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {detail.dispute_review_assist.candidate_context_summary}
+                  </p>
+                  <ul className="text-xs text-muted-foreground mt-1 list-disc list-inside space-y-1">
+                    {detail.dispute_review_assist.points_of_agreement_or_conflict.map(
+                      (point, i) => (
+                        <li key={i}>{point}</li>
+                      ),
+                    )}
                   </ul>
                 </div>
               )}
 
-              {detail.flag.status === "raised" || detail.flag.status === "under_review" ? (
+              {detail.flag.status === "raised" ||
+              detail.flag.status === "under_review" ? (
                 <div className="space-y-3 pt-2">
-                  <label className="text-xs font-medium text-slate">
+                  <label className="text-xs font-medium text-muted-foreground">
                     Review notes (required to uphold; optional to dismiss):
                   </label>
                   <textarea
-                    className="w-full min-h-20 p-3 border rounded text-sm bg-background text-foreground focus:outline-none"
+                    className="w-full min-h-20 p-3 border rounded-md text-sm bg-background text-foreground focus:outline-none"
                     placeholder="Explain the basis for your decision..."
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
@@ -149,7 +233,9 @@ export default function AdminFlagAuditPage() {
                       variant="secondary"
                       disabled={submitting !== null}
                     >
-                      {submitting === "dismissed" ? "Dismissing…" : "Dismiss Flag"}
+                      {submitting === "dismissed"
+                        ? "Dismissing…"
+                        : "Dismiss Flag"}
                     </Button>
                     <Button
                       onClick={() => handleAction("upheld")}
@@ -161,11 +247,13 @@ export default function AdminFlagAuditPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded text-sm mt-4">
-                  <h4 className="font-semibold text-emerald-800 dark:text-emerald-400 capitalize">
+                <div className="p-4 bg-success/10 border border-success/20 rounded-md text-sm mt-4">
+                  <h4 className="font-semibold text-success capitalize">
                     Flag status: {resolution ?? detail.flag.status}
                   </h4>
-                  <p className="text-xs text-slate mt-1">Reviewer notes: {detail.flag.review_notes ?? "(none)"}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Reviewer notes: {detail.flag.review_notes ?? "(none)"}
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -174,16 +262,25 @@ export default function AdminFlagAuditPage() {
           <div>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base font-semibold">Audit Instructions</CardTitle>
+                <CardTitle className="text-base font-semibold">
+                  Audit Instructions
+                </CardTitle>
               </CardHeader>
-              <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-                <p>Weigh the evidence and any candidate dispute context. The AI summary above is assistive only — it never recommends a verdict.</p>
-                <p>An Uphold decision requires written notes and is the only action that affects the candidate&apos;s authenticity score.</p>
+              <CardContent className="text-xs text-muted-foreground space-y-2 leading-relaxed">
+                <p>
+                  Weigh the evidence and any candidate dispute context. The AI
+                  summary above is assistive only — it never recommends a
+                  verdict.
+                </p>
+                <p>
+                  An Uphold decision requires written notes and is the only
+                  action that affects the candidate&apos;s authenticity score.
+                </p>
               </CardContent>
             </Card>
           </div>
         </div>
       )}
-    </div>
+    </Page>
   );
 }

@@ -10,7 +10,11 @@ import { PlagiarismMatchList } from "@/components/PlagiarismMatchList";
 import { SlideViewer } from "@/components/SlideViewer";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchPresentationReport, PITCH_SCORE_LABELS, type PresentationReportResponse } from "@/lib/api";
+import {
+  fetchPresentationReport,
+  PITCH_SCORE_LABELS,
+  type PresentationReportResponse,
+} from "@/lib/api";
 
 // Lives OUTSIDE any (role) route group — same reasoning as the shared /dashboard route
 // (.agents/decisions.md): doc/SRS/04 §1/§2 says this module is "fully self-contained"
@@ -53,7 +57,10 @@ export default function PitchDeckReportPage() {
           timer = setTimeout(load, 2000);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load report");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to load report",
+          );
       }
     }
 
@@ -65,9 +72,15 @@ export default function PitchDeckReportPage() {
     };
   }, [isLoaded, isSignedIn, me, getToken, router, params.id]);
 
-  if (meError) return <div className="p-8 text-sm text-destructive">{meError}</div>;
+  if (meError)
+    return <div className="p-8 text-sm text-destructive">{meError}</div>;
   if (error) return <div className="p-8 text-sm text-destructive">{error}</div>;
-  if (!report) return <div className="p-8 text-sm text-muted-foreground">Loading pitch report…</div>;
+  if (!report)
+    return (
+      <div className="p-8 text-sm text-muted-foreground">
+        Loading pitch report…
+      </div>
+    );
 
   if (report.status === "failed") {
     return (
@@ -78,7 +91,8 @@ export default function PitchDeckReportPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              This deck could not be processed. Try re-uploading, or check the file format.
+              This deck could not be processed. Try re-uploading, or check the
+              file format.
             </p>
           </CardContent>
         </Card>
@@ -98,8 +112,9 @@ export default function PitchDeckReportPage() {
               <div className="h-full w-full animate-pulse rounded-full bg-primary" />
             </div>
             <p className="text-sm text-muted-foreground">
-              Extracting slides, scoring problem clarity/innovation/feasibility, and checking for plagiarism —
-              this usually takes under a minute. This page updates automatically.
+              Extracting slides, scoring problem clarity/innovation/feasibility,
+              and checking for plagiarism — this usually takes under a minute.
+              This page updates automatically.
             </p>
           </CardContent>
         </Card>
@@ -112,7 +127,10 @@ export default function PitchDeckReportPage() {
       <Card>
         <CardHeader>
           <CardTitle className="font-heading">
-            Overall Pitch Score: {report.overall_pitch_score !== null ? report.overall_pitch_score.toFixed(1) : "—"}
+            Overall Pitch Score:{" "}
+            {report.overall_pitch_score !== null
+              ? report.overall_pitch_score.toFixed(1)
+              : "—"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -129,9 +147,14 @@ export default function PitchDeckReportPage() {
             const sub = report.scores[key];
             const wasRenormalized = report.renormalized_scores.includes(key);
             return (
-              <div key={key} className="border-b border-border pb-2 last:border-0 last:pb-0">
+              <div
+                key={key}
+                className="border-b border-border pb-2 last:border-0 last:pb-0"
+              >
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-medium text-foreground">{label}</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {label}
+                  </span>
                   <span className="text-sm tabular-nums text-muted-foreground">
                     {sub?.value !== null && sub?.value !== undefined
                       ? sub.value.toFixed(1)
@@ -140,7 +163,11 @@ export default function PitchDeckReportPage() {
                         : "N/A"}
                   </span>
                 </div>
-                {sub?.rationale && <p className="mt-0.5 text-xs text-muted-foreground">{sub.rationale}</p>}
+                {sub?.rationale && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {sub.rationale}
+                  </p>
+                )}
                 {sub?.gaps && sub.gaps.length > 0 && (
                   <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">
                     {sub.gaps.map((gap: string) => (
@@ -159,14 +186,18 @@ export default function PitchDeckReportPage() {
           <CardTitle className="font-heading">Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="whitespace-pre-wrap text-sm text-foreground">{report.summary ?? "No summary available."}</p>
+          <p className="whitespace-pre-wrap text-sm text-foreground">
+            {report.summary ?? "No summary available."}
+          </p>
         </CardContent>
       </Card>
 
       {report.suggestions.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="font-heading">Improvement suggestions</CardTitle>
+            <CardTitle className="font-heading">
+              Improvement suggestions
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="list-inside list-disc space-y-1 text-sm text-foreground">

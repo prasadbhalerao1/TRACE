@@ -40,13 +40,17 @@ interface PageProps {
   params: Promise<{ username: string }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { username } = await params;
   const portfolio = await fetchPublicPortfolio(BACKEND_URL, username);
   if (!portfolio) {
     return { title: "Profile not found" };
   }
-  const title = portfolio.headline ? `${portfolio.username} — ${portfolio.headline}` : portfolio.username;
+  const title = portfolio.headline
+    ? `${portfolio.username} — ${portfolio.headline}`
+    : portfolio.username;
   return {
     title,
     description:
@@ -79,40 +83,59 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
   } = portfolio;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 bg-white text-zinc-900 dark:bg-background dark:text-foreground p-8">
-      <ProfileHeader username={portfolio.username} headline={headline} location={location} overallScore={overall_score} />
+    <div className="mx-auto w-full max-w-5xl space-y-6 bg-card text-foreground p-8">
+      <ProfileHeader
+        username={portfolio.username}
+        headline={headline}
+        location={location}
+        overallScore={overall_score}
+      />
 
       {!github_username || !github_stats ? (
         <Card className="bg-card text-card-foreground">
           <CardContent className="p-5">
-            <EmptyState message="This candidate hasn't connected GitHub yet." />
+            <EmptyState
+              title="No GitHub evidence yet"
+              description="This candidate hasn't connected a GitHub account, so there are no repositories to show."
+            />
           </CardContent>
         </Card>
       ) : (
         <>
           <StatsGrid stats={github_stats} />
 
-          <Section title="Contribution Activity" index={0}>
+          <Section title="Contribution Activity">
             <div className="flex flex-wrap items-center gap-4 text-xs">
               <span className="text-muted-foreground">
-                Contributions <span className="font-semibold text-foreground">{github_stats.total_contributions}</span>
+                Contributions{" "}
+                <span className="font-semibold text-foreground">
+                  {github_stats.total_contributions}
+                </span>
               </span>
               <span className="text-muted-foreground">
-                Max Streak <span className="font-semibold text-foreground">{github_stats.longest_streak}</span>
+                Max Streak{" "}
+                <span className="font-semibold text-foreground">
+                  {github_stats.longest_streak}
+                </span>
               </span>
               <span className="text-muted-foreground">
-                Current Streak <span className="font-semibold text-foreground">{github_stats.current_streak}</span>
+                Current Streak{" "}
+                <span className="font-semibold text-foreground">
+                  {github_stats.current_streak}
+                </span>
               </span>
             </div>
             <ContributionHeatmap days={github_stats.days} />
           </Section>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Section title="Languages" index={1}>
+            <Section title="Languages">
               <LanguageChart projects={github_summary.projects} />
             </Section>
-            <Section title="Commit Activity (weekly)" index={2}>
-              <CommitActivityChartLazy weeklyCounts={github_stats.commit_activity_weekly} />
+            <Section title="Commit Activity (weekly)">
+              <CommitActivityChartLazy
+                weeklyCounts={github_stats.commit_activity_weekly}
+              />
             </Section>
           </div>
 
@@ -122,11 +145,18 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
 
           <SkillsSectionWrapper projects={github_summary.projects} />
 
-          <AchievementsGridWrapper githubStats={github_stats} githubSummary={github_summary} projects={github_summary.projects} />
+          <AchievementsGridWrapper
+            githubStats={github_stats}
+            githubSummary={github_summary}
+            projects={github_summary.projects}
+          />
         </>
       )}
 
-      <ProblemSolvingStats leetcodeUsername={leetcode_username} leetcodeStats={leetcode_stats} />
+      <ProblemSolvingStats
+        leetcodeUsername={leetcode_username}
+        leetcodeStats={leetcode_stats}
+      />
 
       {skills && skills.length > 0 && (
         <Card>
@@ -153,7 +183,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
               <Badge
                 key={badge.id}
                 variant="secondary"
-                className="border-teal-verified/40 text-teal-verified"
+                className="border-teal-verified/40 text-success"
                 title={badge.corroboration_sources.join(", ")}
               >
                 {badge.skill_name}
@@ -176,7 +206,9 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                   {entry.company ? ` — ${String(entry.company)}` : ""}
                 </p>
                 {entry.description ? (
-                  <p className="text-muted-foreground">{String(entry.description)}</p>
+                  <p className="text-muted-foreground">
+                    {String(entry.description)}
+                  </p>
                 ) : null}
               </div>
             ))}
@@ -192,7 +224,8 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
           <CardContent className="space-y-2">
             {education.map((entry, i) => (
               <p key={i} className="text-sm">
-                {String(entry.institution ?? "")} {entry.degree ? `— ${String(entry.degree)}` : ""}
+                {String(entry.institution ?? "")}{" "}
+                {entry.degree ? `— ${String(entry.degree)}` : ""}
               </p>
             ))}
           </CardContent>

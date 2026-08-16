@@ -5,7 +5,13 @@ import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -18,8 +24,14 @@ import {
   type TrustTier,
 } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
-const TRUST_TIERS: TrustTier[] = ["platform", "university", "employer", "community"];
+const TRUST_TIERS: TrustTier[] = [
+  "platform",
+  "university",
+  "employer",
+  "community",
+];
 
 // Certificate verification (services/agents/fraud/tools/issuer_lookup.py) checks a
 // candidate's entered issuer against this registry: a match with a
@@ -38,13 +50,22 @@ export default function TrustedIssuersPage() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // The issuer awaiting confirmation. Holding the whole row (not just an id) lets the
+  // dialog name what is about to be removed.
+  const [pendingDelete, setPendingDelete] =
+    useState<TrustedIssuerResponse | null>(null);
 
   const fetcher = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error("No session token");
     return fetchTrustedIssuers(token);
   }, [getToken]);
-  const { data: issuers, loading, error, retry } = useAsyncResource(fetcher, "admin:trusted-issuers");
+  const {
+    data: issuers,
+    loading,
+    error,
+    retry,
+  } = useAsyncResource(fetcher, "admin:trusted-issuers");
 
   function resetForm() {
     setEditingId(null);
@@ -102,21 +123,24 @@ export default function TrustedIssuersPage() {
     }
   }
 
+  // Confirmation moved into ConfirmDialog. `window.confirm` cannot be styled, blocks
+  // the main thread, has no busy state, and reads as a browser malfunction rather than
+  // part of the product.
   async function handleDelete(issuer: TrustedIssuerResponse) {
-    if (!confirm(`Remove "${issuer.name}" from the trusted issuer registry? Certificates from this issuer will start being treated as unrecognized.`)) {
-      return;
-    }
     setDeletingId(issuer.id);
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
       await deleteTrustedIssuer(token, issuer.id);
-      toast.success("Issuer removed");
+      toast.success(`Removed ${issuer.name}`);
       retry();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove issuer");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to remove issuer",
+      );
     } finally {
       setDeletingId(null);
+      setPendingDelete(null);
     }
   }
 
@@ -124,40 +148,53 @@ export default function TrustedIssuersPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Trusted Issuer Registry</h1>
-          <p className="text-sm text-slate">
-            Certificate verification checks the candidate&apos;s entered issuer against this list. An
-            issuer not listed here is flagged to reviewers as unrecognized instead of silently assumed
-            legitimate.
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Trusted Issuer Registry
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Certificate verification checks the candidate&apos;s entered issuer
+            against this list. An issuer not listed here is flagged to reviewers
+            as unrecognized instead of silently assumed legitimate.
           </p>
         </div>
-        <Button onClick={() => (formOpen ? resetForm() : setFormOpen(true))} variant={formOpen ? "outline" : "default"}>
+        <Button
+          onClick={() => (formOpen ? resetForm() : setFormOpen(true))}
+          variant={formOpen ? "outline" : "default"}
+        >
           {formOpen ? "Cancel" : "Add Issuer"}
         </Button>
       </div>
 
-      {error && <p className="text-sm text-rose-flagged">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {formOpen && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-semibold">{editingId ? "Edit Issuer" : "Add Trusted Issuer"}</CardTitle>
+            <CardTitle className="text-base font-semibold">
+              {editingId ? "Edit Issuer" : "Add Trusted Issuer"}
+            </CardTitle>
             <CardDescription>
-              Aliases let a candidate&apos;s free-text issuer entry (e.g. &quot;Amazon Web Services
-              (AWS)&quot;) still match this registry entry.
+              Aliases let a candidate&apos;s free-text issuer entry (e.g.
+              &quot;Amazon Web Services (AWS)&quot;) still match this registry
+              entry.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="issuer-name">Issuer name</Label>
-                <Input id="issuer-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Coursera" />
+                <Input
+                  id="issuer-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Coursera"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="issuer-tier">Trust tier</Label>
                 <select
                   id="issuer-tier"
-                  className="w-full text-sm border rounded-md px-3 py-2 bg-white dark:bg-zinc-900 dark:border-zinc-700 capitalize"
+                  className="w-full text-sm border rounded-md px-3 py-2 bg-card capitalize"
                   value={trustTier}
                   onChange={(e) => setTrustTier(e.target.value as TrustTier)}
                 >
@@ -179,22 +216,30 @@ export default function TrustedIssuersPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="issuer-url">Verification URL template (optional)</Label>
+              <Label htmlFor="issuer-url">
+                Verification URL template (optional)
+              </Label>
               <Input
                 id="issuer-url"
                 value={urlTemplate}
                 onChange={(e) => setUrlTemplate(e.target.value)}
                 placeholder="https://www.coursera.org/verify/{credential_id}"
               />
-              <p className="text-xs text-slate">
-                Use <code>{"{credential_id}"}</code> as a placeholder. Leave blank if this issuer is known/trusted
-                but has no automated verification page — certificates from it will still fall through to
-                Visual Forensics without the unrecognized-issuer penalty.
+              <p className="text-xs text-muted-foreground">
+                Use <code>{"{credential_id}"}</code> as a placeholder. Leave
+                blank if this issuer is known/trusted but has no automated
+                verification page — certificates from it will still fall through
+                to Visual Forensics without the unrecognized-issuer penalty.
               </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="issuer-notes">Notes (optional, internal)</Label>
-              <Input id="issuer-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Why this issuer is trusted, who added it, etc." />
+              <Input
+                id="issuer-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Why this issuer is trusted, who added it, etc."
+              />
             </div>
             <div className="flex gap-2 pt-2">
               <Button onClick={handleSave} disabled={saving}>
@@ -210,48 +255,65 @@ export default function TrustedIssuersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Registered Issuers</CardTitle>
-          <CardDescription>{issuers?.length ?? 0} issuer(s) in the trusted registry.</CardDescription>
+          <CardTitle className="text-base font-semibold">
+            Registered Issuers
+          </CardTitle>
+          <CardDescription>
+            {issuers?.length ?? 0} issuer(s) in the trusted registry.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {loading && !issuers && <CardListSkeleton />}
           {issuers !== null && issuers?.length === 0 && (
-            <p className="text-sm text-slate">
-              No trusted issuers registered yet — every certificate will be treated as unrecognized until you add some.
+            <p className="text-sm text-muted-foreground">
+              No trusted issuers registered yet — every certificate will be
+              treated as unrecognized until you add some.
             </p>
           )}
           {issuers?.map((issuer) => (
             <div
               key={issuer.id}
-              className="p-4 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-zinc-900 shadow-sm"
+              className="p-4 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card shadow-flat"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className="text-sm font-semibold text-ink dark:text-zinc-50">{issuer.name}</h4>
-                  <span className="text-[10px] uppercase tracking-wide font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">
+                  <h4 className="text-sm font-semibold text-foreground">
+                    {issuer.name}
+                  </h4>
+                  <span className="text-[10px] uppercase tracking-wide font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">
                     {issuer.trust_tier}
                   </span>
                   {!issuer.verification_url_template && (
-                    <span className="text-[10px] uppercase tracking-wide font-bold text-amber-700 bg-amber-50 dark:bg-amber-950 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] uppercase tracking-wide font-bold text-warning bg-warning/10 px-1.5 py-0.5 rounded-md">
                       no auto-verify
                     </span>
                   )}
                 </div>
                 {issuer.aliases && issuer.aliases.length > 0 && (
-                  <p className="text-xs text-slate mt-0.5">Aliases: {issuer.aliases.join(", ")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Aliases: {issuer.aliases.join(", ")}
+                  </p>
                 )}
-                {issuer.notes && <p className="text-xs text-slate mt-0.5">{issuer.notes}</p>}
+                {issuer.notes && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {issuer.notes}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <Button variant="outline" size="sm" onClick={() => startEdit(issuer)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => startEdit(issuer)}
+                >
                   Edit
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDelete(issuer)}
+                  onClick={() => setPendingDelete(issuer)}
                   disabled={deletingId === issuer.id}
-                  className="text-rose-600 hover:text-rose-700"
+                  className="text-destructive hover:text-destructive"
                 >
                   {deletingId === issuer.id ? "Removing…" : "Remove"}
                 </Button>
@@ -260,6 +322,26 @@ export default function TrustedIssuersPage() {
           ))}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title="Remove trusted issuer?"
+        description={
+          <>
+            Certificates from{" "}
+            <span className="font-medium text-foreground">
+              {pendingDelete?.name}
+            </span>{" "}
+            will start being treated as unrecognized. Existing verifications are not
+            revoked.
+          </>
+        }
+        confirmLabel="Remove issuer"
+        onConfirm={() => (pendingDelete ? handleDelete(pendingDelete) : undefined)}
+      />
     </div>
   );
 }

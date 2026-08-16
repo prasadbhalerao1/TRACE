@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InterviewLobby } from "@/components/interview/InterviewLobby";
@@ -20,7 +26,9 @@ export default function CandidateInterviewsPage() {
   const { getToken } = useAuth();
 
   // Browse state
-  const [openDefinitions, setOpenDefinitions] = useState<InterviewDefinitionResponse[] | null>(null);
+  const [openDefinitions, setOpenDefinitions] = useState<
+    InterviewDefinitionResponse[] | null
+  >(null);
   const [loadingDefinitions, setLoadingDefinitions] = useState(true);
 
   // Practice interview creation state
@@ -28,7 +36,9 @@ export default function CandidateInterviewsPage() {
   const [practiceRole, setPracticeRole] = useState("");
   const [practiceDesc, setPracticeDesc] = useState("");
   const [practiceYears, setPracticeYears] = useState("");
-  const [practiceQuestions, setPracticeQuestions] = useState<InterviewDefinitionQuestion[]>([]);
+  const [practiceQuestions, setPracticeQuestions] = useState<
+    InterviewDefinitionQuestion[]
+  >([]);
   const [generatingPractice, setGeneratingPractice] = useState(false);
 
   // Navigation
@@ -83,7 +93,11 @@ export default function CandidateInterviewsPage() {
 
       setPracticeQuestions(result.questions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate practice topics");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to generate practice topics",
+      );
     } finally {
       setGeneratingPractice(false);
     }
@@ -136,7 +150,9 @@ export default function CandidateInterviewsPage() {
       // the whole React tree and re-downloads the bundle just to change route.
       router.push(`/interview/${result.session_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start interview");
+      setError(
+        err instanceof Error ? err.message : "Failed to start interview",
+      );
       setStartingSession(null);
     }
   }
@@ -148,13 +164,15 @@ export default function CandidateInterviewsPage() {
     return (
       <div className="space-y-6 max-w-4xl mx-auto">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Ready to join?</h1>
-          <p className="text-sm text-slate">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Ready to join?
+          </h1>
+          <p className="text-sm text-muted-foreground">
             Check your camera and microphone before you start.
           </p>
         </div>
 
-        {error && <p className="text-sm text-rose-flagged">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <InterviewLobby
           topics={lobby.topics}
@@ -174,76 +192,101 @@ export default function CandidateInterviewsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Interview Practice</h1>
-        <p className="text-sm text-slate">Browse open interview templates or create your own practice interview.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Interview Practice
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Browse open interview templates or create your own practice interview.
+        </p>
       </div>
 
       {/* Open Interview Definitions */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Open Interviews</CardTitle>
-          <CardDescription>Recruiters have published these interview templates. Take one to practice.</CardDescription>
+          <CardTitle className="text-base font-semibold">
+            Open Interviews
+          </CardTitle>
+          <CardDescription>
+            Recruiters have published these interview templates. Take one to
+            practice.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {error && <p className="text-sm text-rose-flagged">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           {loadingDefinitions && (
-            <div className="flex items-center gap-2 py-6 justify-center text-slate">
+            <div className="flex items-center gap-2 py-6 justify-center text-muted-foreground">
               <span className="h-4 w-4 rounded-full border-2 border-slate/30 border-t-slate animate-spin" />
               <span className="text-sm">Loading open interviews…</span>
             </div>
           )}
           {!loadingDefinitions && openDefinitions?.length === 0 && (
-            <p className="text-sm text-slate">No open interviews yet. Try creating a practice interview below.</p>
+            <p className="text-sm text-muted-foreground">
+              No open interviews yet. Try creating a practice interview below.
+            </p>
           )}
-          {!loadingDefinitions && openDefinitions?.map((def) => (
-            <div
-              key={def.id}
-              className="p-4 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-zinc-900 shadow-sm"
-            >
-              <div>
-                <h4 className="text-sm font-semibold text-ink dark:text-zinc-50">{def.title}</h4>
-                {/* "topics", not "questions": the count is how many areas the
-                    interviewer will cover, and each one can spawn a follow-up when an
-                    answer is thin, so the number of questions asked is not fixed. */}
-                <p className="text-xs text-slate mt-1">
-                  {def.role_title} · {def.question_count} topics · {def.years_experience ?? "Not specified"} years experience
-                </p>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => openDefinitionLobby(def)}
-                disabled={startingSession === def.id}
+          {!loadingDefinitions &&
+            openDefinitions?.map((def) => (
+              <div
+                key={def.id}
+                className="p-4 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card shadow-flat"
               >
-                {startingSession === def.id ? "Starting…" : "Start"}
-              </Button>
-            </div>
-          ))}
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">
+                    {def.title}
+                  </h4>
+                  {/* "topics", not "questions": the count is how many areas the
+ interviewer will cover, and each one can spawn a follow-up when an
+ answer is thin, so the number of questions asked is not fixed. */}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {def.role_title} · {def.question_count} topics ·{" "}
+                    {def.years_experience ?? "Not specified"} years experience
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => openDefinitionLobby(def)}
+                  disabled={startingSession === def.id}
+                >
+                  {startingSession === def.id ? "Starting…" : "Start"}
+                </Button>
+              </div>
+            ))}
         </CardContent>
       </Card>
 
       {/* Practice Interview Creation */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Practice Interview</CardTitle>
+          <CardTitle className="text-base font-semibold">
+            Practice Interview
+          </CardTitle>
           <CardDescription>
-            Create a custom interview for any role. Describe the position and we&apos;ll generate topics.
+            Create a custom interview for any role. Describe the position and
+            we&apos;ll generate topics.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {!showCreatePractice ? (
-            <Button className="w-full" variant="outline" onClick={() => setShowCreatePractice(true)}>
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={() => setShowCreatePractice(true)}
+            >
               Create Practice Interview
             </Button>
           ) : (
             <div className="space-y-4">
               {practiceQuestions.length === 0 ? (
-                <form onSubmit={handleGeneratePracticeQuestions} className="space-y-4">
+                <form
+                  onSubmit={handleGeneratePracticeQuestions}
+                  className="space-y-4"
+                >
                   <div className="space-y-1">
                     <Label htmlFor="practiceRole">Role Title</Label>
                     <input
                       id="practiceRole"
                       required
-                      className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       placeholder="e.g. Frontend Engineer"
                       value={practiceRole}
                       onChange={(e) => setPracticeRole(e.target.value)}
@@ -255,7 +298,7 @@ export default function CandidateInterviewsPage() {
                     <textarea
                       id="practiceDesc"
                       required
-                      className="w-full min-h-20 p-3 border rounded text-sm bg-background text-foreground"
+                      className="w-full min-h-20 p-3 border rounded-md text-sm bg-background text-foreground"
                       placeholder="What does this role do? What skills matter?"
                       value={practiceDesc}
                       onChange={(e) => setPracticeDesc(e.target.value)}
@@ -268,7 +311,7 @@ export default function CandidateInterviewsPage() {
                       id="practiceYears"
                       type="number"
                       min={0}
-                      className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       placeholder="e.g. 3"
                       value={practiceYears}
                       onChange={(e) => setPracticeYears(e.target.value)}
@@ -284,7 +327,11 @@ export default function CandidateInterviewsPage() {
                     >
                       Cancel
                     </Button>
-                    <Button type="submit" className="flex-1" disabled={generatingPractice}>
+                    <Button
+                      type="submit"
+                      className="flex-1"
+                      disabled={generatingPractice}
+                    >
                       {generatingPractice ? "Generating…" : "Generate Topics"}
                     </Button>
                   </div>
@@ -295,9 +342,16 @@ export default function CandidateInterviewsPage() {
                     <Label className="text-xs">Generated Topics</Label>
                     <div className="space-y-2 mt-2">
                       {practiceQuestions.map((q, idx) => (
-                        <div key={q.id} className="p-3 border rounded bg-white dark:bg-zinc-900">
-                          <p className="text-xs text-slate">Topic {idx + 1}</p>
-                          <p className="text-sm font-semibold text-ink">{q.topic}</p>
+                        <div
+                          key={q.id}
+                          className="p-3 border rounded-md bg-card"
+                        >
+                          <p className="text-xs text-muted-foreground">
+                            Topic {idx + 1}
+                          </p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {q.topic}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -323,7 +377,9 @@ export default function CandidateInterviewsPage() {
                       onClick={openPracticeLobby}
                       disabled={startingSession === "practice"}
                     >
-                      {startingSession === "practice" ? "Starting…" : "Continue"}
+                      {startingSession === "practice"
+                        ? "Starting…"
+                        : "Continue"}
                     </Button>
                   </div>
                 </div>

@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { fetchAuditLog, type AuditLogEntry } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 
@@ -35,7 +41,10 @@ export default function AdminAuditLogsPage() {
         if (cancelled) return;
         setLogs(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load audit log");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to load audit log",
+          );
       }
     })();
     return () => {
@@ -46,33 +55,53 @@ export default function AdminAuditLogsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">System Security Audit Logs</h1>
-        <p className="text-sm text-slate">Examine immutable platform activity logs, action tracking, and operator modifications.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          System Security Audit Logs
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Examine immutable platform activity logs, action tracking, and
+          operator modifications.
+        </p>
       </div>
 
-      {error && <p className="text-sm text-rose-flagged">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 space-y-4">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Audit Records</CardTitle>
-            <CardDescription>Most recent platform actions, newest first.</CardDescription>
+            <CardTitle className="text-base font-semibold">
+              Audit Records
+            </CardTitle>
+            <CardDescription>
+              Most recent platform actions, newest first.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {logs === null && !error && <CardListSkeleton />}
             {logs !== null && logs.length === 0 && (
-              <p className="text-sm text-slate">No audit log entries yet.</p>
+              <p className="text-sm text-muted-foreground">
+                No audit log entries yet.
+              </p>
             )}
             {logs?.map((log) => (
-              <div key={log.id} className="p-3 border rounded-md text-xs bg-white dark:bg-zinc-900 shadow-sm space-y-1">
+              <div
+                key={log.id}
+                className="p-3 border rounded-md text-xs bg-card shadow-flat space-y-1"
+              >
                 <div className="flex justify-between font-semibold">
-                  <span className="text-ink dark:text-zinc-50">{formatAction(log.action)}</span>
-                  <span className="text-slate font-normal">{formatTimestamp(log.created_at)}</span>
+                  <span className="text-foreground">
+                    {formatAction(log.action)}
+                  </span>
+                  <span className="text-muted-foreground font-normal">
+                    {formatTimestamp(log.created_at)}
+                  </span>
                 </div>
-                <div className="flex justify-between text-slate">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Actor: {log.actor_user_id ?? "system"}</span>
                   <span>
-                    {log.target_type ? `${log.target_type}: ${log.target_id}` : "—"}
+                    {log.target_type
+                      ? `${log.target_type}: ${log.target_id}`
+                      : "—"}
                   </span>
                 </div>
               </div>
@@ -83,11 +112,19 @@ export default function AdminAuditLogsPage() {
         <div>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">Logging Policy</CardTitle>
+              <CardTitle className="text-base font-semibold">
+                Logging Policy
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>All sensitive operations (role changes, onboarding, flags, disputes resolution) generate an immutable audit log entry.</p>
-              <p>Logs are append-only — no update or delete path exists in the API.</p>
+            <CardContent className="text-xs text-muted-foreground space-y-2 leading-relaxed">
+              <p>
+                All sensitive operations (role changes, onboarding, flags,
+                disputes resolution) generate an immutable audit log entry.
+              </p>
+              <p>
+                Logs are append-only — no update or delete path exists in the
+                API.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -95,10 +132,18 @@ export default function AdminAuditLogsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Technical Reference: doc/multi-agent-architecture/00-master-architecture.md §4</CardTitle>
+          <CardTitle className="text-base font-semibold">
+            Technical Reference:
+            doc/multi-agent-architecture/00-master-architecture.md §4
+          </CardTitle>
         </CardHeader>
-        <CardContent className="text-xs text-slate space-y-2">
-          <p>**Audit Logs Schema**: Logs are permanently saved to the `audit_logs` table (`actor_user_id`, `action`, `target_type`, `target_id`, `created_at`). They cannot be edited or deleted by any user or administrator.</p>
+        <CardContent className="text-xs text-muted-foreground space-y-2">
+          <p>
+            **Audit Logs Schema**: Logs are permanently saved to the
+            `audit_logs` table (`actor_user_id`, `action`, `target_type`,
+            `target_id`, `created_at`). They cannot be edited or deleted by any
+            user or administrator.
+          </p>
         </CardContent>
       </Card>
     </div>

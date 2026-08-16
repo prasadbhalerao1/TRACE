@@ -1,53 +1,93 @@
 "use client";
 
+import Link from "next/link";
+import { useCallback } from "react";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchPublicHackathonTeamDetail, type TeamDetailResponse } from "@/lib/api";
-import { CardListSkeleton } from "@/components/CardListSkeleton";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { ListSkeleton } from "@/components/common/Skeleton";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { fetchPublicHackathonTeamDetail } from "@/lib/api";
 
 export default function PublicTeamPage() {
   const params = useParams<{ id: string; teamId: string }>();
-  const [detail, setDetail] = useState<TeamDetailResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setDetail(await fetchPublicHackathonTeamDetail(params.id, params.teamId));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load team");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [params.id, params.teamId]);
+  const fetcher = useCallback(
+    () => fetchPublicHackathonTeamDetail(params.id, params.teamId),
+    [params.id, params.teamId],
+  );
+
+  const {
+    data: detail,
+    error,
+    loading,
+    retry,
+  } = useAsyncResource(fetcher, `public:team:${params.teamId}`);
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto p-8">
-      <div>
-        <h1 className="text-3xl font-heading font-bold tracking-tight text-ink">
-          Team: {detail?.team.team_name ?? params.teamId}
-        </h1>
-        <p className="text-sm text-slate">Hackathon: {params.id}</p>
-      </div>
+    <Page>
+      <PageHeader
+        title={detail?.team.team_name ?? "Team"}
+        // The subtitle used to print the raw hackathon UUID, which tells a public
+        // visitor nothing. A link back to the leaderboard is the useful thing here.
+        breadcrumb={
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink
+                  render={<Link href={`/hackathons/${params.id}/leaderboard`} />}
+                >
+                  Leaderboard
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Team</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        }
+      />
 
-      {loading && <CardListSkeleton />}
-      {error && <p className="text-sm text-rose-flagged">{error}</p>}
+      {loading && !detail ? <ListSkeleton rows={3} /> : null}
+      {error && !detail ? (
+        <SectionError message={error} onRetry={retry} retrying={loading} />
+      ) : null}
 
       {detail && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="md:col-span-2 space-y-4">
+        <div className="max-w-reading">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">Team Specifications</CardTitle>
-              <CardDescription>Details about participants, code repository links, and pitch deck status.</CardDescription>
+              <CardTitle>Submission</CardTitle>
+              <CardDescription>
+                Participants, repository and final standing.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate">
+            <CardContent className="space-y-4 text-sm text-muted-foreground">
               <div className="flex justify-between border-b pb-2">
-                <span className="font-semibold text-ink dark:text-zinc-50">GitHub Repository</span>
+                <span className="font-semibold text-foreground">
+                  GitHub Repository
+                </span>
                 {detail.submission?.repo_url ? (
-                  <a href={detail.submission.repo_url} className="text-blue-600 hover:underline">
+                  <a
+                    href={detail.submission.repo_url}
+                    className="text-primary hover:underline"
+                  >
                     {detail.submission.repo_url}
                   </a>
                 ) : (
@@ -56,34 +96,37 @@ export default function PublicTeamPage() {
               </div>
               {detail.ranking && (
                 <div className="flex justify-between border-b pb-2">
-                  <span className="font-semibold text-ink dark:text-zinc-50">Composite Score</span>
-                  <span>#{detail.ranking.rank} — {detail.ranking.composite_score.toFixed(1)} pts</span>
+                  <span className="font-semibold text-foreground">
+                    Composite Score
+                  </span>
+                  <span>
+                    #{detail.ranking.rank} —{" "}
+                    {detail.ranking.composite_score.toFixed(1)} pts
+                  </span>
                 </div>
               )}
               <div className="space-y-2">
-                <h4 className="font-semibold text-ink dark:text-zinc-50">Team Members</h4>
+                <h4 className="font-semibold text-foreground">Team Members</h4>
                 <ul className="list-disc list-inside text-xs space-y-1">
                   {detail.members.map((m) => (
-                    <li key={m.id}>{m.display_name ?? m.github_username ?? "Unregistered member"} ({m.role})</li>
+                    <li key={m.id}>
+                      {m.display_name ??
+                        m.github_username ??
+                        "Unregistered member"}{" "}
+                      ({m.role})
+                    </li>
                   ))}
-                  {detail.members.length === 0 && <li>No members registered</li>}
+                  {detail.members.length === 0 && (
+                    <li>No members registered</li>
+                  )}
                 </ul>
               </div>
             </CardContent>
           </Card>
-
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">Public Page Info</CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-                <p>Publicly accessible, no sign-in required — candidates, judges, recruiters, and the general public all see the same team detail.</p>
-              </CardContent>
-            </Card>
-          </div>
+          {/* A "Public Page Info" card here explained that the page is public. A
+              visitor reading it is already looking at it. */}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

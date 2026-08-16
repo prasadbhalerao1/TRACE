@@ -1,11 +1,18 @@
 "use client";
 
+import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,7 +58,10 @@ export default function CandidateHackathonJoinPage() {
         const result = await fetchHackathon(token, hackathonId);
         if (!cancelled) setHackathon(result);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Failed to load hackathon");
+        if (!cancelled)
+          setLoadError(
+            err instanceof Error ? err.message : "Failed to load hackathon",
+          );
       }
     })();
     return () => {
@@ -85,8 +95,11 @@ export default function CandidateHackathonJoinPage() {
         presentation_id: presentationId.trim() || null,
       });
       setSuccess(true);
+      toast.success("Project submitted");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit project");
+      const message = err instanceof Error ? err.message : "Failed to submit project";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -95,25 +108,40 @@ export default function CandidateHackathonJoinPage() {
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
           {hackathon ? `Submit to ${hackathon.name}` : "Submit Project"}
         </h1>
-        <p className="text-sm text-slate">
-          Register your team and link your repo and pitch deck — re-submitting with the same team name updates your entry.
+        <p className="text-sm text-muted-foreground">
+          Register your team and link your repo and pitch deck — re-submitting
+          with the same team name updates your entry.
         </p>
-        {loadError && <p className="text-sm text-rose-flagged mt-1">{loadError}</p>}
+        {loadError && (
+          <p className="text-sm text-destructive mt-1">{loadError}</p>
+        )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Team Submission</CardTitle>
-          <CardDescription>Only the team name is required — add what you have, update it later if needed.</CardDescription>
+          <CardTitle className="text-base font-semibold">
+            Team Submission
+          </CardTitle>
+          <CardDescription>
+            Only the team name is required — add what you have, update it later
+            if needed.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {success ? (
             <div className="space-y-4">
-              <p className="text-sm text-teal-verified">Submission received! Your team is now in the running.</p>
-              <Button variant="outline" onClick={() => router.push("/hackathons")}>Back to Hackathons</Button>
+              <p className="text-sm text-success">
+                Submission received! Your team is now in the running.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/hackathons")}
+              >
+                Back to Hackathons
+              </Button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -137,7 +165,9 @@ export default function CandidateHackathonJoinPage() {
                   onChange={(e) => setTrack(e.target.value)}
                 />
                 {hackathon?.tracks && hackathon.tracks.length > 0 && (
-                  <p className="text-xs text-slate">Available tracks: {hackathon.tracks.join(", ")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Available tracks: {hackathon.tracks.join(", ")}
+                  </p>
                 )}
               </div>
 
@@ -160,14 +190,17 @@ export default function CandidateHackathonJoinPage() {
                   value={presentationId}
                   onChange={(e) => setPresentationId(e.target.value)}
                 />
-                <p className="text-xs text-slate">
-                  Upload your deck under Pitch Deck Analyzer first, then paste the presentation ID it returns.
+                <p className="text-xs text-muted-foreground">
+                  Upload your deck under Pitch Deck Analyzer first, then paste
+                  the presentation ID it returns.
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="member_github">Teammate GitHub Username</Label>
+                  <Label htmlFor="member_github">
+                    Teammate GitHub Username
+                  </Label>
                   <Input
                     id="member_github"
                     placeholder="optional"
@@ -186,8 +219,12 @@ export default function CandidateHackathonJoinPage() {
                 </div>
               </div>
 
-              {error && <p className="text-sm text-rose-flagged">{error}</p>}
-              <Button type="submit" className="w-full" disabled={submitting || !teamName.trim()}>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={submitting || !teamName.trim()}
+              >
                 {submitting ? "Submitting…" : "Submit Project"}
               </Button>
             </form>

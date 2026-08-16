@@ -19,8 +19,8 @@ export default function OnboardingPage() {
       <Suspense
         fallback={
           <div className="space-y-4">
-            <div className="h-1.5 w-full animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800" />
-            <div className="h-64 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-900" />
+            <div className="h-1.5 w-full animate-pulse rounded-full bg-muted" />
+            <div className="h-64 animate-pulse rounded-xl bg-muted" />
           </div>
         }
       >

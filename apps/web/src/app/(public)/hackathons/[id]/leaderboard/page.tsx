@@ -1,80 +1,81 @@
 "use client";
 
+import { useCallback } from "react";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
-import { fetchPublicHackathon, fetchPublicHackathonRankings, type HackathonResponse, type RankingResponse } from "@/lib/api";
-import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { Trophy } from "lucide-react";
 
+import { DataRow, DataRowList } from "@/components/common/DataRow";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { ListSkeleton } from "@/components/common/Skeleton";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import {
+  fetchPublicHackathon,
+  fetchPublicHackathonRankings,
+} from "@/lib/api";
+
+/** Public standings. No sign-in required — this is the page an event shares publicly,
+ * so it names the event rather than describing itself as "Public Leaderboard". */
 export default function PublicLeaderboardPage() {
   const params = useParams<{ id: string }>();
-  const [hackathon, setHackathon] = useState<HackathonResponse | null>(null);
-  const [rankings, setRankings] = useState<RankingResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [h, r] = await Promise.all([
-          fetchPublicHackathon(params.id),
-          fetchPublicHackathonRankings(params.id),
-        ]);
-        setHackathon(h);
-        setRankings(r);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load leaderboard");
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const fetcher = useCallback(async () => {
+    const [hackathon, rankings] = await Promise.all([
+      fetchPublicHackathon(params.id),
+      fetchPublicHackathonRankings(params.id),
+    ]);
+    return { hackathon, rankings };
   }, [params.id]);
 
+  const { data, error, loading, retry } = useAsyncResource(
+    fetcher,
+    `public:leaderboard:${params.id}`,
+  );
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto p-8">
-      <div>
-        <h1 className="text-3xl font-heading font-bold tracking-tight text-ink">Public Leaderboard</h1>
-        <p className="text-sm text-slate">Live standings for {hackathon?.name ?? `Hackathon: ${params.id}`}</p>
-      </div>
+    <Page>
+      <PageHeader
+        title={data?.hackathon.name ?? "Leaderboard"}
+        description="Final standings, combining judge ratings with automated code and deck analysis."
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 space-y-4">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Standings</CardTitle>
-            <CardDescription>Standings calculated from combined judge and system scoring.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loading && <CardListSkeleton />}
-            {error && <p className="text-sm text-rose-flagged">{error}</p>}
-            {!loading && rankings.length === 0 && (
-              <p className="text-sm text-slate">Rankings haven&apos;t been finalized yet.</p>
-            )}
-            {rankings.map((r) => (
-              <div key={r.id} className="flex justify-between items-center p-4 border rounded-md bg-white dark:bg-zinc-900 shadow-sm">
-                <div>
-                  <h4 className="font-semibold text-sm">#{r.rank} Team {r.team_name ?? r.team_id}</h4>
-                  <Link href={`/hackathons/${params.id}/teams/${r.team_id}`} className="text-xs text-blue-600 font-semibold hover:underline block mt-1">
-                    View Team Details →
-                  </Link>
-                </div>
-                <span className="font-semibold text-ink dark:text-zinc-50">{r.composite_score.toFixed(1)} Pts</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">Public Leaderboard Info</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>Publicly viewable, no sign-in required — candidates, judges, recruiters, and the general public all see the same finalized standings.</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+      {error && !data ? (
+        <SectionError message={error} onRetry={retry} retrying={loading} />
+      ) : !data ? (
+        <ListSkeleton rows={6} />
+      ) : data.rankings.length === 0 ? (
+        <EmptyState
+          icon={Trophy}
+          title="Rankings not finalized yet"
+          description="Standings appear here once the organizer finalizes results for this event."
+        />
+      ) : (
+        <DataRowList>
+          {data.rankings.map((ranking) => (
+            <DataRow
+              key={ranking.id}
+              href={`/hackathons/${params.id}/teams/${ranking.team_id}`}
+              title={
+                <span className="flex items-center gap-2">
+                  <span data-numeric className="tabular-nums text-muted-foreground">
+                    #{ranking.rank}
+                  </span>
+                  {ranking.team_name ?? ranking.team_id}
+                </span>
+              }
+              meta={
+                <span data-numeric className="text-body font-medium tabular-nums">
+                  {ranking.composite_score.toFixed(1)}
+                  <span className="ml-1 text-meta font-normal text-muted-foreground">
+                    pts
+                  </span>
+                </span>
+              }
+            />
+          ))}
+        </DataRowList>
+      )}
+    </Page>
   );
 }

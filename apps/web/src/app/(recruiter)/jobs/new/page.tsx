@@ -1,9 +1,17 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { createJob, pollMatchingStatus, type JobResponse } from "@/lib/api";
@@ -19,7 +27,9 @@ export default function RecruiterNewJobPage() {
   const [created, setCreated] = useState<JobResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [matchingStatus, setMatchingStatus] = useState<"processing" | "done" | "failed">("processing");
+  const [matchingStatus, setMatchingStatus] = useState<
+    "processing" | "done" | "failed"
+  >("processing");
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +57,9 @@ export default function RecruiterNewJobPage() {
       const result = await pollMatchingStatus(token, job.id);
       setMatchingStatus(result.status === "failed" ? "failed" : "done");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create job posting");
+      const message = err instanceof Error ? err.message : "Failed to create job posting";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -56,15 +68,23 @@ export default function RecruiterNewJobPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Post a New Job Posting</h1>
-        <p className="text-sm text-slate">Add a job listing to search, rank, and match candidates.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Post a New Job Posting
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Add a job listing to search, rank, and match candidates.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Job Details</CardTitle>
-            <CardDescription>Specify target roles, description, and required core skills.</CardDescription>
+            <CardTitle className="text-base font-semibold">
+              Job Details
+            </CardTitle>
+            <CardDescription>
+              Specify target roles, description, and required core skills.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!created ? (
@@ -74,7 +94,7 @@ export default function RecruiterNewJobPage() {
                   <input
                     id="title"
                     required
-                    className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     placeholder="e.g. Senior Backend Engineer"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -85,17 +105,19 @@ export default function RecruiterNewJobPage() {
                   <textarea
                     id="desc"
                     required
-                    className="w-full min-h-24 p-3 border rounded text-sm bg-background text-foreground"
+                    className="w-full min-h-24 p-3 border rounded-md text-sm bg-background text-foreground"
                     placeholder="Describe duties, tools used, and target outcomes..."
                     value={desc}
                     onChange={(e) => setDesc(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="skills">Required Skills (Comma separated)</Label>
+                  <Label htmlFor="skills">
+                    Required Skills (Comma separated)
+                  </Label>
                   <input
                     id="skills"
-                    className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     placeholder="e.g. Python, FastAPI, PostgreSQL"
                     value={skills}
                     onChange={(e) => setSkills(e.target.value)}
@@ -106,37 +128,45 @@ export default function RecruiterNewJobPage() {
                     <Label htmlFor="location">Location</Label>
                     <input
                       id="location"
-                      className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       placeholder="e.g. Delhi"
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="minExperience">Min Experience (years)</Label>
+                    <Label htmlFor="minExperience">
+                      Min Experience (years)
+                    </Label>
                     <input
                       id="minExperience"
                       type="number"
                       min={0}
-                      className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       value={minExperience}
                       onChange={(e) => setMinExperience(e.target.value)}
                     />
                   </div>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-slate">
-                  <input type="checkbox" checked={isRemote} onChange={(e) => setIsRemote(e.target.checked)} />
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={isRemote}
+                    onChange={(e) => setIsRemote(e.target.checked)}
+                  />
                   Remote OK
                 </label>
-                {error && <p className="text-sm text-rose-flagged">{error}</p>}
+                {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" className="w-full" disabled={submitting}>
                   {submitting ? "Publishing…" : "Publish Job Posting"}
                 </Button>
               </form>
             ) : (
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded text-sm space-y-2">
-                <h4 className="font-semibold text-emerald-800 dark:text-emerald-400">Job Posting Created</h4>
-                <p className="text-xs text-slate">
+              <div className="p-4 bg-success/10 border border-success/20 rounded-md text-sm space-y-2">
+                <h4 className="font-semibold text-success">
+                  Job Posting Created
+                </h4>
+                <p className="text-xs text-muted-foreground">
                   {matchingStatus === "processing" &&
                     "The AI Matching Engine is scoring candidates in the background…"}
                   {matchingStatus === "done" &&
@@ -149,7 +179,9 @@ export default function RecruiterNewJobPage() {
                   className="w-full"
                   disabled={matchingStatus === "processing"}
                 >
-                  {matchingStatus === "processing" ? "Scoring…" : "View Ranked Matches"}
+                  {matchingStatus === "processing"
+                    ? "Scoring…"
+                    : "View Ranked Matches"}
                 </Button>
                 <Button
                   render={<Link href={`/pipeline/${created.id}`} />}
@@ -166,13 +198,27 @@ export default function RecruiterNewJobPage() {
         <div>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">Matching Strategy</CardTitle>
+              <CardTitle className="text-base font-semibold">
+                Matching Strategy
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
+            <CardContent className="text-xs text-muted-foreground space-y-2 leading-relaxed">
               <p>Posting triggers the AI Job Matching Engine (doc 08 §2):</p>
-              <p><strong>Skill Overlap</strong>: required skills vs. the candidate&apos;s verified (GitHub-corroborated) and self-declared skills.</p>
-              <p><strong>Semantic Similarity</strong>: embedding similarity between the job description and the candidate&apos;s skills, blended with location/remote fit.</p>
-              <p><strong>Experience Match</strong> and <strong>Talent Score Alignment</strong> round out the 4-term breakdown shown on every match.</p>
+              <p>
+                <strong>Skill Overlap</strong>: required skills vs. the
+                candidate&apos;s verified (GitHub-corroborated) and
+                self-declared skills.
+              </p>
+              <p>
+                <strong>Semantic Similarity</strong>: embedding similarity
+                between the job description and the candidate&apos;s skills,
+                blended with location/remote fit.
+              </p>
+              <p>
+                <strong>Experience Match</strong> and{" "}
+                <strong>Talent Score Alignment</strong> round out the 4-term
+                breakdown shown on every match.
+              </p>
             </CardContent>
           </Card>
         </div>

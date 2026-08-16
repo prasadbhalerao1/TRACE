@@ -9,7 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ConflictResolver } from "@/components/ConflictResolver";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import { INGESTION_STAGES, StageProgress } from "@/components/common/StageProgress";
+import {
+  INGESTION_STAGES,
+  StageProgress,
+} from "@/components/common/StageProgress";
 import {
   connectLeetcode,
   fetchDashboard,
@@ -67,7 +70,8 @@ export default function ProfileEditPage() {
       if (dashboard.profile) {
         setHeadline(dashboard.profile.headline ?? "");
         setLocation(dashboard.profile.location ?? "");
-        const edu = dashboard.profile.education?.[0] as { institution?: string; degree?: string } | undefined;
+        const edu = dashboard.profile.education?.[0] as
+          { institution?: string; degree?: string } | undefined;
         setCollege(edu?.institution ?? "");
         setDegree(edu?.degree ?? "");
         setUsernameInput(dashboard.profile.username ?? "");
@@ -95,7 +99,10 @@ export default function ProfileEditPage() {
       try {
         await reload();
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load profile");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to load profile",
+          );
       }
     })();
 
@@ -171,7 +178,11 @@ export default function ProfileEditPage() {
       const authorizeUrl = await fetchGithubOAuthUrl(token);
       window.location.href = authorizeUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start GitHub connection");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not start GitHub connection",
+      );
       setBusy(null);
     }
   }
@@ -188,7 +199,9 @@ export default function ProfileEditPage() {
       setNotice("LeetCode connected — problem-solving stats synced.");
       setLeetcodeInput("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect LeetCode");
+      setError(
+        err instanceof Error ? err.message : "Could not connect LeetCode",
+      );
     } finally {
       setBusy(null);
     }
@@ -214,7 +227,9 @@ export default function ProfileEditPage() {
       if (result.status === "failed") {
         setError(result.error ?? "Resume processing failed");
       } else if (result.status === "processing") {
-        setNotice("Resume uploaded — still processing. Your Talent Score will update shortly.");
+        setNotice(
+          "Resume uploaded — still processing. Your Talent Score will update shortly.",
+        );
       } else {
         setNotice("Resume processed — Talent Score updated.");
       }
@@ -228,7 +243,9 @@ export default function ProfileEditPage() {
     }
   }
 
-  async function handleCertificateUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleCertificateUpload(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
     const file = e.target.files?.[0];
     if (!file) return;
     setBusy("certificate");
@@ -245,13 +262,17 @@ export default function ProfileEditPage() {
       if (result.status === "failed") {
         setError(result.error ?? "Certificate processing failed");
       } else if (result.status === "processing") {
-        setNotice("Certificate uploaded — still scanning. Results will appear shortly.");
+        setNotice(
+          "Certificate uploaded — still scanning. Results will appear shortly.",
+        );
       } else {
         setNotice("Certificate processed and OCR-scanned.");
       }
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Certificate upload failed");
+      setError(
+        err instanceof Error ? err.message : "Certificate upload failed",
+      );
     } finally {
       setBusy(null);
       setIngestionStage(null);
@@ -275,7 +296,11 @@ export default function ProfileEditPage() {
       setProfile(updated);
       setNotice("Profile information updated successfully.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update profile information");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update profile information",
+      );
     } finally {
       setBusy(null);
     }
@@ -291,7 +316,9 @@ export default function ProfileEditPage() {
       if (!token) throw new Error("No session token");
       const updated = await publishPortfolio(token, trimmed);
       setProfile(updated);
-      setNotice(`Portfolio username set to "${trimmed}". Your public link is now active.`);
+      setNotice(
+        `Portfolio username set to "${trimmed}". Your public link is now active.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to set username");
     } finally {
@@ -313,7 +340,9 @@ export default function ProfileEditPage() {
         date: hackathonDate,
       });
       setProfile(updated);
-      setNotice("Hackathon experience added — Talent Score updating in background.");
+      setNotice(
+        "Hackathon experience added — Talent Score updating in background.",
+      );
       // Reset form
       setHackathonName("");
       setHackathonResult("participant");
@@ -324,7 +353,11 @@ export default function ProfileEditPage() {
       await pollIngestionStatus(token);
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add hackathon experience");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to add hackathon experience",
+      );
     } finally {
       setBusy(null);
     }
@@ -338,19 +371,27 @@ export default function ProfileEditPage() {
       if (!token) throw new Error("No session token");
       const updated = await removeHackathonExperience(token, entryId);
       setProfile(updated);
-      setNotice("Hackathon experience removed — Talent Score updating in background.");
+      setNotice(
+        "Hackathon experience removed — Talent Score updating in background.",
+      );
       // Poll for rescore completion
       await pollIngestionStatus(token);
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove hackathon experience");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to remove hackathon experience",
+      );
     } finally {
       setBusy(null);
     }
   }
 
   if (!profile) {
-    return <div className="p-8 text-muted-foreground">Loading your profile…</div>;
+    return (
+      <div className="p-8 text-muted-foreground">Loading your profile…</div>
+    );
   }
 
   return (
@@ -374,10 +415,16 @@ export default function ProfileEditPage() {
             <div>
               <p className="text-sm font-medium">GitHub</p>
               <p className="text-xs text-muted-foreground">
-                {profile.github_username ? `Connected as ${profile.github_username}` : "Not connected"}
+                {profile.github_username
+                  ? `Connected as ${profile.github_username}`
+                  : "Not connected"}
               </p>
             </div>
-            <Button onClick={handleConnectGithub} disabled={busy === "github"} variant="outline">
+            <Button
+              onClick={handleConnectGithub}
+              disabled={busy === "github"}
+              variant="outline"
+            >
               {profile.github_username ? "Reconnect" : "Connect GitHub"}
             </Button>
           </div>
@@ -386,7 +433,9 @@ export default function ProfileEditPage() {
             <div className="flex-1">
               <p className="text-sm font-medium">LeetCode</p>
               <p className="text-xs text-muted-foreground">
-                {profile.leetcode_username ? `Connected as ${profile.leetcode_username}` : "Not connected"}
+                {profile.leetcode_username
+                  ? `Connected as ${profile.leetcode_username}`
+                  : "Not connected"}
               </p>
               <Input
                 value={leetcodeInput}
@@ -400,7 +449,11 @@ export default function ProfileEditPage() {
               disabled={busy === "leetcode" || !leetcodeInput.trim()}
               variant="outline"
             >
-              {busy === "leetcode" ? "Connecting…" : profile.leetcode_username ? "Reconnect" : "Connect"}
+              {busy === "leetcode"
+                ? "Connecting…"
+                : profile.leetcode_username
+                  ? "Reconnect"
+                  : "Connect"}
             </Button>
           </div>
 
@@ -448,58 +501,70 @@ export default function ProfileEditPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-        <CardHeader className="pb-3 border-b border-zinc-100">
-          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-zinc-500 uppercase">Edit Profile Details</CardTitle>
+      <Card className="border-border bg-card text-foreground shadow-flat ">
+        <CardHeader className="pb-3 border-b border-border">
+          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            Edit Profile Details
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Full Name</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+              Full Name
+            </label>
             <Input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Jane Doe"
-              className="border-zinc-200 bg-zinc-50/30 focus-visible:ring-indigo-500/20"
+              className="border-border bg-card/30 focus-visible:ring-ring"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Headline</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+              Headline
+            </label>
             <Input
               value={headline}
               onChange={(e) => setHeadline(e.target.value)}
               placeholder="e.g. Senior Software Engineer"
-              className="border-zinc-200 bg-zinc-50/30 focus-visible:ring-indigo-500/20"
+              className="border-border bg-card/30 focus-visible:ring-ring"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Location</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+              Location
+            </label>
             <Input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. San Francisco, CA"
-              className="border-zinc-200 bg-zinc-50/30 focus-visible:ring-indigo-500/20"
+              className="border-border bg-card/30 focus-visible:ring-ring"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">College / University</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                College / University
+              </label>
               <Input
                 value={college}
                 onChange={(e) => setCollege(e.target.value)}
                 placeholder="e.g. Stanford University"
-                className="border-zinc-200 bg-zinc-50/30 focus-visible:ring-indigo-500/20"
+                className="border-border bg-card/30 focus-visible:ring-ring"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Degree</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                Degree
+              </label>
               <Input
                 value={degree}
                 onChange={(e) => setDegree(e.target.value)}
                 placeholder="e.g. B.S. in Computer Science"
-                className="border-zinc-200 bg-zinc-50/30 focus-visible:ring-indigo-500/20"
+                className="border-border bg-card/30 focus-visible:ring-ring"
               />
             </div>
           </div>
@@ -507,7 +572,7 @@ export default function ProfileEditPage() {
           <Button
             onClick={handleSaveProfileInfo}
             disabled={busy === "save_profile"}
-            className="w-full bg-zinc-900 hover:bg-zinc-800 text-white font-medium mt-2"
+            className="w-full bg-foreground hover:bg-foreground text-white font-medium mt-2"
           >
             {busy === "save_profile" ? "Saving..." : "Save Profile Details"}
           </Button>
@@ -517,48 +582,56 @@ export default function ProfileEditPage() {
       <ConflictResolver profile={profile} />
 
       {/* Hackathon Experience — self-reported external hackathon wins/placements */}
-      <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-        <CardHeader className="pb-3 border-b border-zinc-100">
-          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-zinc-500 uppercase">Hackathon Experience</CardTitle>
+      <Card className="border-border bg-card text-foreground shadow-flat ">
+        <CardHeader className="pb-3 border-b border-border">
+          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            Hackathon Experience
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
-          <p className="text-xs text-zinc-600">
-            Add hackathon wins, top-5 finishes, and other achievements from external hackathons. These contribute to your Talent Score.
+          <p className="text-xs text-muted-foreground">
+            Add hackathon wins, top-5 finishes, and other achievements from
+            external hackathons. These contribute to your Talent Score.
           </p>
 
           {/* List of existing hackathon entries */}
-          {profile.hackathon_experience && profile.hackathon_experience.length > 0 && (
-            <div className="space-y-2">
-              {profile.hackathon_experience.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 bg-zinc-50/50 p-3"
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-zinc-900">{entry.name}</p>
-                    <p className="text-xs text-zinc-600">
-                      {entry.result === "winner" && "🏆 Winner"}
-                      {entry.result === "top5" && "🥈 Top 5"}
-                      {entry.result === "finalist" && "🥉 Finalist"}
-                      {entry.result === "participant" && "👤 Participant"}
-                      {" • "}
-                      Importance: {entry.weight}/5 • {entry.date}
-                    </p>
-                    <p className="text-[11px] text-zinc-500 mt-1">self-reported</p>
-                  </div>
-                  <Button
-                    onClick={() => handleRemoveHackathonExperience(entry.id)}
-                    disabled={busy === `remove_hackathon_${entry.id}`}
-                    variant="outline"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
+          {profile.hackathon_experience &&
+            profile.hackathon_experience.length > 0 && (
+              <div className="space-y-2">
+                {profile.hackathon_experience.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between gap-4 rounded-md border border-border bg-card/50 p-3"
                   >
-                    Remove
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {entry.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {entry.result === "winner" && "🏆 Winner"}
+                        {entry.result === "top5" && "🥈 Top 5"}
+                        {entry.result === "finalist" && "🥉 Finalist"}
+                        {entry.result === "participant" && "👤 Participant"}
+                        {" • "}
+                        Importance: {entry.weight}/5 • {entry.date}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        self-reported
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => handleRemoveHackathonExperience(entry.id)}
+                      disabled={busy === `remove_hackathon_${entry.id}`}
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
 
           {/* Add new hackathon entry form */}
           {!showHackathonForm ? (
@@ -570,26 +643,32 @@ export default function ProfileEditPage() {
               + Add Hackathon Experience
             </Button>
           ) : (
-            <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50/30 p-4">
+            <div className="space-y-3 rounded-md border border-border bg-card/30 p-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Hackathon Name</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                  Hackathon Name
+                </label>
                 <Input
                   value={hackathonName}
                   onChange={(e) => setHackathonName(e.target.value)}
                   placeholder="e.g. HackIndia 2025, Smart India Hackathon"
-                  className="border-zinc-200 bg-white focus-visible:ring-indigo-500/20"
+                  className="border-border bg-card focus-visible:ring-ring"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Result</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                    Result
+                  </label>
                   <select
                     value={hackathonResult}
                     onChange={(e) =>
-                      setHackathonResult(e.target.value as HackathonExperienceResult)
+                      setHackathonResult(
+                        e.target.value as HackathonExperienceResult,
+                      )
                     }
-                    className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/30"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:ring-2 focus:ring-ring"
                   >
                     <option value="winner">🏆 Winner</option>
                     <option value="top5">🥈 Top 5</option>
@@ -599,36 +678,48 @@ export default function ProfileEditPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Importance (1-5)</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                    Importance (1-5)
+                  </label>
                   <div className="flex items-center gap-2">
                     <input
                       type="range"
                       min="1"
                       max="5"
                       value={hackathonWeight}
-                      onChange={(e) => setHackathonWeight(parseInt(e.target.value))}
+                      onChange={(e) =>
+                        setHackathonWeight(parseInt(e.target.value))
+                      }
                       className="flex-1"
                     />
-                    <span className="w-8 text-center text-sm font-medium text-zinc-700">{hackathonWeight}</span>
+                    <span className="w-8 text-center text-sm font-medium text-foreground">
+                      {hackathonWeight}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Date</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                  Date
+                </label>
                 <Input
                   type="date"
                   value={hackathonDate}
                   onChange={(e) => setHackathonDate(e.target.value)}
-                  className="border-zinc-200 bg-white focus-visible:ring-indigo-500/20"
+                  className="border-border bg-card focus-visible:ring-ring"
                 />
               </div>
 
               <div className="flex gap-2">
                 <Button
                   onClick={handleAddHackathonExperience}
-                  disabled={busy === "add_hackathon" || !hackathonName.trim() || !hackathonDate}
-                  className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white font-medium"
+                  disabled={
+                    busy === "add_hackathon" ||
+                    !hackathonName.trim() ||
+                    !hackathonDate
+                  }
+                  className="flex-1 bg-foreground hover:bg-foreground text-white font-medium"
                 >
                   {busy === "add_hackathon" ? "Adding…" : "Add Experience"}
                 </Button>
@@ -651,30 +742,41 @@ export default function ProfileEditPage() {
       </Card>
 
       {/* Portfolio Username — lets existing candidates set/change their URL slug */}
-      <Card className="border-zinc-200 bg-white text-zinc-900 shadow-md shadow-zinc-200/40">
-        <CardHeader className="pb-3 border-b border-zinc-100">
-          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-zinc-500 uppercase">Portfolio Username</CardTitle>
+      <Card className="border-border bg-card text-foreground shadow-flat ">
+        <CardHeader className="pb-3 border-b border-border">
+          <CardTitle className="font-heading text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            Portfolio Username
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 pt-4">
-          <p className="text-xs text-zinc-500 leading-relaxed">
-            Your unique public URL: <span className="font-mono text-indigo-600">/{profile.username ?? "not set"}</span>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Your unique public URL:{" "}
+            <span className="font-mono text-primary">
+              /{profile.username ?? "not set"}
+            </span>
             {profile.username && (
               <a
                 href={`/${profile.username}`}
                 target="_blank"
                 rel="noreferrer"
-                className="ml-2 text-indigo-500 hover:underline"
+                className="ml-2 text-primary hover:underline"
               >
                 View →
               </a>
             )}
           </p>
           <div className="flex items-center gap-2">
-            <div className="flex flex-1 items-center rounded-md border border-zinc-200 bg-zinc-50/30 ring-offset-background focus-within:ring-2 focus-within:ring-indigo-500/30 focus-within:ring-offset-1">
-              <span className="select-none pl-3 text-sm text-zinc-400">yourdomain.com/</span>
+            <div className="flex flex-1 items-center rounded-md border border-border bg-card/30 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1">
+              <span className="select-none pl-3 text-sm text-muted-foreground">
+                yourdomain.com/
+              </span>
               <Input
                 value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                onChange={(e) =>
+                  setUsernameInput(
+                    e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
+                  )
+                }
                 placeholder={profile.username ?? "yourname"}
                 className="border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 pl-1"
                 autoComplete="off"
@@ -684,12 +786,16 @@ export default function ProfileEditPage() {
             <Button
               onClick={handleSetUsername}
               disabled={busy === "username" || !usernameInput.trim()}
-              className="bg-zinc-900 hover:bg-zinc-800 text-white font-medium"
+              className="bg-foreground hover:bg-foreground text-white font-medium"
             >
-              {busy === "username" ? "Saving…" : profile.username ? "Update" : "Set Username"}
+              {busy === "username"
+                ? "Saving…"
+                : profile.username
+                  ? "Update"
+                  : "Set Username"}
             </Button>
           </div>
-          <p className="text-[11px] text-zinc-400">
+          <p className="text-[11px] text-muted-foreground">
             Only lowercase letters, numbers, and hyphens. Min 2 chars.
           </p>
         </CardContent>

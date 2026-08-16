@@ -1,140 +1,207 @@
 "use client";
 
+import { useCallback, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { Trophy } from "lucide-react";
+import { toast } from "sonner";
+
 import { useAuth } from "@/components/AuthProvider";
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { DataRow, DataRowList } from "@/components/common/DataRow";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { ListSkeleton } from "@/components/common/Skeleton";
 import { Button } from "@/components/ui/button";
 import {
-  finalizeHackathonRankings,
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import {
   fetchHackathonRankings,
+  finalizeHackathonRankings,
   pollRankingStatus,
   type RankingResponse,
 } from "@/lib/api";
 
+/** Composite weighting sent to the API. Previously the page *described* the split as
+ * 0.40 judge / 0.30 pitch / 0.20 repo / 0.10 novelty while sending an even 0.25 each,
+ * so organizers were told a formula the code did not use. One constant now feeds both
+ * the request and the copy, so they cannot drift again. */
+const WEIGHTS = {
+  judge_weight: 0.25,
+  pitch_weight: 0.25,
+  repo_weight: 0.25,
+  novelty_weight: 0.25,
+} as const;
+
+const WEIGHT_SUMMARY = "Equal weighting: judge, pitch, repo quality and novelty.";
+
 export default function OrganizerRankingsPage() {
   const params = useParams<{ id: string }>();
   const { getToken } = useAuth();
-  const [rankings, setRankings] = useState<RankingResponse[]>([]);
-  const [loading, setLoading] = useState(true);
   const [finalizing, setFinalizing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const judgeWeight = 0.25;
-  const pitchWeight = 0.25;
-  const repoWeight = 0.25;
-  const noveltyWeight = 0.25;
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const res = await fetchHackathonRankings(token, params.id);
-        if (cancelled) return;
-        setRankings(res);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load rankings");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchHackathonRankings(token, params.id);
   }, [getToken, params.id]);
+
+  const { data, error, loading, retry } = useAsyncResource(
+    fetcher,
+    `organizer:rankings:${params.id}`,
+  );
 
   async function handleFinalize() {
     setFinalizing(true);
-    setError(null);
+    setActionError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      await finalizeHackathonRankings(token, params.id, {
-        custom_weights: {
-          judge_weight: judgeWeight,
-          pitch_weight: pitchWeight,
-          repo_weight: repoWeight,
-          novelty_weight: noveltyWeight,
-        },
-      });
-      // Finalization runs in the background now: the POST returns immediately and its
+      await finalizeHackathonRankings(token, params.id, { custom_weights: WEIGHTS });
+      // Finalization runs in the background: the POST returns immediately and its
       // `rankings` are the previous run's, so poll for completion before re-fetching.
       const status = await pollRankingStatus(token, params.id);
       if (status.status === "failed") {
-        setError(status.error ?? "Ranking finalization failed");
+        const message = status.error ?? "Ranking finalization failed";
+        setActionError(message);
+        toast.error(message);
       } else if (status.status === "processing") {
-        setError("Still finalizing — this is taking longer than expected. Refresh in a moment to see results.");
+        toast.info("Still finalizing", {
+          description: "This is taking longer than usual — results will appear shortly.",
+        });
+      } else {
+        toast.success("Rankings finalized", {
+          description: "Top teams are now surfaced to recruiters.",
+        });
       }
-      if (status.status !== "failed") {
-        setRankings(await fetchHackathonRankings(token, params.id));
-      }
+      if (status.status !== "failed") retry();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to finalize rankings");
+      const message =
+        err instanceof Error ? err.message : "Failed to finalize rankings";
+      setActionError(message);
+      toast.error(message);
     } finally {
       setFinalizing(false);
     }
   }
 
-  if (loading) return <div className="p-8 text-muted-foreground">Loading rankings…</div>;
+  const hasRankings = (data?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Leaderboard Rankings</h1>
-        <p className="text-sm text-slate">Compile competitor scores, verify judge rubrics, and finalize event standings.</p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Rankings"
+        description={WEIGHT_SUMMARY}
+        breadcrumb={
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/events" />}>
+                  My events
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Rankings</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        }
+        actions={
+          <Button onClick={() => setConfirmOpen(true)} disabled={finalizing}>
+            {finalizing ? "Finalizing…" : hasRankings ? "Re-finalize" : "Finalize rankings"}
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 space-y-4">
-          <CardHeader className="flex flex-row justify-between items-center pb-2">
-            <div>
-              <CardTitle className="text-base font-semibold">Rankings</CardTitle>
-              <CardDescription>Composite score = 0.40 judge + 0.30 pitch + 0.20 repo quality + 0.10 novelty.</CardDescription>
-            </div>
-            <Button onClick={handleFinalize} disabled={finalizing}>
-              {finalizing ? "Finalizing…" : rankings.length ? "Re-finalize Rankings" : "Finalize Rankings"}
+      {actionError ? (
+        <SectionError
+          message={actionError}
+          onRetry={() => setActionError(null)}
+          retrying={false}
+          className="mb-4"
+        />
+      ) : null}
+
+      {error && !data ? (
+        <SectionError message={error} onRetry={retry} retrying={loading} />
+      ) : !data ? (
+        <ListSkeleton rows={5} />
+      ) : data.length === 0 ? (
+        <EmptyState
+          icon={Trophy}
+          title="No rankings yet"
+          description="Once teams have submitted and judges have scored, finalize to compute standings."
+          action={
+            <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={finalizing}>
+              Finalize rankings
             </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {error && <p className="text-sm text-rose-flagged">{error}</p>}
-            {rankings.length === 0 && (
-              <p className="text-sm text-slate">No rankings yet — click Finalize Rankings once teams have submitted.</p>
-            )}
-            {rankings.map((r) => (
-              <div key={r.id} className="flex justify-between items-center p-3 border rounded-md bg-white dark:bg-zinc-900 shadow-sm">
-                <div>
-                  <h4 className="font-semibold text-sm">#{r.rank} {r.team_name ?? r.team_id}</h4>
-                  {r.score_breakdown && (
-                    <p className="text-xs text-slate mt-0.5">
-                      Judge {r.score_breakdown.judge_score ?? "—"} · Pitch {r.score_breakdown.pitch_score ?? "—"} ·
-                      {" "}Repo {r.score_breakdown.repo_quality_score ?? "—"} · Novelty {r.score_breakdown.novelty_score ?? "—"}
-                    </p>
-                  )}
-                </div>
-                <span className="font-semibold text-ink dark:text-zinc-50">{r.composite_score.toFixed(1)} Pts</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+          }
+        />
+      ) : (
+        <DataRowList>
+          {data.map((ranking) => (
+            <RankingRow key={ranking.id} ranking={ranking} />
+          ))}
+        </DataRowList>
+      )}
 
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">Action Trigger Details</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>Finalizing standings triggers the <strong>hackathon.rankings.finalized</strong> event, naming the top 3 teams and their candidate IDs for recruiter surfacing (Phase 2 consumer, Module 02).</p>
-              <p>Re-finalizing after correcting a judge score is safe — rankings are upserted, not duplicated.</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        destructive={false}
+        title={hasRankings ? "Re-finalize rankings?" : "Finalize rankings?"}
+        description={
+          hasRankings
+            ? "Scores are recomputed and existing rankings are updated in place, not duplicated. Recruiters see the revised top teams."
+            : "This computes final standings and surfaces the top teams to recruiters. You can re-finalize later if a judge score changes."
+        }
+        confirmLabel={hasRankings ? "Re-finalize" : "Finalize"}
+        onConfirm={handleFinalize}
+      />
+    </Page>
   );
+}
+
+function RankingRow({ ranking }: { ranking: RankingResponse }) {
+  const breakdown = ranking.score_breakdown;
+
+  return (
+    <DataRow
+      title={
+        <span className="flex items-center gap-2">
+          <span data-numeric className="tabular-nums text-muted-foreground">
+            #{ranking.rank}
+          </span>
+          {ranking.team_name ?? ranking.team_id}
+        </span>
+      }
+      subtitle={
+        breakdown
+          ? `Judge ${fmt(breakdown.judge_score)} · Pitch ${fmt(breakdown.pitch_score)} · Repo ${fmt(breakdown.repo_quality_score)} · Novelty ${fmt(breakdown.novelty_score)}`
+          : undefined
+      }
+      meta={
+        <span data-numeric className="text-body font-medium tabular-nums">
+          {ranking.composite_score.toFixed(1)}
+          <span className="ml-1 text-meta font-normal text-muted-foreground">pts</span>
+        </span>
+      }
+    />
+  );
+}
+
+/** A missing sub-score means "not scored", which is not the same as zero. */
+function fmt(value: number | null | undefined): string {
+  return value === null || value === undefined ? "n/a" : value.toFixed(0);
 }

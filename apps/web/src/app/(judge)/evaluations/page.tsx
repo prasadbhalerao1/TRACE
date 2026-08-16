@@ -1,84 +1,130 @@
 "use client";
 
-import { useAuth } from "@/components/AuthProvider";
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
-import { fetchJudgingQueue, type JudgeQueueEntry } from "@/lib/api";
-import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { useCallback, useMemo } from "react";
+import { Gavel } from "lucide-react";
 
+import { useAuth } from "@/components/AuthProvider";
+import { DataRow, DataRowList } from "@/components/common/DataRow";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Page, PageHeader, SectionHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { ListSkeleton } from "@/components/common/Skeleton";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { fetchJudgingQueue, type JudgeQueueEntry } from "@/lib/api";
+
+/** The judge's queue — and, since `/evaluations` is their only route, effectively the
+ * whole product for this role.
+ *
+ * Unscored submissions lead: a judge opens this page to find work, not to browse a
+ * mixed list. Previously everything was one undifferentiated list ordered by the API. */
 export default function JudgeEvaluationsQueuePage() {
   const { getToken } = useAuth();
-  const [queue, setQueue] = useState<JudgeQueueEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-        setQueue(await fetchJudgingQueue(token));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load evaluation queue");
-      } finally {
-        setLoading(false);
-      }
-    })();
+  // Was a hand-rolled useEffect + three useState hooks, which meant this page got none
+  // of useAsyncResource's 429/backoff handling. It also returned early when no token
+  // resolved *without* clearing `loading`, so that path spun a skeleton forever.
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchJudgingQueue(token);
   }, [getToken]);
 
+  const { data, error, loading, retry } = useAsyncResource(fetcher, "judge:queue");
+
+  const { pending, scored } = useMemo(() => {
+    const entries = data ?? [];
+    return {
+      pending: entries.filter((entry) => entry.judge_score === null),
+      scored: entries.filter((entry) => entry.judge_score !== null),
+    };
+  }, [data]);
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Judge Evaluation Queue</h1>
-        <p className="text-sm text-slate">Review submitted repos across every hackathon and score them.</p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Evaluation queue"
+        description="Score submitted projects against the rubric. Your ratings combine with automated code and deck analysis in the final ranking."
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 space-y-4">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Submissions</CardTitle>
-            <CardDescription>Select a team project submission to evaluate.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loading && <CardListSkeleton />}
-            {error && <p className="text-sm text-rose-flagged">{error}</p>}
-            {!loading && queue.length === 0 && <p className="text-sm text-slate">No submissions yet.</p>}
-            {queue.map((sub) => (
-              <div key={sub.submission_id} className="p-4 border rounded-md hover:border-primary transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-zinc-900 shadow-sm">
-                <div>
-                  <h4 className="text-sm font-semibold text-ink dark:text-zinc-50">Team {sub.team_name}</h4>
-                  <p className="text-xs text-slate mt-0.5">{sub.hackathon_name}{sub.repo_url ? ` — ${sub.repo_url}` : ""}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant={sub.judge_score === null ? "secondary" : "outline"} className="capitalize">
-                    {sub.judge_score === null ? "pending" : `scored ${sub.judge_score}`}
-                  </Badge>
-                  <Link
-                    href={`/submissions/${sub.submission_id}?hackathonId=${sub.hackathon_id}`}
-                    className="text-xs text-blue-600 font-semibold hover:underline"
-                  >
-                    Evaluate →
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      {error && !data ? (
+        <SectionError message={error} onRetry={retry} retrying={loading} />
+      ) : !data ? (
+        <ListSkeleton rows={5} />
+      ) : data.length === 0 ? (
+        <EmptyState
+          icon={Gavel}
+          title="Nothing to evaluate yet"
+          description="Submissions appear here once teams have submitted their projects to a hackathon you're judging."
+        />
+      ) : (
+        <div className="space-y-8">
+          <section>
+            <SectionHeader
+              title="Awaiting your score"
+              description={
+                pending.length === 0
+                  ? "You've scored everything in the queue."
+                  : `${pending.length} of ${data.length} submissions`
+              }
+            />
+            {pending.length === 0 ? (
+              <EmptyState
+                icon={Gavel}
+                title="All caught up"
+                description="Every submission in your queue has been scored."
+              />
+            ) : (
+              <DataRowList>
+                {pending.map((submission) => (
+                  <SubmissionRow key={submission.submission_id} submission={submission} />
+                ))}
+              </DataRowList>
+            )}
+          </section>
 
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">Scoring Policy</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>Every authenticated judge sees every submission — no per-judge/per-track assignment table exists yet.</p>
-              <p>Judge ratings are combined with {"Module 03/04's"} automated scoring in the composite ranking formula.</p>
-            </CardContent>
-          </Card>
+          {scored.length > 0 ? (
+            <section>
+              <SectionHeader
+                title="Already scored"
+                description="Open one to revise your rating."
+              />
+              <DataRowList>
+                {scored.map((submission) => (
+                  <SubmissionRow key={submission.submission_id} submission={submission} />
+                ))}
+              </DataRowList>
+            </section>
+          ) : null}
         </div>
-      </div>
-    </div>
+      )}
+    </Page>
+  );
+}
+
+function SubmissionRow({ submission }: { submission: JudgeQueueEntry }) {
+  const isScored = submission.judge_score !== null;
+
+  return (
+    <DataRow
+      // The whole row is the target. It previously ended in a small "Evaluate →" text
+      // link, which is a needlessly precise thing to ask someone to hit repeatedly.
+      href={`/submissions/${submission.submission_id}?hackathonId=${submission.hackathon_id}`}
+      title={submission.team_name}
+      subtitle={submission.hackathon_name}
+      meta={
+        isScored ? (
+          <Badge variant="outline" className="font-normal">
+            <span data-numeric className="tabular-nums">
+              {submission.judge_score}
+            </span>
+            <span className="text-muted-foreground">/10</span>
+          </Badge>
+        ) : (
+          <StatusBadge status="pending" label="Not scored" />
+        )
+      }
+    />
   );
 }

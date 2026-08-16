@@ -1,9 +1,17 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { createHackathon } from "@/lib/api";
@@ -31,7 +39,9 @@ export default function OrganizerNewHackathonPage() {
       });
       router.push(`/hackathons/${hackathon.id}/manage`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create hackathon");
+      const message = err instanceof Error ? err.message : "Failed to create hackathon";
+      setError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }
@@ -39,15 +49,23 @@ export default function OrganizerNewHackathonPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Create a New Hackathon</h1>
-        <p className="text-sm text-slate">Register a hiring hackathon and define evaluation tracks.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Create a New Hackathon
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Register a hiring hackathon and define evaluation tracks.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Hackathon Details</CardTitle>
-            <CardDescription>Configure hackathon names, durations, and criteria.</CardDescription>
+            <CardTitle className="text-base font-semibold">
+              Hackathon Details
+            </CardTitle>
+            <CardDescription>
+              Configure hackathon names, durations, and criteria.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <form onSubmit={handleCreate} className="space-y-4">
@@ -56,7 +74,7 @@ export default function OrganizerNewHackathonPage() {
                 <input
                   id="name"
                   required
-                  className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                  className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                   placeholder="e.g. Winter Developer Challenge 2026"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -66,13 +84,13 @@ export default function OrganizerNewHackathonPage() {
                 <Label htmlFor="track">Evaluation Track</Label>
                 <input
                   id="track"
-                  className="w-full px-3 py-2 border rounded text-sm bg-background text-foreground"
+                  className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                   placeholder="e.g. Full-Stack Dev, ML Algorithms"
                   value={track}
                   onChange={(e) => setTrack(e.target.value)}
                 />
               </div>
-              {error && <p className="text-sm text-rose-flagged">{error}</p>}
+              {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={submitting}>
                 {submitting ? "Creating…" : "Create Event"}
               </Button>
@@ -83,12 +101,18 @@ export default function OrganizerNewHackathonPage() {
         <div>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">Event Parameters</CardTitle>
+              <CardTitle className="text-base font-semibold">
+                Event Parameters
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-slate space-y-2 leading-relaxed">
-              <p>Hackathon events integrate directly into matches. Finalizing rankings triggers:
-                <br />• The `hackathon.rankings.finalized` event, naming the top 3 teams.
-                <br />• Recruiter watchlist visibility via the Top Performers feed.
+            <CardContent className="text-xs text-muted-foreground space-y-2 leading-relaxed">
+              <p>
+                Hackathon events integrate directly into matches. Finalizing
+                rankings triggers:
+                <br />• The `hackathon.rankings.finalized` event, naming the top
+                3 teams.
+                <br />• Recruiter watchlist visibility via the Top Performers
+                feed.
               </p>
             </CardContent>
           </Card>

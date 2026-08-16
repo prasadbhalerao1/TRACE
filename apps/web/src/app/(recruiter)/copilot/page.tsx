@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { postCopilotQuery, type CopilotResult } from "@/lib/api";
 
@@ -13,18 +19,24 @@ interface ChatMessage {
 }
 
 function formatResults(results: CopilotResult[]): string {
-  if (results.length === 0) return "I couldn't find any candidates matching that search.";
+  if (results.length === 0)
+    return "I couldn't find any candidates matching that search.";
   return `I found ${results.length} candidate(s) matching your description.`;
 }
 
 export default function RecruiterCopilotPage() {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "ai", text: "Hello! I am your Recruitment Copilot. Ask me to find candidates (e.g. 'Find backend developers with React and Python experience')" },
+    {
+      role: "ai",
+      text: "Hello! I am your Recruitment Copilot. Ask me to find candidates (e.g. 'Find backend developers with React and Python experience')",
+    },
   ]);
   const [input, setInput] = useState("");
   const [searching, setSearching] = useState(false);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    undefined,
+  );
   const [error, setError] = useState<string | null>(null);
 
   async function handleSend() {
@@ -42,7 +54,11 @@ export default function RecruiterCopilotPage() {
       setConversationId(response.conversation_id);
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: formatResults(response.results), results: response.results },
+        {
+          role: "ai",
+          text: formatResults(response.results),
+          results: response.results,
+        },
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Copilot search failed");
@@ -54,29 +70,50 @@ export default function RecruiterCopilotPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Recruiter Copilot</h1>
-        <p className="text-sm text-slate">Search for talent using conversational natural language commands.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Recruiter Copilot
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Search for talent using conversational natural language commands.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 flex flex-col h-[500px]">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Copilot Chat</CardTitle>
-            <CardDescription>Structured filters + Qdrant semantic re-rank + Claude explanation, per doc 02 §3.</CardDescription>
+            <CardTitle className="text-base font-semibold">
+              Copilot Chat
+            </CardTitle>
+            <CardDescription>
+              Structured filters + Qdrant semantic re-rank + Claude explanation,
+              per doc 02 §3.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col flex-1 space-y-4 overflow-hidden">
-            <div className="flex-1 overflow-y-auto space-y-3 p-4 bg-slate-50 dark:bg-zinc-900 rounded-md border">
+            <div className="flex-1 overflow-y-auto space-y-3 p-4 bg-card rounded-md border">
               {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "ai" ? "justify-start" : "justify-end"}`}>
-                  <div className={`max-w-[80%] p-3 rounded-lg text-sm whitespace-pre-wrap ${m.role === "ai" ? "bg-white dark:bg-zinc-800 text-ink dark:text-zinc-50 shadow-sm border border-border" : "bg-primary text-primary-foreground"}`}>
-                    <p className="font-semibold text-xs mb-1 opacity-70">{m.role === "ai" ? "Recruiter Copilot" : "You"}</p>
+                <div
+                  key={i}
+                  className={`flex ${m.role === "ai" ? "justify-start" : "justify-end"}`}
+                >
+                  <div
+                    className={`max-w-[80%] p-3 rounded-lg text-sm whitespace-pre-wrap ${m.role === "ai" ? "bg-card text-foreground shadow-flat border border-border" : "bg-primary text-primary-foreground"}`}
+                  >
+                    <p className="font-semibold text-xs mb-1 opacity-70">
+                      {m.role === "ai" ? "Recruiter Copilot" : "You"}
+                    </p>
                     <p>{m.text}</p>
                     {m.results && m.results.length > 0 && (
                       <ul className="mt-2 space-y-1 text-xs">
                         {m.results.map((r) => (
-                          <li key={r.candidate_id} className="border-t border-border/50 pt-1">
+                          <li
+                            key={r.candidate_id}
+                            className="border-t border-border/50 pt-1"
+                          >
                             {r.match_percentage !== null && (
-                              <span className="font-semibold">{r.match_percentage.toFixed(0)}% — </span>
+                              <span className="font-semibold">
+                                {r.match_percentage.toFixed(0)}% —{" "}
+                              </span>
                             )}
                             {r.explanation}
                           </li>
@@ -88,12 +125,12 @@ export default function RecruiterCopilotPage() {
               ))}
               {searching && (
                 <div className="flex justify-start">
-                  <div className="bg-white dark:bg-zinc-800 text-slate p-3 rounded-lg text-sm border">
+                  <div className="bg-card text-muted-foreground p-3 rounded-lg text-sm border">
                     Understanding your query and searching the candidate pool…
                   </div>
                 </div>
               )}
-              {error && <p className="text-sm text-rose-flagged">{error}</p>}
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
 
             <div className="flex gap-2">
@@ -104,7 +141,9 @@ export default function RecruiterCopilotPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
               />
-              <Button onClick={handleSend} disabled={searching}>Search</Button>
+              <Button onClick={handleSend} disabled={searching}>
+                Search
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -112,12 +151,14 @@ export default function RecruiterCopilotPage() {
         <div>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-semibold">Search Tips</CardTitle>
+              <CardTitle className="text-base font-semibold">
+                Search Tips
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-slate space-y-3 leading-relaxed">
+            <CardContent className="text-xs text-muted-foreground space-y-3 leading-relaxed">
               <div>
                 <p className="font-semibold mb-1">Try these searches:</p>
-                <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                <ul className="space-y-1 text-muted-foreground">
                   <li>• &quot;Find Python developers&quot;</li>
                   <li>• &quot;Find React developers&quot;</li>
                   <li>• &quot;Fullstack with Python and React&quot;</li>
@@ -127,7 +168,7 @@ export default function RecruiterCopilotPage() {
               </div>
               <div className="border-t pt-2">
                 <p className="font-semibold mb-1">Refine results:</p>
-                <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                <ul className="space-y-1 text-muted-foreground">
                   <li>• &quot;Now show only San Francisco&quot;</li>
                   <li>• &quot;Filter to 75+ scores&quot;</li>
                   <li>• &quot;Who has best problem solving?&quot;</li>

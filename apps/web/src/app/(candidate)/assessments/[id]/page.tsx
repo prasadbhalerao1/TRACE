@@ -1,9 +1,17 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/CodeEditor";
 import { MCQForm } from "@/components/MCQForm";
@@ -23,7 +31,9 @@ export default function CandidateAssessmentPage() {
   const params = useParams<{ id: string }>();
   const { getToken } = useAuth();
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
-  const [code, setCode] = useState("def solve_problem(n):\n    # Write your Python code here\n    return n * 2\n");
+  const [code, setCode] = useState(
+    "def solve_problem(n):\n # Write your Python code here\n return n * 2\n",
+  );
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [output, setOutput] = useState<TestResult[] | null>(null);
   const [running, setRunning] = useState(false);
@@ -39,7 +49,10 @@ export default function CandidateAssessmentPage() {
         const result = await fetchAssessment(token, params.id);
         if (!cancelled) setAssessment(result);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load assessment");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Failed to load assessment",
+          );
       }
     })();
     return () => {
@@ -75,6 +88,12 @@ export default function CandidateAssessmentPage() {
         // analysis + LLM review) finishes in the background, so poll for the score
         // instead of rendering the not-yet-graded null as a dash forever.
         setSubmission(result);
+        // Confirms the answers are safely stored — otherwise the only feedback is a
+        // score appearing some seconds later, which reads as nothing having happened.
+        toast.success("Assessment submitted", {
+          description:
+            result.grading_status === "processing" ? "Grading in progress…" : undefined,
+        });
         if (result.grading_status === "processing") {
           const graded = await pollSubmissionGrading(token, result.id, {
             onUpdate: setSubmission,
@@ -92,20 +111,25 @@ export default function CandidateAssessmentPage() {
     }
   }
 
-  if (error) return <div className="p-8 text-rose-flagged">{error}</div>;
-  if (!assessment) return <div className="p-8 text-slate">Loading assessment…</div>;
+  if (error) return <div className="p-8 text-destructive">{error}</div>;
+  if (!assessment)
+    return <div className="p-8 text-muted-foreground">Loading assessment…</div>;
 
-  const codingSpec = assessment.type === "coding" ? (assessment.spec as CodingAssessmentSpec) : null;
-  const mcqSpec = assessment.type === "mcq" ? (assessment.spec as MCQAssessmentSpec) : null;
+  const codingSpec =
+    assessment.type === "coding"
+      ? (assessment.spec as CodingAssessmentSpec)
+      : null;
+  const mcqSpec =
+    assessment.type === "mcq" ? (assessment.spec as MCQAssessmentSpec) : null;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {assessment.type === "mcq" ? "MCQ Assessment" : "Coding Assessment"}
           </h1>
-          <p className="text-sm text-slate">
+          <p className="text-sm text-muted-foreground">
             {assessment.type === "coding"
               ? "Complete the coding challenge — tests run locally in your browser via Pyodide (WASM), never on our servers."
               : "Answer the questions below."}
@@ -119,7 +143,9 @@ export default function CandidateAssessmentPage() {
             <CardTitle className="text-base font-semibold">
               {assessment.type === "coding" ? "Python Editor" : "Questions"}
             </CardTitle>
-            {codingSpec && <CardDescription>{codingSpec.problem_statement}</CardDescription>}
+            {codingSpec && (
+              <CardDescription>{codingSpec.problem_statement}</CardDescription>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             {assessment.type === "coding" && (
@@ -128,10 +154,19 @@ export default function CandidateAssessmentPage() {
             {assessment.type === "mcq" && mcqSpec && (
               <MCQForm spec={mcqSpec} answers={answers} onChange={setAnswers} />
             )}
-            {error && <p className="text-sm text-rose-flagged">{error}</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-between">
-              <Button onClick={handleRunAndSubmit} disabled={running || !!submission}>
-                {running ? "Running…" : submission ? "Submitted" : assessment.type === "coding" ? "Run Tests & Submit" : "Submit"}
+              <Button
+                onClick={handleRunAndSubmit}
+                disabled={running || !!submission}
+              >
+                {running
+                  ? "Running…"
+                  : submission
+                    ? "Submitted"
+                    : assessment.type === "coding"
+                      ? "Run Tests & Submit"
+                      : "Submit"}
               </Button>
             </div>
           </CardContent>
@@ -141,12 +176,19 @@ export default function CandidateAssessmentPage() {
           {codingSpec && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base font-semibold">Constraints</CardTitle>
+                <CardTitle className="text-base font-semibold">
+                  Constraints
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm text-slate">
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <ul className="list-disc list-inside text-xs">
                   <li>{codingSpec.hidden_tests.length} hidden test case(s)</li>
-                  <li>Function name: <code className="font-mono bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-xs">solve_problem</code></li>
+                  <li>
+                    Function name:{" "}
+                    <code className="font-mono bg-muted px-1 py-0.5 rounded-md text-xs">
+                      solve_problem
+                    </code>
+                  </li>
                 </ul>
               </CardContent>
             </Card>
@@ -158,31 +200,37 @@ export default function CandidateAssessmentPage() {
             </CardHeader>
             <CardContent>
               {output && (
-                <pre className="p-3 bg-slate-100 dark:bg-zinc-900 font-mono text-xs rounded border border-border whitespace-pre-wrap mb-3">
-                  {output.map((r) => `${r.test_name}: ${r.passed ? "PASS" : "FAIL"}`).join("\n")}
+                <pre className="p-3 bg-muted font-mono text-xs rounded-md border border-border whitespace-pre-wrap mb-3">
+                  {output
+                    .map((r) => `${r.test_name}: ${r.passed ? "PASS" : "FAIL"}`)
+                    .join("\n")}
                 </pre>
               )}
               {submission ? (
                 <div className="text-sm space-y-1">
                   {submission.grading_status === "processing" ? (
-                    <p className="font-semibold text-slate animate-pulse">
+                    <p className="font-semibold text-muted-foreground animate-pulse">
                       Submitted — grading your answer…
                     </p>
                   ) : submission.grading_status === "failed" ? (
-                    <p className="font-semibold text-rose-flagged">
+                    <p className="font-semibold text-destructive">
                       Grading failed. Your submission was saved.
                     </p>
                   ) : (
-                    <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    <p className="font-semibold text-success">
                       Score: {submission.score?.toFixed(0) ?? "—"}/100
                     </p>
                   )}
                   {submission.test_results?.rationale && (
-                    <p className="text-xs text-slate">{submission.test_results.rationale}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {submission.test_results.rationale}
+                    </p>
                   )}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Run and submit to see your result.</p>
+                <p className="text-xs text-muted-foreground">
+                  Run and submit to see your result.
+                </p>
               )}
             </CardContent>
           </Card>

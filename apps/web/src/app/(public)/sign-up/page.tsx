@@ -5,7 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, type SignupInput } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -65,7 +71,8 @@ export default function SignUpPage() {
           <CardTitle className="font-heading">Create Account</CardTitle>
           {role === "candidate" && (
             <CardDescription>
-              Claim your unique portfolio link now — you can always change it later in Profile settings.
+              Claim your unique portfolio link now — you can always change it
+              later in Profile settings.
             </CardDescription>
           )}
         </CardHeader>
@@ -126,14 +133,22 @@ export default function SignUpPage() {
               <div className="space-y-2">
                 <Label htmlFor="username">
                   Username{" "}
-                  <span className="text-xs font-normal text-zinc-400">(optional — sets your public URL)</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    (optional — sets your public URL)
+                  </span>
                 </Label>
                 <div className="flex items-center rounded-md border border-input bg-background ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
-                  <span className="select-none pl-3 text-sm text-zinc-400">yourdomain.com/</span>
+                  <span className="select-none pl-3 text-sm text-muted-foreground">
+                    yourdomain.com/
+                  </span>
                   <Input
                     id="username"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                    onChange={(e) =>
+                      setUsername(
+                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
+                      )
+                    }
                     placeholder="yourname"
                     className="border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 pl-1"
                     autoComplete="off"
@@ -143,12 +158,16 @@ export default function SignUpPage() {
               </div>
             )}
 
-            {error && <p className="text-sm text-rose-600">{error}</p>}
-            <Button type="submit" disabled={!role || submitting} className="w-full">
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button
+              type="submit"
+              disabled={!role || submitting}
+              className="w-full"
+            >
               {submitting ? "Creating account…" : "Sign Up"}
             </Button>
 
-            <p className="text-center text-sm text-zinc-600">
+            <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link href="/sign-in" className="font-semibold hover:underline">
                 Sign in

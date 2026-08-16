@@ -32,7 +32,11 @@ export default function PitchDeckUploadPage() {
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      const { presentation_id } = await uploadPresentation(token, file, linkedRepo || undefined);
+      const { presentation_id } = await uploadPresentation(
+        token,
+        file,
+        linkedRepo || undefined,
+      );
       router.push(`/pitch-deck/${presentation_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -50,8 +54,9 @@ export default function PitchDeckUploadPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Accepts .pptx, .ppt, and .pdf. Analysis covers problem/solution clarity, innovation, business
-            potential, and technical feasibility — plus a plagiarism/AI-content signal, never a verdict.
+            Accepts .pptx, .ppt, and .pdf. Analysis covers problem/solution
+            clarity, innovation, business potential, and technical feasibility —
+            plus a plagiarism/AI-content signal, never a verdict.
           </p>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -66,7 +71,8 @@ export default function PitchDeckUploadPage() {
               disabled={busy}
             />
             <p className="text-xs text-muted-foreground">
-              Used to cross-check technical claims in the deck against your actual code, if provided.
+              Used to cross-check technical claims in the deck against your
+              actual code, if provided.
             </p>
           </div>
 

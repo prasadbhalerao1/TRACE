@@ -5,8 +5,19 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { applyToJob, fetchOpenJobs, fetchMyApplications, type JobResponse } from "@/lib/api";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  applyToJob,
+  fetchOpenJobs,
+  fetchMyApplications,
+  type JobResponse,
+} from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 
 // QA_FINDINGS_20260729 Candidate #3: "Apply to jobs" was unreachable — applyToJob()
@@ -50,7 +61,8 @@ export default function CandidateJobsPage() {
       try {
         await reload();
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load jobs");
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "Failed to load jobs");
       }
     })();
     return () => {
@@ -71,7 +83,9 @@ export default function CandidateJobsPage() {
       const message = err instanceof Error ? err.message : "Failed to apply";
       setFeedback((prev) => ({
         ...prev,
-        [jobId]: message.includes("already_applied") ? "Already applied" : message,
+        [jobId]: message.includes("already_applied")
+          ? "Already applied"
+          : message,
       }));
     } finally {
       setBusyJobId(null);
@@ -81,15 +95,22 @@ export default function CandidateJobsPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Browse Jobs</h1>
-        <p className="text-sm text-slate">Find an open role and apply — your application is tracked on the Applications page.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Browse Jobs
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Find an open role and apply — your application is tracked on the
+          Applications page.
+        </p>
       </div>
 
-      {error && <p className="text-sm text-rose-flagged">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {!error && jobs === null && <CardListSkeleton />}
       {jobs !== null && jobs.length === 0 && (
-        <p className="text-sm text-slate">No open jobs right now — check back later.</p>
+        <p className="text-sm text-muted-foreground">
+          No open jobs right now — check back later.
+        </p>
       )}
 
       <div className="space-y-4">
@@ -100,11 +121,16 @@ export default function CandidateJobsPage() {
               <CardHeader>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <CardTitle className="text-base font-semibold">{job.title}</CardTitle>
+                    <CardTitle className="text-base font-semibold">
+                      {job.title}
+                    </CardTitle>
                     <CardDescription>
-                      {job.location ?? (job.is_remote ? "Remote" : "Location not specified")}
+                      {job.location ??
+                        (job.is_remote ? "Remote" : "Location not specified")}
                       {job.is_remote && job.location ? " • Remote" : ""}
-                      {job.min_experience_years != null ? ` • ${job.min_experience_years}+ yrs experience` : ""}
+                      {job.min_experience_years != null
+                        ? ` • ${job.min_experience_years}+ yrs experience`
+                        : ""}
                     </CardDescription>
                   </div>
                   <Button
@@ -112,21 +138,31 @@ export default function CandidateJobsPage() {
                     disabled={applied || busyJobId === job.id}
                     onClick={() => handleApply(job.id)}
                   >
-                    {applied ? "Applied" : busyJobId === job.id ? "Applying…" : "Apply"}
+                    {applied
+                      ? "Applied"
+                      : busyJobId === job.id
+                        ? "Applying…"
+                        : "Apply"}
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-sm text-slate whitespace-pre-line">{job.description}</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {job.description}
+                </p>
                 {job.required_skills && job.required_skills.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {job.required_skills.map((skill) => (
-                      <Badge key={skill} variant="outline">{skill}</Badge>
+                      <Badge key={skill} variant="outline">
+                        {skill}
+                      </Badge>
                     ))}
                   </div>
                 )}
                 {feedback[job.id] && (
-                  <p className={`text-xs ${feedback[job.id] === "Applied!" ? "text-teal-verified" : "text-rose-flagged"}`}>
+                  <p
+                    className={`text-xs ${feedback[job.id] === "Applied!" ? "text-success" : "text-destructive"}`}
+                  >
                     {feedback[job.id]}
                   </p>
                 )}

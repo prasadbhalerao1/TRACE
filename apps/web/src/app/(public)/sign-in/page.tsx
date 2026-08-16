@@ -62,12 +62,12 @@ export default function SignInPage() {
               />
             </div>
 
-            {error && <p className="text-sm text-rose-600">{error}</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting ? "Signing in…" : "Sign In"}
             </Button>
 
-            <p className="text-center text-sm text-zinc-600">
+            <p className="text-center text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
               <Link href="/sign-up" className="font-semibold hover:underline">
                 Sign up
