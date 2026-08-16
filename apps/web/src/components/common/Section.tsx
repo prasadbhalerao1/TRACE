@@ -1,7 +1,3 @@
-"use client";
-
-import { motion } from "framer-motion";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -12,29 +8,38 @@ interface SectionProps {
   className?: string;
   contentClassName?: string;
   children: React.ReactNode;
-  index?: number;
 }
 
 /** Standard "titled card" wrapper shared by every dashboard section, so each section
- * component only owns its own content, not header/animation/card boilerplate. */
-export function Section({ title, subtitle, action, className, contentClassName, children, index = 0 }: SectionProps) {
+ * component owns only its content, not header/card boilerplate.
+ *
+ * The staggered fade-in this used to carry is gone: it delayed each section by
+ * `index * 50ms`, so a dashboard of eight sections spent half a second assembling
+ * itself on every visit. Motion should communicate a state change, and "the page
+ * loaded" is not one. Dropping it also removes framer-motion from every dashboard
+ * route's critical path. */
+export function Section({
+  title,
+  subtitle,
+  action,
+  className,
+  contentClassName,
+  children,
+}: SectionProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.3 }}
-      className={className}
-    >
-      <Card className="h-full border-zinc-200/80 bg-white text-zinc-900 shadow-sm shadow-zinc-200/40 dark:border-zinc-700/80 dark:bg-zinc-900 dark:text-zinc-50 dark:shadow-zinc-950/40">
-        <CardHeader className="flex-row items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
-          <div className="space-y-1">
-            <CardTitle className="font-heading text-xs font-bold tracking-wider text-zinc-500 dark:text-zinc-400 uppercase">{title}</CardTitle>
-            {subtitle && <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">{subtitle}</p>}
-          </div>
-          {action}
-        </CardHeader>
-        <CardContent className={cn("pt-4", contentClassName)}>{children}</CardContent>
-      </Card>
-    </motion.div>
+    <Card className={cn("h-full", className)}>
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <div className="min-w-0 space-y-0.5">
+          <CardTitle className="text-section font-semibold text-foreground">
+            {title}
+          </CardTitle>
+          {subtitle ? (
+            <p className="text-meta text-muted-foreground">{subtitle}</p>
+          ) : null}
+        </div>
+        {action}
+      </CardHeader>
+      <CardContent className={contentClassName}>{children}</CardContent>
+    </Card>
   );
 }

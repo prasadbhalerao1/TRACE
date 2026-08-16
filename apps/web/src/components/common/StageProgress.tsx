@@ -35,7 +35,11 @@ export function StageProgress({
   const unknownStage = Boolean(currentStage) && activeIndex === -1;
 
   return (
-    <div className={cn("space-y-2", className)} aria-live="polite" aria-busy="true">
+    <div
+      className={cn("space-y-2", className)}
+      aria-live="polite"
+      aria-busy="true"
+    >
       {stages.map((stage, i) => {
         const done = activeIndex > i;
         const active = activeIndex === i;
@@ -59,7 +63,8 @@ export function StageProgress({
             <span
               className={cn(
                 "transition-colors duration-300",
-                done && "text-muted-foreground line-through decoration-muted-foreground/40",
+                done &&
+                  "text-muted-foreground line-through decoration-muted-foreground/40",
                 active && "font-medium text-foreground",
                 !done && !active && "text-muted-foreground/70",
               )}

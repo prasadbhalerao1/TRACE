@@ -52,23 +52,80 @@ export interface ATSScoreDetail {
 
 const CRITICAL_ATS_KEYWORDS = [
   // Technical Skills
-  "javascript", "typescript", "python", "java", "c++", "sql", "html", "css",
-  "react", "next.js", "vue", "angular", "node.js", "express", "fastapi", "django",
-  "postgresql", "mongodb", "redis", "mysql", "dynamodb", "firestore",
-  "aws", "azure", "gcp", "google cloud", "docker", "kubernetes", "git",
+  "javascript",
+  "typescript",
+  "python",
+  "java",
+  "c++",
+  "sql",
+  "html",
+  "css",
+  "react",
+  "next.js",
+  "vue",
+  "angular",
+  "node.js",
+  "express",
+  "fastapi",
+  "django",
+  "postgresql",
+  "mongodb",
+  "redis",
+  "mysql",
+  "dynamodb",
+  "firestore",
+  "aws",
+  "azure",
+  "gcp",
+  "google cloud",
+  "docker",
+  "kubernetes",
+  "git",
 
   // Business & Soft Skills
-  "leadership", "communication", "problem solving", "project management",
-  "agile", "scrum", "sprint", "kanban", "ci/cd", "devops",
-  "api", "rest", "graphql", "microservices", "cloud",
+  "leadership",
+  "communication",
+  "problem solving",
+  "project management",
+  "agile",
+  "scrum",
+  "sprint",
+  "kanban",
+  "ci/cd",
+  "devops",
+  "api",
+  "rest",
+  "graphql",
+  "microservices",
+  "cloud",
 
   // Metrics & Impact Words
-  "improved", "increased", "reduced", "optimized", "engineered", "architected",
-  "designed", "implemented", "developed", "launched", "scaled", "achieved",
-  "delivered", "collaborated", "managed", "led",
+  "improved",
+  "increased",
+  "reduced",
+  "optimized",
+  "engineered",
+  "architected",
+  "designed",
+  "implemented",
+  "developed",
+  "launched",
+  "scaled",
+  "achieved",
+  "delivered",
+  "collaborated",
+  "managed",
+  "led",
 
   // Percent & Numbers (important for ATS)
-  "%", "x", "roi", "revenue", "growth", "performance", "million", "thousand",
+  "%",
+  "x",
+  "roi",
+  "revenue",
+  "growth",
+  "performance",
+  "million",
+  "thousand",
 ];
 
 export function calculateATSScore(data: ResumeData): ATSScoreDetail {
@@ -85,7 +142,7 @@ export function calculateATSScore(data: ResumeData): ATSScoreDetail {
       breakdown.contact.score * 0.15 +
       breakdown.keywords.score * 0.25 +
       breakdown.formatting.score * 0.15 +
-      breakdown.content.score * 0.30
+      breakdown.content.score * 0.3,
   );
 
   return {
@@ -94,7 +151,10 @@ export function calculateATSScore(data: ResumeData): ATSScoreDetail {
   };
 }
 
-function calculateParsingScore(data: ResumeData): { score: number; issues: string[] } {
+function calculateParsingScore(data: ResumeData): {
+  score: number;
+  issues: string[];
+} {
   const issues: string[] = [];
   let score = 100;
 
@@ -136,7 +196,10 @@ function calculateParsingScore(data: ResumeData): { score: number; issues: strin
   return { score: Math.max(0, score), issues };
 }
 
-function calculateContactScore(data: ResumeData): { score: number; issues: string[] } {
+function calculateContactScore(data: ResumeData): {
+  score: number;
+  issues: string[];
+} {
   const issues: string[] = [];
   let score = 100;
 
@@ -169,7 +232,10 @@ function calculateContactScore(data: ResumeData): { score: number; issues: strin
   return { score: Math.max(0, score), issues };
 }
 
-function calculateKeywordScore(data: ResumeData): { score: number; issues: string[] } {
+function calculateKeywordScore(data: ResumeData): {
+  score: number;
+  issues: string[];
+} {
   const issues: string[] = [];
   let score = 0;
   const keywordMatches = new Set<string>();
@@ -190,31 +256,47 @@ function calculateKeywordScore(data: ResumeData): { score: number; issues: strin
     score += 15;
     keywordMatches.add("quantified achievements");
   } else {
-    issues.push("No quantified results found (add metrics like %, $, x multiplier)");
+    issues.push(
+      "No quantified results found (add metrics like %, $, x multiplier)",
+    );
     score -= 10;
   }
 
   // Check for impact action verbs
-  const impactVerbs = ["led", "architected", "engineered", "optimized", "scaled", "delivered"];
+  const impactVerbs = [
+    "led",
+    "architected",
+    "engineered",
+    "optimized",
+    "scaled",
+    "delivered",
+  ];
   const hasImpactVerbs = impactVerbs.some((verb) =>
-    new RegExp(`\\b${verb}\\b`, "i").test(fullText)
+    new RegExp(`\\b${verb}\\b`, "i").test(fullText),
   );
   if (hasImpactVerbs) {
     score += 10;
   } else {
-    issues.push("Resume lacks strong action verbs (add: led, engineered, optimized, scaled)");
+    issues.push(
+      "Resume lacks strong action verbs (add: led, engineered, optimized, scaled)",
+    );
     score -= 5;
   }
 
   if (keywordMatches.size < 10) {
-    issues.push(`Low keyword density—found only ${keywordMatches.size} ATS keywords (ideal: 15+)`);
+    issues.push(
+      `Low keyword density—found only ${keywordMatches.size} ATS keywords (ideal: 15+)`,
+    );
     score = Math.max(score - 15, 0);
   }
 
   return { score: Math.min(score, 100), issues };
 }
 
-function calculateFormattingScore(data: ResumeData): { score: number; issues: string[] } {
+function calculateFormattingScore(data: ResumeData): {
+  score: number;
+  issues: string[];
+} {
   const issues: string[] = [];
   let score = 100;
 
@@ -222,7 +304,11 @@ function calculateFormattingScore(data: ResumeData): { score: number; issues: st
   const fullText = getResumeText(data);
 
   // Detect potential formatting issues
-  if (fullText.includes("•") || fullText.includes("◦") || fullText.includes("‣")) {
+  if (
+    fullText.includes("•") ||
+    fullText.includes("◦") ||
+    fullText.includes("‣")
+  ) {
     score -= 5; // Non-standard bullets
   }
 
@@ -231,7 +317,9 @@ function calculateFormattingScore(data: ResumeData): { score: number; issues: st
     score -= 10;
   }
 
-  if (data.projects.some((proj) => !proj.bullets || proj.bullets.length === 0)) {
+  if (
+    data.projects.some((proj) => !proj.bullets || proj.bullets.length === 0)
+  ) {
     issues.push("Some projects lack descriptions");
     score -= 5;
   }
@@ -245,9 +333,13 @@ function calculateFormattingScore(data: ResumeData): { score: number; issues: st
   const hasExperience = data.experience.length > 0;
   const hasEducation = data.education.length > 0;
 
-  const sections = [hasSummary, hasSkills, hasExperience, hasEducation].filter(Boolean).length;
+  const sections = [hasSummary, hasSkills, hasExperience, hasEducation].filter(
+    Boolean,
+  ).length;
   if (sections < 3) {
-    issues.push("Resume missing key sections (needs: Summary, Skills, Experience, Education)");
+    issues.push(
+      "Resume missing key sections (needs: Summary, Skills, Experience, Education)",
+    );
     score -= 15;
   }
 
@@ -264,7 +356,10 @@ function calculateFormattingScore(data: ResumeData): { score: number; issues: st
   return { score: Math.max(0, score), issues };
 }
 
-function calculateContentScore(data: ResumeData): { score: number; issues: string[] } {
+function calculateContentScore(data: ResumeData): {
+  score: number;
+  issues: string[];
+} {
   const issues: string[] = [];
   let score = 0;
 
@@ -316,7 +411,9 @@ function calculateContentScore(data: ResumeData): { score: number; issues: strin
   if (totalLength > 2000 && totalLength < 4500) {
     score += 10;
   } else if (totalLength > 4500) {
-    issues.push("Resume too long—ATS systems prefer 1-2 pages (truncation may occur)");
+    issues.push(
+      "Resume too long—ATS systems prefer 1-2 pages (truncation may occur)",
+    );
     score -= 15;
   } else if (totalLength < 1500) {
     issues.push("Resume too short—add more detail and impact statements");
@@ -360,8 +457,12 @@ function getResumeText(data: ResumeData): string {
     data.skills.databases,
     data.skills.tools,
     data.skills.cloud,
-    ...data.experience.map((e) => `${e.company} ${e.role} ${e.bullets.join(" ")}`),
-    ...data.projects.map((p) => `${p.title} ${p.technologies} ${p.bullets.join(" ")}`),
+    ...data.experience.map(
+      (e) => `${e.company} ${e.role} ${e.bullets.join(" ")}`,
+    ),
+    ...data.projects.map(
+      (p) => `${p.title} ${p.technologies} ${p.bullets.join(" ")}`,
+    ),
     ...data.education.map((e) => `${e.institution} ${e.degree}`),
   ];
   return parts.filter(Boolean).join(" ");

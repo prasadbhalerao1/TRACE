@@ -23,10 +23,7 @@ export function CardSkeleton({ className }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={cn(
-        "rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950",
-        className,
-      )}
+      className={cn("rounded-lg border border-border bg-card", className)}
     />
   );
 }

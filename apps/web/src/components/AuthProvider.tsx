@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  ReactNode,
+} from "react";
 import { API_URL } from "@/lib/api";
 
 export interface SignupInput {
@@ -47,22 +55,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem("access_token");
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<void> => {
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+  const login = useCallback(
+    async (email: string, password: string): Promise<void> => {
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Login failed");
-    }
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Login failed");
+      }
 
-    const data = await response.json();
-    localStorage.setItem("access_token", data.access_token);
-    setIsSignedIn(true);
-  }, []);
+      const data = await response.json();
+      localStorage.setItem("access_token", data.access_token);
+      setIsSignedIn(true);
+    },
+    [],
+  );
 
   const signup = useCallback(async (input: SignupInput): Promise<void> => {
     const response = await fetch(`${API_URL}/auth/signup`, {

@@ -33,7 +33,10 @@ const _MAX_ME_RETRIES = 4;
  * code, whereas `fetchMe` throws `GET /me failed: 500` when the server did answer. */
 function isTransientMeError(message: string): boolean {
   if (/\b(429|502|503|504)\b/.test(message)) return true;
-  return /failed to fetch|networkerror|load failed/i.test(message) && !/\b[45]\d\d\b/.test(message);
+  return (
+    /failed to fetch|networkerror|load failed/i.test(message) &&
+    !/\b[45]\d\d\b/.test(message)
+  );
 }
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
@@ -70,7 +73,11 @@ function writeCachedMe(me: MeResponse | null): void {
   }
 }
 
-export function CurrentUserProvider({ children }: { children: React.ReactNode }) {
+export function CurrentUserProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const { isLoaded, isSignedIn, getToken, logout } = useAuth();
   // Holds only what must be fetched. The signed-out value is *derived* below rather than
@@ -135,7 +142,8 @@ export function CurrentUserProvider({ children }: { children: React.ReactNode })
         setError(null);
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : "Failed to load account";
+        const message =
+          err instanceof Error ? err.message : "Failed to load account";
         // Check for 401 in error message (token expired/invalid)
         if (message.includes("401")) {
           writeCachedMe(null);

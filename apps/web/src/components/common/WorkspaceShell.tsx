@@ -1,21 +1,31 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { useCurrentUser } from "@/components/CurrentUserProvider";
-import { ConnectionState, isConnectionError } from "@/components/common/ConnectionState";
+import {
+  ConnectionState,
+  isConnectionError,
+} from "@/components/common/ConnectionState";
 import { SectionError } from "@/components/common/SectionError";
 import { PageSkeleton } from "@/components/common/Skeleton";
-import { WORKSPACE_NAV, type WorkspaceRole } from "@/components/common/workspaceNav";
+import { WorkspaceNavList } from "@/components/common/WorkspaceNavList";
+import { CommandPalette } from "@/components/common/CommandPalette";
+import {
+  ROLE_LABELS,
+  type WorkspaceRole,
+} from "@/components/common/workspaceNav";
 
-export type { WorkspaceNavItem, WorkspaceRole } from "@/components/common/workspaceNav";
+export type {
+  WorkspaceNavItem,
+  WorkspaceRole,
+} from "@/components/common/workspaceNav";
 
 interface WorkspaceShellProps {
-  /** Role this route is restricted to. Omit for routes that serve every role
-   * (`/home`), in which case the sidebar follows the signed-in user's own role and
-   * the only gate is "signed in and onboarded". */
+  /** Role this route is restricted to. Omit for routes serving every role (`/home`),
+   * where the sidebar follows the viewer's own role and the only gate is
+   * "signed in and onboarded". */
   role?: WorkspaceRole;
   children: React.ReactNode;
 }
@@ -31,13 +41,13 @@ interface WorkspaceShellProps {
  */
 export function WorkspaceShell({ role, children }: WorkspaceShellProps) {
   const router = useRouter();
-  const { me, isLoaded, isSignedIn, error, attempts, reload } = useCurrentUser();
+  const { me, isLoaded, isSignedIn, error, attempts, reload } =
+    useCurrentUser();
 
   const viewerRole = me?.profile?.role as WorkspaceRole | undefined;
   // Before `me` resolves there is no role to look up, so fall back to the route's own
   // role (when it has one) to render a plausible sidebar rather than an empty rail.
   const navRole = viewerRole ?? role;
-  const { heading, nav } = navRole ? WORKSPACE_NAV[navRole] : { heading: "Workspace", nav: [] };
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -64,36 +74,46 @@ export function WorkspaceShell({ role, children }: WorkspaceShellProps) {
   const settling = !isLoaded || me === undefined;
 
   return (
-    <div className="flex flex-col md:flex-row flex-1 min-h-[calc(100vh-65px)]">
-      <aside className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6">
-        <div className="space-y-4">
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{heading}</h2>
-          <nav className="flex flex-col gap-1">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-zinc-900 text-sm font-medium text-ink dark:text-zinc-50"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+    <div className="flex flex-1">
+      <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 flex-col gap-4 overflow-y-auto bg-sidebar px-3 py-5 shadow-flat md:flex">
+        {navRole ? (
+          <>
+            <div className="flex items-center justify-between px-2">
+              <h2 className="text-meta font-medium text-muted-foreground">
+                {ROLE_LABELS[navRole]}
+              </h2>
+              {/* Surfaces the shortcut rather than leaving it undiscoverable. */}
+              <kbd className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                ⌘K
+              </kbd>
+            </div>
+            <WorkspaceNavList role={navRole} />
+            <CommandPalette role={navRole} />
+          </>
+        ) : null}
       </aside>
-      <main className="flex-1 bg-zinc-50 dark:bg-black p-8">
+
+      <main className="min-w-0 flex-1">
         {error ? (
           // A bare "Failed to fetch" reads as a broken app when it usually just means
           // the API hasn't finished booting. Only genuine API errors get the red box.
-          isConnectionError(error) ? (
-            <ConnectionState onRetry={reload} retrying={false} attempts={attempts} />
-          ) : (
-            <SectionError message={error} onRetry={reload} retrying={false} />
-          )
+          <div className="mx-auto w-full max-w-workspace px-4 py-8 md:px-8">
+            {isConnectionError(error) ? (
+              <ConnectionState
+                onRetry={reload}
+                retrying={false}
+                attempts={attempts}
+              />
+            ) : (
+              <SectionError message={error} onRetry={reload} retrying={false} />
+            )}
+          </div>
         ) : allowed ? (
           children
         ) : settling ? (
-          <PageSkeleton />
+          <div className="mx-auto w-full max-w-workspace px-4 py-8 md:px-8">
+            <PageSkeleton />
+          </div>
         ) : null}
       </main>
     </div>

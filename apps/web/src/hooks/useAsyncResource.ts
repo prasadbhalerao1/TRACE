@@ -19,9 +19,16 @@ const _cacheTimestamps = new Map<string, number>();
  * transient gateway error. Retried automatically rather than surfaced — showing a red
  * error box for a condition that clears in two seconds is the wrong call. */
 function isTransient(message: string): boolean {
-  if (/\b(429|502|503|504)\b/.test(message) || /rate_limit_exceeded/i.test(message)) return true;
+  if (
+    /\b(429|502|503|504)\b/.test(message) ||
+    /rate_limit_exceeded/i.test(message)
+  )
+    return true;
   // A connection-level failure has no HTTP status attached; a real 4xx/5xx does.
-  return /failed to fetch|networkerror|load failed/i.test(message) && !/\b[45]\d\d\b/.test(message);
+  return (
+    /failed to fetch|networkerror|load failed/i.test(message) &&
+    !/\b[45]\d\d\b/.test(message)
+  );
 }
 
 const _MAX_AUTO_RETRIES = 4;
@@ -50,10 +57,16 @@ export function useAsyncResource<T>(
   // Evaluating it on every render also meant an entry could expire mid-render and
   // change the result without any state having changed.
   const [state, setState] = useState<AsyncResourceState<T>>(() => {
-    const cached = cacheKey !== undefined ? (_resourceCache.get(cacheKey) as T | undefined) : undefined;
-    const cachedAt = cacheKey !== undefined ? _cacheTimestamps.get(cacheKey) : undefined;
+    const cached =
+      cacheKey !== undefined
+        ? (_resourceCache.get(cacheKey) as T | undefined)
+        : undefined;
+    const cachedAt =
+      cacheKey !== undefined ? _cacheTimestamps.get(cacheKey) : undefined;
     const hasFreshCache =
-      cached !== undefined && cachedAt !== undefined && Date.now() - cachedAt < _CACHE_TTL_MS;
+      cached !== undefined &&
+      cachedAt !== undefined &&
+      Date.now() - cachedAt < _CACHE_TTL_MS;
 
     return hasFreshCache
       ? { data: cached as T, error: null, loading: false }
@@ -82,8 +95,7 @@ export function useAsyncResource<T>(
         }
       } catch (err) {
         if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : "Failed to load";
+        const message = err instanceof Error ? err.message : "Failed to load";
 
         // Boot-time unreachability and rate limits clear on their own, so wait and try
         // again instead of showing an error the user can do nothing about.
@@ -98,7 +110,9 @@ export function useAsyncResource<T>(
           // Keep any stale cached data visible on a background revalidation failure —
           // only replace it with an error state if we had nothing to show at all.
           data: s.data,
-          error: isTransient(message) ? "Can't reach the backend right now." : message,
+          error: isTransient(message)
+            ? "Can't reach the backend right now."
+            : message,
           loading: false,
         }));
       }

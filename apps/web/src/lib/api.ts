@@ -2,7 +2,8 @@
 // guards routes itself; components call FastAPI directly with the bearer token they
 // already have client-side. No Server Actions, no app/api/* proxying.
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type Role = "candidate" | "recruiter" | "organizer" | "judge" | "admin";
 
@@ -54,10 +55,26 @@ export const SUB_SCORE_LABELS: Record<string, string> = {
   hackathon_performance: "Hackathon Performance",
 };
 
+/** How much of a Talent Score is backed by real evidence rather than cold-start gaps.
+ *
+ * `available_signals / expected_signals`, where a signal is a sub-score that resolved
+ * to a non-null value. Per the backend contract, a score below the 50% threshold
+ * reflects a *sparse profile, not a weak candidate* — the UI must not present it as a
+ * poor result. */
+export interface EvidenceConfidence {
+  available_signals: number;
+  expected_signals: number;
+  /** available_signals / expected_signals, 0-1. */
+  confidence: number;
+}
+
 export interface TalentScoreResponse {
   overall: number | null;
   sub_scores: Record<string, SubScore>;
   renormalized_subscores: string[];
+  // The API has always returned this; the type omitted it, so every consumer silently
+  // dropped the confidence context that makes a score readable.
+  confidence: EvidenceConfidence;
   score_version: string;
   computed_at: string;
 }
@@ -92,13 +109,19 @@ export interface LeetcodeStats {
   current_streak: number;
   total_active_days: number;
   submission_calendar: Record<string, number>;
-  contest_history: { title: string; rating: number; ranking: number; start_time: number }[];
+  contest_history: {
+    title: string;
+    rating: number;
+    ranking: number;
+    start_time: number;
+  }[];
   latest_rating: number | null;
 }
 
 /** The four outcomes a self-reported hackathon entry can have. Shared by the create
  * request and the stored entry so the form's select and the rendered list can't drift. */
-export type HackathonExperienceResult = "winner" | "top5" | "finalist" | "participant";
+export type HackathonExperienceResult =
+  "winner" | "top5" | "finalist" | "participant";
 
 /** A hackathon entry as stored on the profile: the fields the client submits plus the
  * server-generated `id` and the optional link to a platform-run hackathon. Mirrors the
@@ -159,7 +182,8 @@ export interface IngestionStatusResponse {
 async function pollDelay(ms: number, signal?: AbortSignal): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 
-  if (typeof document === "undefined" || !document.hidden || signal?.aborted) return;
+  if (typeof document === "undefined" || !document.hidden || signal?.aborted)
+    return;
 
   await new Promise<void>((resolve) => {
     const onVisible = () => {
@@ -175,12 +199,17 @@ async function pollDelay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export async function fetchIngestionStatus(token: string): Promise<IngestionStatusResponse> {
+export async function fetchIngestionStatus(
+  token: string,
+): Promise<IngestionStatusResponse> {
   const res = await fetch(`${API_URL}/candidates/me/ingestion-status`, {
     headers: authHeaders(token),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`GET /candidates/me/ingestion-status failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error(
+      `GET /candidates/me/ingestion-status failed: ${res.status}`,
+    );
   return res.json();
 }
 
@@ -286,12 +315,15 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
-export async function fetchDashboard(token: string): Promise<DashboardResponse> {
+export async function fetchDashboard(
+  token: string,
+): Promise<DashboardResponse> {
   const res = await fetch(`${API_URL}/candidates/me/dashboard`, {
     headers: authHeaders(token),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`GET /candidates/me/dashboard failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error(`GET /candidates/me/dashboard failed: ${res.status}`);
   return res.json();
 }
 
@@ -300,33 +332,60 @@ export async function fetchDashboard(token: string): Promise<DashboardResponse> 
 // gets its own loading/error/retry state. See services/api/modules/candidates/router.py's
 // `/me/github-summary` and `/me/badges` (split out from `/me/dashboard` for this reason).
 
-export async function fetchMyProfile(token: string): Promise<CandidateProfileResponse> {
-  const res = await fetch(`${API_URL}/candidates/me`, { headers: authHeaders(token), cache: "no-store" });
+export async function fetchMyProfile(
+  token: string,
+): Promise<CandidateProfileResponse> {
+  const res = await fetch(`${API_URL}/candidates/me`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(`GET /candidates/me failed: ${res.status}`);
   return res.json();
 }
 
-export async function fetchGithubSummary(token: string): Promise<GithubSummary> {
-  const res = await fetch(`${API_URL}/candidates/me/github-summary`, { headers: authHeaders(token), cache: "no-store" });
-  if (!res.ok) throw new Error(`GET /candidates/me/github-summary failed: ${res.status}`);
+export async function fetchGithubSummary(
+  token: string,
+): Promise<GithubSummary> {
+  const res = await fetch(`${API_URL}/candidates/me/github-summary`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok)
+    throw new Error(`GET /candidates/me/github-summary failed: ${res.status}`);
   return res.json();
 }
 
-export async function fetchMyLatestScore(token: string): Promise<TalentScoreResponse | null> {
-  const res = await fetch(`${API_URL}/candidates/me/score`, { headers: authHeaders(token), cache: "no-store" });
-  if (!res.ok) throw new Error(`GET /candidates/me/score failed: ${res.status}`);
+export async function fetchMyLatestScore(
+  token: string,
+): Promise<TalentScoreResponse | null> {
+  const res = await fetch(`${API_URL}/candidates/me/score`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok)
+    throw new Error(`GET /candidates/me/score failed: ${res.status}`);
   return res.json();
 }
 
-export async function fetchMyScoreHistory(token: string): Promise<TalentScoreResponse[]> {
-  const res = await fetch(`${API_URL}/candidates/me/score/history`, { headers: authHeaders(token), cache: "no-store" });
-  if (!res.ok) throw new Error(`GET /candidates/me/score/history failed: ${res.status}`);
+export async function fetchMyScoreHistory(
+  token: string,
+): Promise<TalentScoreResponse[]> {
+  const res = await fetch(`${API_URL}/candidates/me/score/history`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok)
+    throw new Error(`GET /candidates/me/score/history failed: ${res.status}`);
   return res.json();
 }
 
 export async function fetchMyBadges(token: string): Promise<BadgeResponse[]> {
-  const res = await fetch(`${API_URL}/candidates/me/badges`, { headers: authHeaders(token), cache: "no-store" });
-  if (!res.ok) throw new Error(`GET /candidates/me/badges failed: ${res.status}`);
+  const res = await fetch(`${API_URL}/candidates/me/badges`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+  if (!res.ok)
+    throw new Error(`GET /candidates/me/badges failed: ${res.status}`);
   return res.json();
 }
 
@@ -343,7 +402,8 @@ export async function fetchGithubOAuthUrl(
     `${API_URL}/candidates/github/oauth-url?return_to=${encodeURIComponent(returnTo)}`,
     { headers: authHeaders(token) },
   );
-  if (!res.ok) throw new Error(`GET /candidates/github/oauth-url failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error(`GET /candidates/github/oauth-url failed: ${res.status}`);
   const data = await res.json();
   return data.authorize_url;
 }
@@ -359,20 +419,27 @@ export async function connectLeetcode(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`POST /candidates/me/leetcode failed: ${detail}`);
   }
   return res.json();
 }
 
-export async function refreshStats(token: string): Promise<CandidateProfileResponse> {
+export async function refreshStats(
+  token: string,
+): Promise<CandidateProfileResponse> {
   const res = await fetch(`${API_URL}/candidates/me/stats/refresh`, {
     method: "POST",
     headers: authHeaders(token),
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = payload?.detail?.retry_at ? `on cooldown until ${payload.detail.retry_at}` : `status ${res.status}`;
+    const detail = payload?.detail?.retry_at
+      ? `on cooldown until ${payload.detail.retry_at}`
+      : `status ${res.status}`;
     throw new Error(`POST /candidates/me/stats/refresh failed: ${detail}`);
   }
   return res.json();
@@ -391,7 +458,10 @@ export async function uploadResume(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`POST /candidates/me/ingest/resume failed: ${detail}`);
   }
   return res.json();
@@ -410,7 +480,10 @@ export async function uploadCertificate(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`POST /candidates/me/ingest/certificate failed: ${detail}`);
   }
   return res.json();
@@ -428,7 +501,12 @@ export interface GeneratedResumeContent {
   headline: string;
   summary: string;
   skills: string[];
-  experience: { title: string; company?: string; years?: string; bullets: string[] }[];
+  experience: {
+    title: string;
+    company?: string;
+    years?: string;
+    bullets: string[];
+  }[];
   education: { institution?: string; degree?: string; year?: string }[];
 }
 
@@ -441,7 +519,10 @@ export interface GeneratedDocumentResponse {
   id: string;
   document_type: "resume" | "cover_letter";
   target_job_description: string | null;
-  content: GeneratedResumeContent | GeneratedCoverLetterContent | Record<string, unknown>;
+  content:
+    | GeneratedResumeContent
+    | GeneratedCoverLetterContent
+    | Record<string, unknown>;
   file_url: string | null;
   fact_check_status: "pending" | "passed" | "failed";
   fact_check_findings: FactCheckFinding[] | null;
@@ -456,7 +537,11 @@ export class DocumentGenerationError extends Error {
   status: number;
   findings: FactCheckFinding[] | null;
 
-  constructor(status: number, message: string, findings: FactCheckFinding[] | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    findings: FactCheckFinding[] | null = null,
+  ) {
     super(message);
     this.status = status;
     this.findings = findings;
@@ -477,7 +562,11 @@ async function postDocumentGeneration(
     const payload = await res.json().catch(() => null);
     const detail = payload?.detail;
     if (res.status === 422 && detail?.findings) {
-      throw new DocumentGenerationError(422, "fact_check_failed", detail.findings);
+      throw new DocumentGenerationError(
+        422,
+        "fact_check_failed",
+        detail.findings,
+      );
     }
     throw new DocumentGenerationError(
       res.status,
@@ -505,14 +594,19 @@ export function generateCoverLetter(
   });
 }
 
-export async function fetchMyDocuments(token: string): Promise<GeneratedDocumentResponse[]> {
+export async function fetchMyDocuments(
+  token: string,
+): Promise<GeneratedDocumentResponse[]> {
   const res = await fetch(`${API_URL}/candidates/me/documents`, {
     headers: authHeaders(token),
     cache: "no-store",
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`GET /candidates/me/documents failed: ${detail}`);
   }
   return res.json();
@@ -531,21 +625,31 @@ export async function publishPortfolio(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`POST /candidates/me/portfolio/publish failed: ${detail}`);
   }
   return res.json();
 }
 
-export async function unpublishPortfolio(token: string): Promise<CandidateProfileResponse> {
+export async function unpublishPortfolio(
+  token: string,
+): Promise<CandidateProfileResponse> {
   const res = await fetch(`${API_URL}/candidates/me/portfolio/unpublish`, {
     method: "POST",
     headers: authHeaders(token),
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
-    throw new Error(`POST /candidates/me/portfolio/unpublish failed: ${detail}`);
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
+    throw new Error(
+      `POST /candidates/me/portfolio/unpublish failed: ${detail}`,
+    );
   }
   return res.json();
 }
@@ -580,13 +684,19 @@ export async function fetchPublicPortfolio(
   baseUrl: string,
   username: string,
 ): Promise<PublicPortfolioResponse | null> {
-  const res = await fetch(`${baseUrl}/public/candidates/${encodeURIComponent(username)}`, {
-    cache: "no-store",
-  });
+  const res = await fetch(
+    `${baseUrl}/public/candidates/${encodeURIComponent(username)}`,
+    {
+      cache: "no-store",
+    },
+  );
   if (res.status === 404) return null;
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`GET /public/candidates/${username} failed: ${detail}`);
   }
   return res.json();
@@ -651,13 +761,20 @@ export async function fetchCareerGuidance(
   if (options?.targetRole) params.set("target_role", options.targetRole);
   if (options?.refresh) params.set("refresh", "true");
   const query = params.toString();
-  const res = await fetch(`${API_URL}/candidates/me/career-guidance${query ? `?${query}` : ""}`, {
-    headers: authHeaders(token),
-    cache: "no-store",
-  });
+  const res = await fetch(
+    `${API_URL}/candidates/me/career-guidance${query ? `?${query}` : ""}`,
+    {
+      headers: authHeaders(token),
+      cache: "no-store",
+    },
+  );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ? String(body.detail) : `GET career-guidance failed: ${res.status}`);
+    throw new Error(
+      body.detail
+        ? String(body.detail)
+        : `GET career-guidance failed: ${res.status}`,
+    );
   }
   return res.json();
 }
@@ -738,7 +855,10 @@ export async function uploadPresentation(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`POST /presentations/upload failed: ${detail}`);
   }
   return res.json();
@@ -754,8 +874,13 @@ export async function fetchPresentationReport(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
-    throw new Error(`GET /presentations/${presentationId}/report failed: ${detail}`);
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
+    throw new Error(
+      `GET /presentations/${presentationId}/report failed: ${detail}`,
+    );
   }
   return res.json();
 }
@@ -801,12 +926,16 @@ export interface MatchingStatusResponse {
   error: string | null;
 }
 
-export async function fetchMatchingStatus(token: string, jobId: string): Promise<MatchingStatusResponse> {
+export async function fetchMatchingStatus(
+  token: string,
+  jobId: string,
+): Promise<MatchingStatusResponse> {
   const res = await fetch(`${API_URL}/jobs/${jobId}/matching-status`, {
     headers: authHeaders(token),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`GET /jobs/${jobId}/matching-status failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error(`GET /jobs/${jobId}/matching-status failed: ${res.status}`);
   return res.json();
 }
 
@@ -958,13 +1087,19 @@ async function recruitmentJson<T>(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
   }
   return res.json();
 }
 
-export function createJob(token: string, body: JobCreateRequest): Promise<JobResponse> {
+export function createJob(
+  token: string,
+  body: JobCreateRequest,
+): Promise<JobResponse> {
   return recruitmentJson(`/jobs`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -984,15 +1119,23 @@ export function fetchOpenJobs(token: string): Promise<JobResponse[]> {
   return recruitmentJson(`/jobs/open`, token);
 }
 
-export function fetchJobMatches(token: string, jobId: string): Promise<MatchScoreWithCandidateResponse[]> {
+export function fetchJobMatches(
+  token: string,
+  jobId: string,
+): Promise<MatchScoreWithCandidateResponse[]> {
   return recruitmentJson(`/jobs/${jobId}/matches`, token);
 }
 
-export function applyToJob(token: string, jobId: string): Promise<ApplicationResponse> {
+export function applyToJob(
+  token: string,
+  jobId: string,
+): Promise<ApplicationResponse> {
   return recruitmentJson(`/jobs/${jobId}/apply`, token, { method: "POST" });
 }
 
-export function fetchMyApplications(token: string): Promise<ApplicationWithJobResponse[]> {
+export function fetchMyApplications(
+  token: string,
+): Promise<ApplicationWithJobResponse[]> {
   return recruitmentJson(`/candidates/me/applications`, token);
 }
 
@@ -1031,17 +1174,26 @@ export function postCopilotQuery(
   });
 }
 
-export function fetchHiringFunnel(token: string, jobId?: string): Promise<HiringFunnelResponse> {
+export function fetchHiringFunnel(
+  token: string,
+  jobId?: string,
+): Promise<HiringFunnelResponse> {
   const query = jobId ? `?job_id=${jobId}` : "";
   return recruitmentJson(`/analytics/hiring-funnel${query}`, token);
 }
 
-export function fetchTimeToHire(token: string, jobId?: string): Promise<TimeToHireResponse> {
+export function fetchTimeToHire(
+  token: string,
+  jobId?: string,
+): Promise<TimeToHireResponse> {
   const query = jobId ? `?job_id=${jobId}` : "";
   return recruitmentJson(`/analytics/time-to-hire${query}`, token);
 }
 
-export function fetchSourceBreakdown(token: string, jobId?: string): Promise<SourceBreakdownResponse> {
+export function fetchSourceBreakdown(
+  token: string,
+  jobId?: string,
+): Promise<SourceBreakdownResponse> {
   const query = jobId ? `?job_id=${jobId}` : "";
   return recruitmentJson(`/analytics/source-breakdown${query}`, token);
 }
@@ -1075,7 +1227,8 @@ export interface AssessmentResponse {
   job_id: string | null;
   candidate_id: string | null;
   type: "coding" | "mcq" | "project_analysis";
-  spec: CodingAssessmentSpec | MCQAssessmentSpec | Record<string, unknown> | null;
+  spec:
+    CodingAssessmentSpec | MCQAssessmentSpec | Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -1115,7 +1268,11 @@ export interface SubmissionResponse {
   submitted_at: string;
 }
 
-async function assessmentJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+async function assessmentJson<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
@@ -1123,7 +1280,10 @@ async function assessmentJson<T>(path: string, token: string, init?: RequestInit
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
   }
   return res.json();
@@ -1135,7 +1295,12 @@ async function assessmentJson<T>(path: string, token: string, init?: RequestInit
  * for later assignment). See .agents/decisions.md for the exact request/response shape. */
 export function createAssessment(
   token: string,
-  body: { type: "coding" | "mcq" | "project_analysis"; spec: Record<string, unknown>; jobId?: string | null; candidateId?: string | null },
+  body: {
+    type: "coding" | "mcq" | "project_analysis";
+    spec: Record<string, unknown>;
+    jobId?: string | null;
+    candidateId?: string | null;
+  },
 ): Promise<AssessmentResponse> {
   return assessmentJson(`/assessments`, token, {
     method: "POST",
@@ -1149,29 +1314,43 @@ export function createAssessment(
   });
 }
 
-export function fetchAssessment(token: string, assessmentId: string): Promise<AssessmentResponse> {
+export function fetchAssessment(
+  token: string,
+  assessmentId: string,
+): Promise<AssessmentResponse> {
   return assessmentJson(`/assessments/${assessmentId}`, token);
 }
 
 /** Candidate-self-serve inbox (QA Candidate #4 fix): every assessment assigned to the
  * authenticated candidate, newest first. Powers `(candidate)/assessments/page.tsx`. */
-export function fetchMyAssessments(token: string): Promise<AssessmentResponse[]> {
+export function fetchMyAssessments(
+  token: string,
+): Promise<AssessmentResponse[]> {
   return assessmentJson(`/assessments/mine`, token);
 }
 
 export function submitAssessment(
   token: string,
   assessmentId: string,
-  body: { code_or_answers: Record<string, unknown>; test_results?: TestResult[] },
+  body: {
+    code_or_answers: Record<string, unknown>;
+    test_results?: TestResult[];
+  },
 ): Promise<SubmissionResponse> {
   return assessmentJson(`/assessments/${assessmentId}/submit`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code_or_answers: body.code_or_answers, test_results: body.test_results ?? [] }),
+    body: JSON.stringify({
+      code_or_answers: body.code_or_answers,
+      test_results: body.test_results ?? [],
+    }),
   });
 }
 
-export function fetchSubmission(token: string, submissionId: string): Promise<SubmissionResponse> {
+export function fetchSubmission(
+  token: string,
+  submissionId: string,
+): Promise<SubmissionResponse> {
   return assessmentJson(`/submissions/${submissionId}`, token);
 }
 
@@ -1278,7 +1457,12 @@ export interface InterviewDefinitionAttempt {
 
 export function generateDefinitionQuestions(
   token: string,
-  body: { role_title: string; job_description: string; years_experience?: number; question_count?: number },
+  body: {
+    role_title: string;
+    job_description: string;
+    years_experience?: number;
+    question_count?: number;
+  },
 ): Promise<{ questions: InterviewDefinitionQuestion[] }> {
   return assessmentJson(`/interview-definitions/generate-questions`, token, {
     method: "POST",
@@ -1310,11 +1494,15 @@ export function createInterviewDefinition(
   });
 }
 
-export function fetchMyInterviewDefinitions(token: string): Promise<InterviewDefinitionResponse[]> {
+export function fetchMyInterviewDefinitions(
+  token: string,
+): Promise<InterviewDefinitionResponse[]> {
   return assessmentJson(`/interview-definitions/mine`, token);
 }
 
-export function fetchOpenInterviewDefinitions(token: string): Promise<InterviewDefinitionResponse[]> {
+export function fetchOpenInterviewDefinitions(
+  token: string,
+): Promise<InterviewDefinitionResponse[]> {
   return assessmentJson(`/interview-definitions/open`, token);
 }
 
@@ -1344,7 +1532,11 @@ export function fetchInterviewDefinitionAttempts(
 
 export function startInterview(
   token: string,
-  body?: { job_id?: string; interview_definition_id?: string; topic_plan?: string[] },
+  body?: {
+    job_id?: string;
+    interview_definition_id?: string;
+    topic_plan?: string[];
+  },
 ): Promise<InterviewTurnResponse> {
   return assessmentJson(`/interview-sessions`, token, {
     method: "POST",
@@ -1363,11 +1555,18 @@ export interface InterviewSessionWithTranscript {
   transcript: TranscriptTurn[];
 }
 
-export function getInterviewSession(token: string, sessionId: string): Promise<InterviewSessionWithTranscript> {
+export function getInterviewSession(
+  token: string,
+  sessionId: string,
+): Promise<InterviewSessionWithTranscript> {
   return assessmentJson(`/interview-sessions/${sessionId}`, token);
 }
 
-export function interviewTurn(token: string, sessionId: string, answerText: string): Promise<InterviewTurnResponse> {
+export function interviewTurn(
+  token: string,
+  sessionId: string,
+  answerText: string,
+): Promise<InterviewTurnResponse> {
   return assessmentJson(`/interview-sessions/${sessionId}/turn`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1375,11 +1574,19 @@ export function interviewTurn(token: string, sessionId: string, answerText: stri
   });
 }
 
-export function endInterview(token: string, sessionId: string): Promise<InterviewReportResponse> {
-  return assessmentJson(`/interview-sessions/${sessionId}/end`, token, { method: "POST" });
+export function endInterview(
+  token: string,
+  sessionId: string,
+): Promise<InterviewReportResponse> {
+  return assessmentJson(`/interview-sessions/${sessionId}/end`, token, {
+    method: "POST",
+  });
 }
 
-export function fetchInterviewReport(token: string, sessionId: string): Promise<InterviewReportResponse> {
+export function fetchInterviewReport(
+  token: string,
+  sessionId: string,
+): Promise<InterviewReportResponse> {
   return assessmentJson(`/interview-sessions/${sessionId}/report`, token);
 }
 
@@ -1407,17 +1614,30 @@ export function generateContributionReport(
   return assessmentJson(`/contribution-reports/generate`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repo_full_name: repoFullName, github_usernames: githubUsernames }),
+    body: JSON.stringify({
+      repo_full_name: repoFullName,
+      github_usernames: githubUsernames,
+    }),
   });
 }
 
-export function fetchContributionReports(token: string, repoFullName: string): Promise<ContributionReportResponse[]> {
-  return assessmentJson(`/contribution-reports?repo_full_name=${encodeURIComponent(repoFullName)}`, token);
+export function fetchContributionReports(
+  token: string,
+  repoFullName: string,
+): Promise<ContributionReportResponse[]> {
+  return assessmentJson(
+    `/contribution-reports?repo_full_name=${encodeURIComponent(repoFullName)}`,
+    token,
+  );
 }
 
 // --- Hackathon Pipeline (Module 05) ---
 
-async function hackathonJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+async function hackathonJson<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
@@ -1425,7 +1645,10 @@ async function hackathonJson<T>(path: string, token: string, init?: RequestInit)
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
   }
   if (res.status === 204) return undefined as T;
@@ -1447,7 +1670,13 @@ export interface HackathonResponse {
 
 export function createHackathon(
   token: string,
-  body: { name: string; start_date?: string | null; end_date?: string | null; tracks?: string[]; ingestion_mode?: string },
+  body: {
+    name: string;
+    start_date?: string | null;
+    end_date?: string | null;
+    tracks?: string[];
+    ingestion_mode?: string;
+  },
 ): Promise<HackathonResponse> {
   return hackathonJson(`/hackathons`, token, {
     method: "POST",
@@ -1464,11 +1693,16 @@ export function fetchMyHackathons(token: string): Promise<HackathonResponse[]> {
 // /hackathons` above is organizer-only and 403s a candidate token; `GET /hackathons/open`
 // is the new, additive, candidate-role read added alongside it. See .agents/decisions.md.)
 
-export function fetchOpenHackathons(token: string): Promise<HackathonResponse[]> {
+export function fetchOpenHackathons(
+  token: string,
+): Promise<HackathonResponse[]> {
   return hackathonJson(`/hackathons/open`, token);
 }
 
-export function fetchHackathon(token: string, hackathonId: string): Promise<HackathonResponse> {
+export function fetchHackathon(
+  token: string,
+  hackathonId: string,
+): Promise<HackathonResponse> {
   return hackathonJson(`/hackathons/${hackathonId}`, token);
 }
 
@@ -1530,7 +1764,10 @@ export function submitHackathonProject(
   });
 }
 
-export function fetchHackathonTeams(token: string, hackathonId: string): Promise<TeamResponse[]> {
+export function fetchHackathonTeams(
+  token: string,
+  hackathonId: string,
+): Promise<TeamResponse[]> {
   return hackathonJson(`/hackathons/${hackathonId}/teams`, token);
 }
 
@@ -1579,7 +1816,11 @@ export interface TeamDetailResponse {
   ranking: RankingResponse | null;
 }
 
-export function fetchHackathonTeamDetail(token: string, hackathonId: string, teamId: string): Promise<TeamDetailResponse> {
+export function fetchHackathonTeamDetail(
+  token: string,
+  hackathonId: string,
+  teamId: string,
+): Promise<TeamDetailResponse> {
   return hackathonJson(`/hackathons/${hackathonId}/teams/${teamId}`, token);
 }
 
@@ -1605,11 +1846,15 @@ export function submitJudgeScore(
   submissionId: string,
   body: { score: number; rationale?: string | null },
 ): Promise<HackathonSubmissionResponse> {
-  return hackathonJson(`/hackathons/${hackathonId}/submissions/${submissionId}/judge-score`, token, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return hackathonJson(
+    `/hackathons/${hackathonId}/submissions/${submissionId}/judge-score`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export interface FinalizeRankingsResponse {
@@ -1676,7 +1921,14 @@ export async function pollRankingStatus(
 export function finalizeHackathonRankings(
   token: string,
   hackathonId: string,
-  body?: { custom_weights?: { judge_weight?: number; pitch_weight?: number; repo_weight?: number; novelty_weight?: number } },
+  body?: {
+    custom_weights?: {
+      judge_weight?: number;
+      pitch_weight?: number;
+      repo_weight?: number;
+      novelty_weight?: number;
+    };
+  },
 ): Promise<FinalizeRankingsResponse> {
   return hackathonJson(`/hackathons/${hackathonId}/rankings/finalize`, token, {
     method: "POST",
@@ -1685,14 +1937,22 @@ export function finalizeHackathonRankings(
   });
 }
 
-export function fetchHackathonRankings(token: string, hackathonId: string): Promise<RankingResponse[]> {
+export function fetchHackathonRankings(
+  token: string,
+  hackathonId: string,
+): Promise<RankingResponse[]> {
   return hackathonJson(`/hackathons/${hackathonId}/rankings`, token);
 }
 
 export function createRecruiterWatchlist(
   token: string,
   body: { track?: string | null; min_rank?: number | null; skills?: string[] },
-): Promise<{ id: string; recruiter_id: string; criteria: Record<string, unknown> | null; created_at: string }> {
+): Promise<{
+  id: string;
+  recruiter_id: string;
+  criteria: Record<string, unknown> | null;
+  created_at: string;
+}> {
   return hackathonJson(`/recruiters/me/watchlists`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1716,7 +1976,9 @@ export interface TopPerformerEntry {
   match_reasons: string[];
 }
 
-export function fetchTopPerformersFeed(token: string): Promise<{ entries: TopPerformerEntry[] }> {
+export function fetchTopPerformersFeed(
+  token: string,
+): Promise<{ entries: TopPerformerEntry[] }> {
   return hackathonJson(`/recruiters/me/top-performers-feed`, token);
 }
 
@@ -1726,21 +1988,31 @@ async function publicHackathonJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`GET ${path} failed: ${detail}`);
   }
   return res.json();
 }
 
-export function fetchPublicHackathonRankings(hackathonId: string): Promise<RankingResponse[]> {
+export function fetchPublicHackathonRankings(
+  hackathonId: string,
+): Promise<RankingResponse[]> {
   return publicHackathonJson(`/hackathons/${hackathonId}/rankings`);
 }
 
-export function fetchPublicHackathonTeamDetail(hackathonId: string, teamId: string): Promise<TeamDetailResponse> {
+export function fetchPublicHackathonTeamDetail(
+  hackathonId: string,
+  teamId: string,
+): Promise<TeamDetailResponse> {
   return publicHackathonJson(`/hackathons/${hackathonId}/teams/${teamId}`);
 }
 
-export function fetchPublicHackathon(hackathonId: string): Promise<HackathonResponse> {
+export function fetchPublicHackathon(
+  hackathonId: string,
+): Promise<HackathonResponse> {
   return publicHackathonJson(`/hackathons/${hackathonId}`);
 }
 
@@ -1751,7 +2023,11 @@ export function fetchPublicHackathon(hackathonId: string): Promise<HackathonResp
 // (Talent Score, Copilot, rankings) — this is enforced entirely backend-side; the
 // frontend just renders whatever the API returns.
 
-async function fraudJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+async function fraudJson<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
@@ -1759,14 +2035,18 @@ async function fraudJson<T>(path: string, token: string, init?: RequestInit): Pr
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
 }
 
-export type FraudFlagStatus = "raised" | "under_review" | "upheld" | "dismissed";
+export type FraudFlagStatus =
+  "raised" | "under_review" | "upheld" | "dismissed";
 
 export interface FraudFlagResponse {
   id: string;
@@ -1801,7 +2081,11 @@ export interface AuthenticityScoreResponse {
   score: number;
   components: {
     starting_score: number;
-    penalties_applied: { flag_id: string; flag_type: string; penalty: number }[];
+    penalties_applied: {
+      flag_id: string;
+      flag_type: string;
+      penalty: number;
+    }[];
     total_penalty: number;
   } | null;
   computed_at: string;
@@ -1836,12 +2120,18 @@ export interface FraudReviewQueueEntry {
 }
 
 // FR-6 — "corroboration strength," never a guilt score.
-export function fetchAuthenticityScore(token: string, candidateId: string): Promise<AuthenticityScoreResponse> {
+export function fetchAuthenticityScore(
+  token: string,
+  candidateId: string,
+): Promise<AuthenticityScoreResponse> {
   return fraudJson(`/candidates/${candidateId}/authenticity-score`, token);
 }
 
 // FR-8 — candidate-visible view of flags raised against their own profile.
-export function fetchCandidateFlags(token: string, candidateId: string): Promise<FraudFlagResponse[]> {
+export function fetchCandidateFlags(
+  token: string,
+  candidateId: string,
+): Promise<FraudFlagResponse[]> {
   return fraudJson(`/candidates/${candidateId}/flags`, token);
 }
 
@@ -1858,11 +2148,16 @@ export function submitFlagDispute(
 }
 
 // Admin/recruiter review queue + actions.
-export function fetchFraudReviewQueue(token: string): Promise<FraudReviewQueueEntry[]> {
+export function fetchFraudReviewQueue(
+  token: string,
+): Promise<FraudReviewQueueEntry[]> {
   return fraudJson(`/admin/fraud-review-queue`, token);
 }
 
-export function fetchFraudFlagDetail(token: string, flagId: string): Promise<FraudFlagDetailResponse> {
+export function fetchFraudFlagDetail(
+  token: string,
+  flagId: string,
+): Promise<FraudFlagDetailResponse> {
   return fraudJson(`/flags/${flagId}`, token);
 }
 
@@ -1881,16 +2176,35 @@ export function reviewFraudFlag(
 // Verification-check triggers (FR-1/FR-2/FR-3/FR-4/FR-5) — admin/recruiter-initiated,
 // since this codebase has no async job queue (every module invokes its LangGraph
 // synchronously from the router, per `.agents/decisions.md`).
-export function checkCertificate(token: string, certificationId: string): Promise<VerificationCheckResponse> {
-  return fraudJson(`/verification/certificates/${certificationId}/check`, token, { method: "POST" });
+export function checkCertificate(
+  token: string,
+  certificationId: string,
+): Promise<VerificationCheckResponse> {
+  return fraudJson(
+    `/verification/certificates/${certificationId}/check`,
+    token,
+    { method: "POST" },
+  );
 }
 
-export function checkSubmission(token: string, submissionId: string): Promise<VerificationCheckResponse> {
-  return fraudJson(`/verification/submissions/${submissionId}/check`, token, { method: "POST" });
+export function checkSubmission(
+  token: string,
+  submissionId: string,
+): Promise<VerificationCheckResponse> {
+  return fraudJson(`/verification/submissions/${submissionId}/check`, token, {
+    method: "POST",
+  });
 }
 
-export function checkProfileDuplicate(token: string, candidateId: string): Promise<VerificationCheckResponse> {
-  return fraudJson(`/verification/profiles/${candidateId}/duplicate-check`, token, { method: "POST" });
+export function checkProfileDuplicate(
+  token: string,
+  candidateId: string,
+): Promise<VerificationCheckResponse> {
+  return fraudJson(
+    `/verification/profiles/${candidateId}/duplicate-check`,
+    token,
+    { method: "POST" },
+  );
 }
 
 // --- Recruiter pipeline enhancements (QA fix: Recruiter #1/#3/#4) ---
@@ -1900,7 +2214,12 @@ export function checkProfileDuplicate(token: string, candidateId: string): Promi
 // long-term, just lets the KanbanBoard "Assign Assessment" button compile and work now.
 export function assignAssessment(
   token: string,
-  body: { jobId: string; candidateId: string; type: "coding" | "mcq" | "project_analysis"; spec: Record<string, unknown> },
+  body: {
+    jobId: string;
+    candidateId: string;
+    type: "coding" | "mcq" | "project_analysis";
+    spec: Record<string, unknown>;
+  },
 ): Promise<{ id: string }> {
   return recruitmentJson(`/assessments`, token, {
     method: "POST",
@@ -1934,7 +2253,11 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
-async function adminJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+async function adminJson<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { ...authHeaders(token), ...(init?.headers ?? {}) },
@@ -1942,7 +2265,10 @@ async function adminJson<T>(path: string, token: string, init?: RequestInit): Pr
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`${init?.method ?? "GET"} ${path} failed: ${detail}`);
   }
   return res.json();
@@ -1952,7 +2278,11 @@ export function fetchAdminUsers(token: string): Promise<AdminUserResponse[]> {
   return adminJson(`/admin/users`, token);
 }
 
-export function updateUserRole(token: string, userId: string, role: Role): Promise<AdminUserResponse> {
+export function updateUserRole(
+  token: string,
+  userId: string,
+  role: Role,
+): Promise<AdminUserResponse> {
   return adminJson(`/admin/users/${userId}/role`, token, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -1960,7 +2290,10 @@ export function updateUserRole(token: string, userId: string, role: Role): Promi
   });
 }
 
-export function fetchAuditLog(token: string, limit = 100): Promise<AuditLogEntry[]> {
+export function fetchAuditLog(
+  token: string,
+  limit = 100,
+): Promise<AuditLogEntry[]> {
   return adminJson(`/admin/audit-log?limit=${limit}`, token);
 }
 
@@ -1996,7 +2329,9 @@ export interface TrustedIssuerUpdateRequest {
   notes?: string | null;
 }
 
-export function fetchTrustedIssuers(token: string): Promise<TrustedIssuerResponse[]> {
+export function fetchTrustedIssuers(
+  token: string,
+): Promise<TrustedIssuerResponse[]> {
   return adminJson(`/admin/trusted-issuers`, token);
 }
 
@@ -2023,15 +2358,23 @@ export function updateTrustedIssuer(
   });
 }
 
-export async function deleteTrustedIssuer(token: string, issuerId: string): Promise<void> {
+export async function deleteTrustedIssuer(
+  token: string,
+  issuerId: string,
+): Promise<void> {
   const res = await fetch(`${API_URL}/admin/trusted-issuers/${issuerId}`, {
     method: "DELETE",
     headers: authHeaders(token),
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
-    throw new Error(`DELETE /admin/trusted-issuers/${issuerId} failed: ${detail}`);
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
+    throw new Error(
+      `DELETE /admin/trusted-issuers/${issuerId} failed: ${detail}`,
+    );
   }
 }
 
@@ -2043,7 +2386,10 @@ export interface ProfileUpdateRequest {
   degree?: string | null;
 }
 
-export async function updateProfile(token: string, body: ProfileUpdateRequest): Promise<CandidateProfileResponse> {
+export async function updateProfile(
+  token: string,
+  body: ProfileUpdateRequest,
+): Promise<CandidateProfileResponse> {
   const res = await fetch(`${API_URL}/candidates/me`, {
     method: "PATCH",
     headers: {
@@ -2054,7 +2400,10 @@ export async function updateProfile(token: string, body: ProfileUpdateRequest): 
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
     throw new Error(`PATCH /candidates/me failed: ${detail}`);
   }
   return res.json();
@@ -2081,8 +2430,13 @@ export async function addHackathonExperience(
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
-    throw new Error(`POST /candidates/me/hackathon-experience failed: ${detail}`);
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
+    throw new Error(
+      `POST /candidates/me/hackathon-experience failed: ${detail}`,
+    );
   }
   return res.json();
 }
@@ -2091,15 +2445,22 @@ export async function removeHackathonExperience(
   token: string,
   entryId: string,
 ): Promise<CandidateProfileResponse> {
-  const res = await fetch(`${API_URL}/candidates/me/hackathon-experience/${entryId}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
+  const res = await fetch(
+    `${API_URL}/candidates/me/hackathon-experience/${entryId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    },
+  );
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const detail = typeof payload?.detail === "string" ? payload.detail : `status ${res.status}`;
-    throw new Error(`DELETE /candidates/me/hackathon-experience failed: ${detail}`);
+    const detail =
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : `status ${res.status}`;
+    throw new Error(
+      `DELETE /candidates/me/hackathon-experience failed: ${detail}`,
+    );
   }
   return res.json();
 }
-

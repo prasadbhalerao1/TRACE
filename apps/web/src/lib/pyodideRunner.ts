@@ -41,7 +41,10 @@ function valuesEqual(a: unknown, b: unknown): boolean {
 /** Runs `code` against each hidden test's input in an isolated WASM instance, comparing
  * to the expected output locally. Returns pass/fail only — the caller submits this
  * result array to the backend, never the raw comparison details (doc 03 §2). */
-export async function runHiddenTests(code: string, tests: HiddenTest[]): Promise<TestResult[]> {
+export async function runHiddenTests(
+  code: string,
+  tests: HiddenTest[],
+): Promise<TestResult[]> {
   const pyodide = await getPyodide();
   const results: TestResult[] = [];
 
@@ -52,7 +55,10 @@ export async function runHiddenTests(code: string, tests: HiddenTest[]): Promise
       pyodide.globals.set("__test_input", test.input);
       pyodide.runPython(code);
       const actual = pyodide.runPython("solve_problem(__test_input)");
-      results.push({ test_name: testName, passed: valuesEqual(actual, test.expected) });
+      results.push({
+        test_name: testName,
+        passed: valuesEqual(actual, test.expected),
+      });
     } catch {
       results.push({ test_name: testName, passed: false });
     }

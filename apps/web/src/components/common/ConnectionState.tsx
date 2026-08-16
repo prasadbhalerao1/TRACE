@@ -14,8 +14,9 @@ import { Button } from "@/components/ui/button";
 export function isConnectionError(message: string | null | undefined): boolean {
   if (!message) return false;
   return (
-    /failed to fetch|networkerror|network request failed|load failed/i.test(message) &&
-    !/\b[45]\d\d\b/.test(message)
+    /failed to fetch|networkerror|network request failed|load failed/i.test(
+      message,
+    ) && !/\b[45]\d\d\b/.test(message)
   );
 }
 
@@ -36,16 +37,22 @@ export function ConnectionState({
   const persistent = attempts >= 4;
 
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white px-6 py-10 text-center dark:border-zinc-800 dark:bg-zinc-950">
-      <span className="flex size-10 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
-        {persistent ? <WifiOff className="size-5" /> : <Loader2 className="size-5 animate-spin" />}
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-10 text-center">
+      <span className="flex size-10 items-center justify-center rounded-full bg-warning/10 text-warning">
+        {persistent ? (
+          <WifiOff className="size-5" />
+        ) : (
+          <Loader2 className="size-5 animate-spin" />
+        )}
       </span>
 
       <div className="space-y-1">
-        <p className="font-heading text-sm font-semibold text-ink dark:text-zinc-50">
-          {persistent ? "Still can't reach the server" : "Connecting to the server…"}
+        <p className="font-heading text-sm font-semibold text-foreground">
+          {persistent
+            ? "Still can't reach the server"
+            : "Connecting to the server…"}
         </p>
-        <p className="max-w-sm text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="max-w-sm text-xs text-muted-foreground">
           {persistent
             ? "The API doesn't seem to be responding. Check that it's running, then try again."
             : "The server takes a few seconds to warm up after starting. This will clear on its own."}
