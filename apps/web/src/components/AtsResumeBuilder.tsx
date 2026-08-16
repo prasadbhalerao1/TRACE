@@ -78,7 +78,7 @@ const INITIAL_RESUME: ResumeData = {
     languages: "TypeScript, JavaScript (ES6+), Python, C++, SQL, HTML5/CSS3",
     frameworks: "Next.js 16, React 19, FastAPI, Tailwind CSS, Redux Toolkit, Express.js",
     tools: "Git, Docker, Postman, VS Code, Jest, Pyodide, Qdrant Vector DB",
-    databases: "PostgreSQL (Neon Cloud), Redis, Qdrant Vector DB, MongoDB Atlas",
+    databases: "PostgreSQL, Redis, Qdrant Vector DB",
     cloud: "Google Cloud Platform, AWS, Vercel, Render, Cloudinary",
   },
   experience: [
