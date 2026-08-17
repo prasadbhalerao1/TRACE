@@ -1,24 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { useAuth } from "@/components/AuthProvider";
+import { Users } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  fetchAdminUsers,
-  updateUserRole,
-  type AdminUserResponse,
-  type Role,
-} from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { fetchAdminUsers, updateUserRole, type Role } from "@/lib/api";
 
 const ASSIGNABLE_ROLES: Role[] = [
   "candidate",
@@ -28,162 +28,162 @@ const ASSIGNABLE_ROLES: Role[] = [
   "admin",
 ];
 
+/** What each role actually grants, so the operator is choosing a capability rather
+ * than a label. Shown in the confirmation before the change is committed. */
+const ROLE_EFFECT: Record<Role, string> = {
+  candidate: "Can only see their own profile, applications and assessments.",
+  recruiter: "Can search candidates, post jobs and move applicants through pipelines.",
+  organizer: "Can create events, import teams and publish rankings.",
+  judge: "Can score submissions in the evaluation queue.",
+  admin: "Full access, including fraud review, the issuer registry and this page.",
+};
+
 export default function AdminUsersPage() {
   const { getToken } = useAuth();
-  const [users, setUsers] = useState<AdminUserResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingChange, setPendingChange] = useState<{
+    userId: string;
+    name: string;
+    from: Role;
+    to: Role;
+  } | null>(null);
 
-  async function load() {
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("No session token");
-      const data = await fetchAdminUsers(token);
-      setUsers(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const data = await fetchAdminUsers(token);
-        if (cancelled) return;
-        setUsers(data);
-        setError(null);
-      } catch (err) {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Failed to load users");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // Was a useEffect plus a near-identical duplicate `load()` that existed only to
+  // re-read after a mutation; `retry()` covers both.
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchAdminUsers(token);
   }, [getToken]);
 
-  async function handleRoleChange(userId: string, role: Role) {
-    setUpdatingId(userId);
-    setError(null);
+  const { data, error: loadError, loading, retry } = useAsyncResource(
+    fetcher,
+    "admin:users",
+  );
+
+  const users = data ?? [];
+  const error = actionError ?? loadError;
+
+  async function handleConfirmRoleChange() {
+    if (!pendingChange) return;
+    setActionError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      await updateUserRole(token, userId, role);
-      await load();
-      toast.success(`Role updated to ${role}`);
+      await updateUserRole(token, pendingChange.userId, pendingChange.to);
+      toast.success(`${pendingChange.name} is now ${pendingChange.to}`, {
+        description: "The change is recorded in the audit log.",
+      });
+      retry();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update role";
-      setError(message);
+      const message =
+        err instanceof Error ? err.message : "Failed to update role";
+      setActionError(message);
       toast.error(message);
-    } finally {
-      setUpdatingId(null);
     }
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          User Role Management
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Audit user accounts, review activity, and adjust RBAC role
-          assignments.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Users"
+        description="Adjust what each account can do. Every change is written to the audit log."
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error ? (
+        <SectionError
+          message={error}
+          onRetry={actionError ? () => setActionError(null) : retry}
+          retrying={loading}
+          className="mb-4"
+        />
+      ) : null}
+      {loading && !data ? <CardListSkeleton /> : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 space-y-4">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">
-              User Directory
-            </CardTitle>
-            <CardDescription>
-              Review role classifications for active platform users.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {users === null && !error && <CardListSkeleton />}
-            {users !== null && users.length === 0 && (
-              <p className="text-sm text-muted-foreground">No users found.</p>
-            )}
-            {users?.map((user) => (
-              <div
+      {data && users.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No users yet"
+          description="Accounts appear here once people sign up."
+        />
+      ) : null}
+
+      {users.length > 0 && (
+        <ul className="rounded-xl shadow-flat">
+          {users.map((user) => {
+            const name = user.full_name ?? user.email;
+            return (
+              <li
                 key={user.id}
-                className="p-4 border rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card shadow-flat"
+                className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0"
               >
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground">
-                    {user.full_name ?? user.email}
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {user.email}
+                <div className="min-w-0">
+                  <p className="truncate text-body font-medium text-foreground">
+                    {name}
                   </p>
+                  {user.full_name ? (
+                    <p className="truncate text-meta text-muted-foreground">
+                      {user.email}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="flex items-center gap-3">
-                  <Badge className="capitalize">{user.role}</Badge>
-                  <select
-                    className="text-xs border rounded-md px-2 py-1 bg-card capitalize"
-                    value={user.role}
-                    disabled={updatingId === user.id}
-                    onChange={(e) =>
-                      handleRoleChange(user.id, e.target.value as Role)
-                    }
+                {/* A role change used to commit the moment the select changed, so
+                    granting someone full admin was a single stray interaction with
+                    no undo. It now states the effect and asks first. */}
+                <Select
+                  value={user.role}
+                  onValueChange={(value) => {
+                    const next = value as Role;
+                    if (!next || next === user.role) return;
+                    setPendingChange({
+                      userId: user.id,
+                      name,
+                      from: user.role,
+                      to: next,
+                    });
+                  }}
+                >
+                  <SelectTrigger
+                    className="w-40 capitalize"
+                    aria-label={`Role for ${name}`}
                   >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
                     {ASSIGNABLE_ROLES.map((r) => (
-                      <option key={r} value={r} className="capitalize">
+                      <SelectItem key={r} value={r} className="capitalize">
                         {r}
-                      </option>
+                      </SelectItem>
                     ))}
-                  </select>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                  </SelectContent>
+                </Select>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                RBAC Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground space-y-2 leading-relaxed">
-              <p>
-                Platform security uses RBAC roles: `candidate`, `recruiter`,
-                `organizer`, `judge`, `admin`.
-              </p>
-              <p>
-                Role constraints are checked on all FastAPI endpoints via JWT
-                token signatures.
-              </p>
-              <p>Changing a role here writes an entry to the audit log.</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">
-            Technical Reference: doc/SRS/00-Master-Architecture-and-Analysis.md
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs text-muted-foreground space-y-2">
-          <p>
-            **User Onboarding**: Accounts are created by signup and completed
-            during the onboarding step redirect flow, where the initial role
-            assignment is made.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+      <ConfirmDialog
+        open={pendingChange !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingChange(null);
+        }}
+        title={`Change role to ${pendingChange?.to}?`}
+        description={
+          pendingChange ? (
+            <>
+              <span className="text-foreground">{pendingChange.name}</span> will
+              change from {pendingChange.from} to {pendingChange.to}.{" "}
+              {ROLE_EFFECT[pendingChange.to]}
+            </>
+          ) : null
+        }
+        confirmLabel={`Make ${pendingChange?.to}`}
+        // Promoting to admin grants irreversible reach; everything else is a
+        // routine reassignment and shouldn't be styled as an alarm.
+        destructive={pendingChange?.to === "admin"}
+        onConfirm={handleConfirmRoleChange}
+      />
+    </Page>
   );
 }

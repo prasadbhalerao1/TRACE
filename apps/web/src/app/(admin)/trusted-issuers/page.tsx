@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 import { useCallback, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
@@ -145,27 +147,25 @@ export default function TrustedIssuersPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Trusted Issuer Registry
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Certificate verification checks the candidate&apos;s entered issuer
-            against this list. An issuer not listed here is flagged to reviewers
-            as unrecognized instead of silently assumed legitimate.
-          </p>
-        </div>
-        <Button
-          onClick={() => (formOpen ? resetForm() : setFormOpen(true))}
-          variant={formOpen ? "outline" : "default"}
-        >
-          {formOpen ? "Cancel" : "Add Issuer"}
-        </Button>
-      </div>
+    <Page>
+      <PageHeader
+        title="Trusted issuers"
+        description="Certificate verification checks a candidate's issuer against this list. Anything not listed is flagged to reviewers as unrecognised rather than silently assumed legitimate."
+        actions={
+          <Button
+            onClick={() => (formOpen ? resetForm() : setFormOpen(true))}
+            variant={formOpen ? "outline" : "default"}
+          >
+            {formOpen ? "Cancel" : "Add issuer"}
+          </Button>
+        }
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="mb-4 text-body text-destructive">
+          {error}
+        </p>
+      )}
 
       {formOpen && (
         <Card>
@@ -242,7 +242,7 @@ export default function TrustedIssuersPage() {
               />
             </div>
             <div className="flex gap-2 pt-2">
-              <Button onClick={handleSave} disabled={saving}>
+              <Button onClick={handleSave} pending={saving}>
                 {saving ? "Saving…" : editingId ? "Save changes" : "Add issuer"}
               </Button>
               <Button variant="outline" onClick={resetForm} disabled={saving}>
@@ -342,6 +342,6 @@ export default function TrustedIssuersPage() {
         confirmLabel="Remove issuer"
         onConfirm={() => (pendingDelete ? handleDelete(pendingDelete) : undefined)}
       />
-    </div>
+    </Page>
   );
 }
