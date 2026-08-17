@@ -1,30 +1,22 @@
 "use client";
 
-import { useAuth } from "@/components/AuthProvider";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-
 import { CareerGuidance } from "@/components/CareerGuidance";
+import { Page, PageHeader } from "@/components/common/PageHeader";
 
-// doc/SRS/01 §8: `(candidate)/career/page.tsx` — "roadmap timeline, course cards,
-// salary range chart." FR-4.1-4.5 all render here via <CareerGuidance />.
+/** Career guidance: roadmap, suggested courses, and salary ranges.
+ *
+ * The redirect-to-sign-in effect this page used to run was a second auth gate on
+ * top of the one `WorkspaceShell` already applies to every route in this group.
+ * Two gates racing each other is how a signed-in user ends up bounced mid-load,
+ * so this defers to the shell. */
 export default function CareerPage() {
-  const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
-
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.replace("/sign-in");
-    }
-  }, [isLoaded, isSignedIn, router]);
-
-  if (!isLoaded || !isSignedIn) {
-    return <div className="p-8 text-muted-foreground">Loading…</div>;
-  }
-
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6 p-8">
+    <Page>
+      <PageHeader
+        title="Career guidance"
+        description="A roadmap based on your verified skills, with the gaps that separate you from your target role."
+      />
       <CareerGuidance />
-    </div>
+    </Page>
   );
 }

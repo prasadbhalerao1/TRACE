@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
   Card,
   CardContent,
@@ -12,24 +13,20 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
 import { InterviewLobby } from "@/components/interview/InterviewLobby";
 import {
   fetchOpenInterviewDefinitions,
   generateDefinitionQuestions,
   startInterview,
-  type InterviewDefinitionResponse,
   type InterviewDefinitionQuestion,
+  type InterviewDefinitionResponse,
 } from "@/lib/api";
 
 export default function CandidateInterviewsPage() {
   const router = useRouter();
   const { getToken } = useAuth();
-
-  // Browse state
-  const [openDefinitions, setOpenDefinitions] = useState<
-    InterviewDefinitionResponse[] | null
-  >(null);
-  const [loadingDefinitions, setLoadingDefinitions] = useState(true);
 
   // Practice interview creation state
   const [showCreatePractice, setShowCreatePractice] = useState(false);
@@ -54,25 +51,22 @@ export default function CandidateInterviewsPage() {
     topics: string[];
   } | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const definitions = await fetchOpenInterviewDefinitions(token);
-        if (!cancelled) setOpenDefinitions(definitions);
-      } catch {
-        // Treat load failures as "no open interviews" rather than surfacing a raw fetch error.
-        if (!cancelled) setOpenDefinitions([]);
-      } finally {
-        if (!cancelled) setLoadingDefinitions(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // Previously swallowed every failure and rendered "no open interviews", so a
+  // candidate with invitations waiting saw an empty page and no way to retry.
+  const definitionsFetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchOpenInterviewDefinitions(token);
   }, [getToken]);
+
+  const {
+    data: fetchedDefinitions,
+    error: definitionsError,
+    loading: loadingDefinitions,
+    retry: retryDefinitions,
+  } = useAsyncResource(definitionsFetcher, "candidate:open-interviews");
+
+  const openDefinitions = fetchedDefinitions ?? [];
 
   async function handleGeneratePracticeQuestions(e: React.FormEvent) {
     e.preventDefault();
@@ -162,17 +156,17 @@ export default function CandidateInterviewsPage() {
   // the user to navigate away with the stream still running.
   if (lobby) {
     return (
-      <div className="space-y-6 max-w-4xl mx-auto">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Ready to join?
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Check your camera and microphone before you start.
-          </p>
-        </div>
+      <Page>
+        <PageHeader
+          title="Ready to join?"
+          description="Check your camera and microphone before you start."
+        />
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="mb-4 text-body text-destructive">
+            {error}
+          </p>
+        )}
 
         <InterviewLobby
           topics={lobby.topics}
@@ -185,38 +179,48 @@ export default function CandidateInterviewsPage() {
             setError(null);
           }}
         />
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Interview Practice
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Browse open interview templates or create your own practice interview.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Interviews"
+        description="Take an interview a recruiter has published, or generate one to practise against."
+      />
 
-      {/* Open Interview Definitions */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-semibold">
-            Open Interviews
+            Open interviews
           </CardTitle>
           <CardDescription>
-            Recruiters have published these interview templates. Take one to
-            practice.
+            Templates recruiters have published for you to take.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {loadingDefinitions && (
-            <div className="flex items-center gap-2 py-6 justify-center text-muted-foreground">
-              <span className="h-4 w-4 rounded-full border-2 border-slate/30 border-t-slate animate-spin" />
-              <span className="text-sm">Loading open interviews…</span>
+          {error && (
+            <p role="alert" className="text-body text-destructive">
+              {error}
+            </p>
+          )}
+          {definitionsError && (
+            <SectionError
+              message={definitionsError}
+              onRetry={retryDefinitions}
+              retrying={loadingDefinitions}
+            />
+          )}
+          {loadingDefinitions && !fetchedDefinitions && (
+            // The spinner's ring used `border-slate`, a colour that no longer
+            // exists in the token layer, so it rendered as a transparent circle.
+            <div
+              aria-live="polite"
+              className="flex items-center justify-center gap-2 py-6 text-muted-foreground"
+            >
+              <span className="size-4 animate-spin rounded-full border-2 border-border border-t-primary" />
+              <span className="text-body">Loading open interviews…</span>
             </div>
           )}
           {!loadingDefinitions && openDefinitions?.length === 0 && (
@@ -330,7 +334,7 @@ export default function CandidateInterviewsPage() {
                     <Button
                       type="submit"
                       className="flex-1"
-                      disabled={generatingPractice}
+                      pending={generatingPractice}
                     >
                       {generatingPractice ? "Generating…" : "Generate Topics"}
                     </Button>
@@ -388,6 +392,6 @@ export default function CandidateInterviewsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }

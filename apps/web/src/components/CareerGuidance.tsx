@@ -118,8 +118,10 @@ export function CareerGuidance() {
   return (
     <div className="space-y-6">
       <Card>
+        {/* Titled "Career Guidance", which now restated the page header directly
+            above it. The card's actual job is the target-role control. */}
         <CardHeader>
-          <CardTitle className="font-heading">Career Guidance</CardTitle>
+          <CardTitle className="font-heading">Target role</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -140,7 +142,7 @@ export function CareerGuidance() {
             </Select>
             <Button
               variant="outline"
-              disabled={loading}
+              pending={loading}
               onClick={() => load(targetRole, true)}
             >
               {loading ? "Refreshing…" : "Refresh"}

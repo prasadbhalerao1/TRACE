@@ -1,104 +1,78 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
+import { ClipboardList } from "lucide-react";
+
 import { useAuth } from "@/components/AuthProvider";
-import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { fetchMyAssessments, type AssessmentResponse } from "@/lib/api";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { EmptyState } from "@/components/common/EmptyState";
+import { DataRow, DataRowList } from "@/components/common/DataRow";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { fetchMyAssessments, type AssessmentResponse } from "@/lib/api";
 
 const ASSESSMENT_TYPE_LABELS: Record<AssessmentResponse["type"], string> = {
-  coding: "Coding Challenge",
-  mcq: "Multiple Choice Quiz",
-  project_analysis: "Project Analysis",
+  coding: "Coding challenge",
+  mcq: "Multiple choice quiz",
+  project_analysis: "Project analysis",
 };
 
 export default function CandidateAssessmentsInboxPage() {
   const { getToken } = useAuth();
-  const [assessments, setAssessments] = useState<AssessmentResponse[] | null>(
-    null,
-  );
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const result = await fetchMyAssessments(token);
-        if (!cancelled) setAssessments(result);
-      } catch (err) {
-        if (!cancelled)
-          setError(
-            err instanceof Error ? err.message : "Failed to load assessments",
-          );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchMyAssessments(token);
   }, [getToken]);
 
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          My Assessments
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Assessments recruiters have assigned to you.
-        </p>
-      </div>
+  const { data, error, loading, retry } = useAsyncResource(
+    fetcher,
+    "candidate:assessments",
+  );
+  const assessments = data ?? [];
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">
-            Assigned Assessments
-          </CardTitle>
-          <CardDescription>
-            Open one to start or continue a coding challenge, quiz, or project
-            review.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {!error && assessments === null && <CardListSkeleton />}
-          {assessments !== null && assessments.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No assessments assigned yet — check back after a recruiter assigns
-              you one.
-            </p>
-          )}
-          {assessments?.map((assessment) => (
-            <Link
+  return (
+    <Page>
+      <PageHeader
+        title="Assessments"
+        description="Challenges recruiters have assigned to you. Open one to start or continue."
+      />
+
+      {error ? (
+        <SectionError
+          message={error}
+          onRetry={retry}
+          retrying={loading}
+          className="mb-4"
+        />
+      ) : null}
+      {loading && !data ? <CardListSkeleton /> : null}
+
+      {data && assessments.length === 0 ? (
+        <EmptyState
+          icon={ClipboardList}
+          title="Nothing assigned yet"
+          description="When a recruiter assigns you a coding challenge, quiz or project review, it will appear here."
+        />
+      ) : null}
+
+      {assessments.length > 0 && (
+        <DataRowList>
+          {assessments.map((assessment) => (
+            // The type was previously printed twice per row — once as the heading
+            // and again as a badge beside it. It is the row's identity, so it is
+            // the title, and the date carries the metadata slot.
+            <DataRow
               key={assessment.id}
               href={`/assessments/${assessment.id}`}
-              className="p-4 border rounded-md hover:border-primary transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card shadow-flat"
-            >
-              <div>
-                <h4 className="text-sm font-semibold text-foreground">
-                  {ASSESSMENT_TYPE_LABELS[assessment.type]}
-                </h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Assigned on{" "}
-                  {new Date(assessment.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              <Badge variant="outline" className="capitalize">
-                {assessment.type.replace("_", " ")}
-              </Badge>
-            </Link>
+              title={ASSESSMENT_TYPE_LABELS[assessment.type]}
+              subtitle={`Assigned ${new Date(assessment.created_at).toLocaleDateString()}`}
+            />
           ))}
-        </CardContent>
-      </Card>
-    </div>
+        </DataRowList>
+      )}
+    </Page>
   );
 }

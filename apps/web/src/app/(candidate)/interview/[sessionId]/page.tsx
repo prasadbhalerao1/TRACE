@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams, useRouter } from "next/navigation";
@@ -381,16 +383,15 @@ export default function CandidateInterviewPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          AI Interview
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Speak or type your answers.{" "}
-          {status === "completed" ? "Wrapping up…" : ""}
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Interview"
+        description={
+          status === "completed"
+            ? "Wrapping up — your report will be ready shortly."
+            : "Speak or type your answers."
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 flex flex-col h-[500px]">
@@ -531,6 +532,6 @@ export default function CandidateInterviewPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

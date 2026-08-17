@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 // Doc/SRS/06 §9's `(candidate)/my-flags/page.tsx` — "view flags against self, submit
 // dispute." Wired to the real Module 06 backend (see .agents/decisions.md's Module 06
 // entry): `raised`/`under_review` flags are shown as pending review, NEVER as a guilt
@@ -95,16 +97,11 @@ export default function CandidateFlagsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Trust Flags & Disputes
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Review system integrity flags raised on your profile and submit
-          disputes.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Trust flags"
+        description="Integrity flags raised on your profile. Nothing counts against you until a human reviewer upholds it — you can dispute any of them."
+      />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading && <CardListSkeleton />}
@@ -275,6 +272,6 @@ export default function CandidateFlagsPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

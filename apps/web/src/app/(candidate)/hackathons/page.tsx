@@ -1,111 +1,99 @@
 "use client";
 
-import { useAuth } from "@/components/AuthProvider";
+import { useCallback } from "react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Trophy } from "lucide-react";
 
+import { useAuth } from "@/components/AuthProvider";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { fetchOpenHackathons, type HackathonResponse } from "@/lib/api";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { EmptyState } from "@/components/common/EmptyState";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { fetchOpenHackathons } from "@/lib/api";
 
-// QA finding (Track 2): candidates had no way to discover a hackathon to submit a
-// project to — `submitHackathonProject()` existed in lib/api.ts but no page called it,
-// and the only listing endpoint (`GET /hackathons`) is organizer-only and 403s a
-// candidate token. Fixed by adding a new, additive, candidate-role `GET /hackathons/open`
-// endpoint (services/api/routers/hackathons.py) rather than touching the existing
-// organizer-scoped `GET /hackathons` — see .agents/decisions.md for the full rationale.
+// Candidates reach hackathons through `GET /hackathons/open`; the plain
+// `GET /hackathons` is organizer-scoped and 403s a candidate token.
 export default function CandidateHackathonsPage() {
   const { getToken } = useAuth();
-  const [hackathons, setHackathons] = useState<HackathonResponse[] | null>(
-    null,
-  );
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const result = await fetchOpenHackathons(token);
-        if (!cancelled) setHackathons(result);
-      } catch (err) {
-        if (!cancelled)
-          setError(
-            err instanceof Error ? err.message : "Failed to load hackathons",
-          );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchOpenHackathons(token);
   }, [getToken]);
 
+  const { data, error, loading, retry } = useAsyncResource(
+    fetcher,
+    "candidate:open-hackathons",
+  );
+  const hackathons = data ?? [];
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Hackathons
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Join an open hackathon and submit your team&apos;s project —
-          recruiters watch top-ranked teams for hiring.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Hackathons"
+        description="Join an open event and submit your team's project. Recruiters watch top-ranked teams."
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {!error && hackathons === null && <CardListSkeleton />}
-      {hackathons !== null && hackathons.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No open hackathons right now — check back later.
-        </p>
-      )}
+      {error ? (
+        <SectionError
+          message={error}
+          onRetry={retry}
+          retrying={loading}
+          className="mb-4"
+        />
+      ) : null}
+      {loading && !data ? <CardListSkeleton /> : null}
 
-      <div className="space-y-4">
-        {hackathons?.map((hackathon) => (
-          <Card key={hackathon.id}>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-4">
+      {data && hackathons.length === 0 ? (
+        <EmptyState
+          icon={Trophy}
+          title="No open hackathons"
+          description="Nothing is accepting submissions right now. New events appear here as organizers open them."
+        />
+      ) : null}
+
+      {hackathons.length > 0 && (
+        <ul className="space-y-3">
+          {hackathons.map((hackathon) => (
+            <li
+              key={hackathon.id}
+              className="flex flex-wrap items-start justify-between gap-4 rounded-xl px-4 py-4 shadow-flat"
+            >
+              <div className="min-w-0 space-y-2">
                 <div>
-                  <CardTitle className="text-base font-semibold">
+                  <h2 className="text-body font-medium text-foreground">
                     {hackathon.name}
-                  </CardTitle>
-                  <CardDescription>
+                  </h2>
+                  <p className="mt-0.5 text-meta text-muted-foreground">
                     {hackathon.start_date && hackathon.end_date
                       ? `${new Date(hackathon.start_date).toLocaleDateString()} – ${new Date(hackathon.end_date).toLocaleDateString()}`
                       : "Dates to be announced"}
-                  </CardDescription>
+                  </p>
                 </div>
-                <Button
-                  size="sm"
-                  render={<Link href={`/hackathons/${hackathon.id}/join`} />}
-                >
-                  Submit Project
-                </Button>
+                {hackathon.tracks && hackathon.tracks.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {hackathon.tracks.map((track) => (
+                      <Badge key={track} variant="outline">
+                        {track}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
-            </CardHeader>
-            {hackathon.tracks && hackathon.tracks.length > 0 && (
-              <CardContent>
-                <div className="flex flex-wrap gap-1.5">
-                  {hackathon.tracks.map((track) => (
-                    <Badge key={track} variant="outline">
-                      {track}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        ))}
-      </div>
-    </div>
+              <Button
+                size="sm"
+                render={<Link href={`/hackathons/${hackathon.id}/join`} />}
+              >
+                Submit project
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Page>
   );
 }

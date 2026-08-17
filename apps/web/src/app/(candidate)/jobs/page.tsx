@@ -1,157 +1,143 @@
 "use client";
 
-import { useAuth } from "@/components/AuthProvider";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
+import { Briefcase } from "lucide-react";
 
+import { useAuth } from "@/components/AuthProvider";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  applyToJob,
-  fetchOpenJobs,
-  fetchMyApplications,
-  type JobResponse,
-} from "@/lib/api";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { EmptyState } from "@/components/common/EmptyState";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { applyToJob, fetchOpenJobs, fetchMyApplications } from "@/lib/api";
 
-// QA_FINDINGS_20260729 Candidate #3: "Apply to jobs" was unreachable — applyToJob()
-// existed in lib/api.ts but no page called it, and the only listing endpoint
-// (`GET /jobs`) is recruiter-only and 403s a candidate token, so there was no way to
-// even discover a job_id to apply to. Fixed by adding a new, additive, candidate-role
-// `GET /jobs/open` endpoint (services/api/routers/recruitment.py) rather than touching
-// the existing recruiter-scoped `GET /jobs` — see .agents/decisions.md for the full
-// rationale. This page calls that new endpoint.
+// Candidates browse via `GET /jobs/open`; the plain `GET /jobs` is recruiter-scoped
+// and 403s a candidate token.
 export default function CandidateJobsPage() {
   const { getToken } = useAuth();
-  const [jobs, setJobs] = useState<JobResponse[] | null>(null);
-  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
+  const [applied, setApplied] = useState<Set<string>>(new Set());
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<Record<string, string>>({});
 
-  const reload = useCallback(async () => {
+  const fetcher = useCallback(async () => {
     const token = await getToken();
     if (!token) throw new Error("No session token");
 
     // Both requests are independent, so they go out together. Awaiting applications
-    // first put two full round trips in series for no reason — the second request did
-    // not need the first one's result.
+    // first put two full round trips in series for no reason.
     //
-    // `fetchMyApplications` keeps its own catch: it is candidate-role and always
-    // available, so a failure there should still leave the job list usable (just without
-    // "already applied" markers). `fetchOpenJobs` rejecting is a real error and
-    // propagates to the caller's error state, exactly as before.
-    const [applications, result] = await Promise.all([
+    // `fetchMyApplications` keeps its own catch: a failure there should still leave
+    // the job list usable, just without "already applied" markers. `fetchOpenJobs`
+    // rejecting is a real error and propagates to the resource's error state.
+    const [applications, jobs] = await Promise.all([
       fetchMyApplications(token).catch(() => []),
       fetchOpenJobs(token),
     ]);
-    setAppliedJobIds(new Set(applications.map((a) => a.job_id)));
-    setJobs(result);
+    return { jobs, appliedIds: new Set(applications.map((a) => a.job_id)) };
   }, [getToken]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await reload();
-      } catch (err) {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Failed to load jobs");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reload]);
+  const { data, error, loading, retry } = useAsyncResource(
+    fetcher,
+    "candidate:open-jobs",
+  );
 
-  async function handleApply(jobId: string) {
+  const jobs = data?.jobs ?? [];
+  // Server truth, plus anything applied to in this session.
+  const appliedIds = new Set([...(data?.appliedIds ?? []), ...applied]);
+
+  async function handleApply(jobId: string, title: string) {
     setBusyJobId(jobId);
-    setFeedback((prev) => ({ ...prev, [jobId]: "" }));
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
       await applyToJob(token, jobId);
-      setAppliedJobIds((prev) => new Set(prev).add(jobId));
-      setFeedback((prev) => ({ ...prev, [jobId]: "Applied!" }));
+      setApplied((prev) => new Set(prev).add(jobId));
+      toast.success(`Applied to ${title}`, {
+        description: "Track it on your Applications page.",
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to apply";
-      setFeedback((prev) => ({
-        ...prev,
-        [jobId]: message.includes("already_applied")
-          ? "Already applied"
-          : message,
-      }));
+      // Was rendered as a per-job inline string, which meant the raw
+      // `already_applied` API error code could surface verbatim at the candidate.
+      if (message.includes("already_applied")) {
+        setApplied((prev) => new Set(prev).add(jobId));
+        toast.info(`You have already applied to ${title}`);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setBusyJobId(null);
     }
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Browse Jobs
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Find an open role and apply — your application is tracked on the
-          Applications page.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Jobs"
+        description="Open roles you can apply to. Everything you apply for is tracked on your Applications page."
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error ? (
+        <SectionError
+          message={error}
+          onRetry={retry}
+          retrying={loading}
+          className="mb-4"
+        />
+      ) : null}
+      {loading && !data ? <CardListSkeleton /> : null}
 
-      {!error && jobs === null && <CardListSkeleton />}
-      {jobs !== null && jobs.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No open jobs right now — check back later.
-        </p>
-      )}
+      {data && jobs.length === 0 ? (
+        <EmptyState
+          icon={Briefcase}
+          title="No open roles right now"
+          description="New postings appear here as recruiters publish them."
+        />
+      ) : null}
 
-      <div className="space-y-4">
-        {jobs?.map((job) => {
-          const applied = appliedJobIds.has(job.id);
-          return (
-            <Card key={job.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <CardTitle className="text-base font-semibold">
+      {jobs.length > 0 && (
+        <ul className="space-y-3">
+          {jobs.map((job) => {
+            const hasApplied = appliedIds.has(job.id);
+            return (
+              <li key={job.id} className="rounded-xl p-4 shadow-flat">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-section font-semibold text-foreground">
                       {job.title}
-                    </CardTitle>
-                    <CardDescription>
+                    </h2>
+                    <p className="mt-0.5 text-meta text-muted-foreground">
                       {job.location ??
                         (job.is_remote ? "Remote" : "Location not specified")}
-                      {job.is_remote && job.location ? " • Remote" : ""}
+                      {job.is_remote && job.location ? " · Remote" : ""}
                       {job.min_experience_years != null
-                        ? ` • ${job.min_experience_years}+ yrs experience`
+                        ? ` · ${job.min_experience_years}+ yrs experience`
                         : ""}
-                    </CardDescription>
+                    </p>
                   </div>
                   <Button
                     size="sm"
-                    disabled={applied || busyJobId === job.id}
-                    onClick={() => handleApply(job.id)}
+                    variant={hasApplied ? "outline" : "default"}
+                    disabled={hasApplied}
+                    pending={busyJobId === job.id}
+                    onClick={() => handleApply(job.id, job.title)}
                   >
-                    {applied
+                    {hasApplied
                       ? "Applied"
                       : busyJobId === job.id
                         ? "Applying…"
                         : "Apply"}
                   </Button>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground whitespace-pre-line">
+
+                <p className="mt-3 text-body leading-relaxed whitespace-pre-line text-muted-foreground">
                   {job.description}
                 </p>
+
                 {job.required_skills && job.required_skills.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     {job.required_skills.map((skill) => (
                       <Badge key={skill} variant="outline">
                         {skill}
@@ -159,18 +145,11 @@ export default function CandidateJobsPage() {
                     ))}
                   </div>
                 )}
-                {feedback[job.id] && (
-                  <p
-                    className={`text-xs ${feedback[job.id] === "Applied!" ? "text-success" : "text-destructive"}`}
-                  >
-                    {feedback[job.id]}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Page>
   );
 }

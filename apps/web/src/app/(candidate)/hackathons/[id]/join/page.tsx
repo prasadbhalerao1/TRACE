@@ -3,8 +3,9 @@
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,10 +16,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
 import {
   fetchHackathon,
   submitHackathonProject,
-  type HackathonResponse,
   type TeamMemberInput,
 } from "@/lib/api";
 
@@ -35,8 +37,18 @@ export default function CandidateHackathonJoinPage() {
   const router = useRouter();
   const { getToken } = useAuth();
 
-  const [hackathon, setHackathon] = useState<HackathonResponse | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    return fetchHackathon(token, hackathonId);
+  }, [getToken, hackathonId]);
+
+  const {
+    data: hackathon,
+    error: loadError,
+    loading,
+    retry,
+  } = useAsyncResource(fetcher, `candidate:hackathon:${hackathonId}`);
 
   const [teamName, setTeamName] = useState("");
   const [track, setTrack] = useState("");
@@ -48,26 +60,6 @@ export default function CandidateHackathonJoinPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const result = await fetchHackathon(token, hackathonId);
-        if (!cancelled) setHackathon(result);
-      } catch (err) {
-        if (!cancelled)
-          setLoadError(
-            err instanceof Error ? err.message : "Failed to load hackathon",
-          );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken, hackathonId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,19 +98,23 @@ export default function CandidateHackathonJoinPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          {hackathon ? `Submit to ${hackathon.name}` : "Submit Project"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Register your team and link your repo and pitch deck — re-submitting
-          with the same team name updates your entry.
-        </p>
-        {loadError && (
-          <p className="text-sm text-destructive mt-1">{loadError}</p>
-        )}
-      </div>
+    <Page width="reading">
+      <PageHeader
+        title={hackathon ? `Submit to ${hackathon.name}` : "Submit project"}
+        description="Register your team and link your repo and pitch deck. Re-submitting with the same team name updates your entry."
+      />
+
+      {/* The event's name is a nicety here, not a prerequisite — the form posts to
+          the id from the URL either way, so a failed load degrades to a generic
+          title rather than blocking submission. */}
+      {loadError ? (
+        <SectionError
+          message={loadError}
+          onRetry={retry}
+          retrying={loading}
+          className="mb-4"
+        />
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -196,7 +192,9 @@ export default function CandidateHackathonJoinPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Unprefixed grid-cols-2: at 375px these two labelled inputs were
+                  ~150px each and the labels wrapped to three lines. */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="member_github">
                     Teammate GitHub Username
@@ -223,7 +221,8 @@ export default function CandidateHackathonJoinPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={submitting || !teamName.trim()}
+                pending={submitting}
+                disabled={!teamName.trim()}
               >
                 {submitting ? "Submitting…" : "Submit Project"}
               </Button>
@@ -231,6 +230,6 @@ export default function CandidateHackathonJoinPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }
