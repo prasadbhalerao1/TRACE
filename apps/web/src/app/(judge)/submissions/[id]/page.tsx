@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -14,14 +15,26 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { submitJudgeScore } from "@/lib/api";
 
 export default function JudgeRubricPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const hackathonId = searchParams.get("hackathonId");
+  const teamName = searchParams.get("team");
   const { getToken } = useAuth();
-  const [score, setScore] = useState("90");
+  const [score, setScore] = useState("8");
   const [rationale, setRationale] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -57,15 +70,28 @@ export default function JudgeRubricPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Rubric Scoring
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Score submission {params.id} and provide qualitative rationale.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        // The team's name comes through the query string from the evaluation
+        // queue; the previous title printed the raw submission UUID at the judge.
+        title={teamName ?? "Score submission"}
+        description="Give a score and the reasoning behind it."
+        breadcrumb={
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link href="/evaluations" />}>
+                  Evaluations
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Score</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">
@@ -80,32 +106,37 @@ export default function JudgeRubricPage() {
           <CardContent className="space-y-4">
             {!submitted ? (
               <form onSubmit={handleSave} className="space-y-4">
+                {/* This form asked for 0–100 while the evaluation queue renders
+                    the same value as "n/10", so a judge entering 90 saw it come
+                    back as "90/10". The backend takes a bare float with no bound,
+                    so the UI is the only place the scale is defined — aligned to
+                    the /10 the queue already displays. */}
                 <div className="space-y-1">
-                  <Label htmlFor="score">Project Score (0-100)</Label>
-                  <input
+                  <Label htmlFor="score">Score (0–10)</Label>
+                  <Input
                     id="score"
                     type="number"
                     min="0"
-                    max="100"
+                    max="10"
+                    step="0.5"
                     required
-                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     value={score}
                     onChange={(e) => setScore(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="rationale">Qualitative Rationale</Label>
-                  <textarea
+                  <Label htmlFor="rationale">Rationale</Label>
+                  <Textarea
                     id="rationale"
                     required
-                    className="w-full min-h-24 p-3 border rounded-md text-sm bg-background text-foreground"
-                    placeholder="Provide details on project strengths, flaws, and design execution..."
+                    className="min-h-24"
+                    placeholder="Strengths, weaknesses, and how the project was executed…"
                     value={rationale}
                     onChange={(e) => setRationale(e.target.value)}
                   />
                 </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="w-full" disabled={submitting}>
+                <Button type="submit" className="w-full" pending={submitting}>
                   {submitting ? "Submitting…" : "Submit Evaluation"}
                 </Button>
               </form>
@@ -142,6 +173,6 @@ export default function JudgeRubricPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

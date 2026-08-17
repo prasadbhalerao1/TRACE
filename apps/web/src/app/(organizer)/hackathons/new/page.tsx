@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 import { toast } from "sonner";
 
 import { useState } from "react";
@@ -47,15 +49,11 @@ export default function OrganizerNewHackathonPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Create a New Hackathon
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Register a hiring hackathon and define evaluation tracks.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="New event"
+        description="Register a hiring hackathon and define its evaluation tracks."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">
@@ -91,7 +89,7 @@ export default function OrganizerNewHackathonPage() {
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={submitting}>
+              <Button type="submit" className="w-full" pending={submitting}>
                 {submitting ? "Creating…" : "Create Event"}
               </Button>
             </form>
@@ -118,6 +116,6 @@ export default function OrganizerNewHackathonPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

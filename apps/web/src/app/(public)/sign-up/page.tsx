@@ -161,7 +161,8 @@ export default function SignUpPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button
               type="submit"
-              disabled={!role || submitting}
+              pending={submitting}
+              disabled={!role}
               className="w-full"
             >
               {submitting ? "Creating account…" : "Sign Up"}

@@ -10,6 +10,9 @@ import { PlagiarismMatchList } from "@/components/PlagiarismMatchList";
 import { SlideViewer } from "@/components/SlideViewer";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { CardListSkeleton } from "@/components/CardListSkeleton";
 import {
   fetchPresentationReport,
   PITCH_SCORE_LABELS,
@@ -72,66 +75,75 @@ export default function PitchDeckReportPage() {
     };
   }, [isLoaded, isSignedIn, me, getToken, router, params.id]);
 
-  if (meError)
-    return <div className="p-8 text-sm text-destructive">{meError}</div>;
-  if (error) return <div className="p-8 text-sm text-destructive">{error}</div>;
-  if (!report)
+  // `meError` and a report failure are both terminal for this page, so they share
+  // one presentation instead of two differently-shaped bare strings.
+  const blockingError = meError ?? error;
+  if (blockingError) {
     return (
-      <div className="p-8 text-sm text-muted-foreground">
-        Loading pitch report…
-      </div>
+      <Page width="reading">
+        <PageHeader title="Pitch deck report" />
+        <SectionError
+          message={blockingError}
+          onRetry={() => window.location.reload()}
+          // A full reload, not an in-place refetch, so this is never mid-retry.
+          retrying={false}
+        />
+      </Page>
     );
+  }
+
+  if (!report) {
+    return (
+      <Page width="reading">
+        <PageHeader title="Pitch deck report" />
+        <CardListSkeleton />
+      </Page>
+    );
+  }
 
   if (report.status === "failed") {
     return (
-      <div className="mx-auto w-full max-w-2xl space-y-6 p-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-heading">Analysis failed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              This deck could not be processed. Try re-uploading, or check the
-              file format.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Page width="reading">
+        <PageHeader
+          title="Analysis failed"
+          description="This deck could not be processed. Try re-uploading it, or check that the file format is supported."
+        />
+      </Page>
     );
   }
 
   if (report.status === "processing") {
     return (
-      <div className="mx-auto w-full max-w-2xl p-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-heading">Analyzing your deck…</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full w-full animate-pulse rounded-full bg-primary" />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Extracting slides, scoring problem clarity/innovation/feasibility,
-              and checking for plagiarism — this usually takes under a minute.
-              This page updates automatically.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Page width="reading">
+        <PageHeader title="Analysing your deck…" />
+        <div aria-live="polite" className="space-y-3">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full w-full animate-pulse rounded-full bg-primary" />
+          </div>
+          <p className="text-body leading-relaxed text-muted-foreground">
+            Extracting slides, scoring clarity, innovation and feasibility, and
+            checking for plagiarism. This usually takes under a minute and the
+            page updates on its own.
+          </p>
+        </div>
+      </Page>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-8">
+    <Page width="reading" className="space-y-6">
+      <PageHeader
+        title="Pitch deck report"
+        description={
+          report.overall_pitch_score !== null
+            ? `Overall score ${report.overall_pitch_score.toFixed(1)} out of 10, broken down below.`
+            : "Scored across clarity, innovation and feasibility."
+        }
+      />
+
       <Card>
         <CardHeader>
-          <CardTitle className="font-heading">
-            Overall Pitch Score:{" "}
-            {report.overall_pitch_score !== null
-              ? report.overall_pitch_score.toFixed(1)
-              : "—"}
-          </CardTitle>
+          <CardTitle className="font-heading">Score profile</CardTitle>
         </CardHeader>
         <CardContent>
           <PitchScoreRadarChart scores={report.scores} />
@@ -235,6 +247,6 @@ export default function PitchDeckReportPage() {
           <SlideViewer slides={report.slides} />
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }

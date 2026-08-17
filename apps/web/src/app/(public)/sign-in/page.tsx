@@ -63,7 +63,7 @@ export default function SignInPage() {
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={submitting} className="w-full">
+            <Button type="submit" pending={submitting} className="w-full">
               {submitting ? "Signing in…" : "Sign In"}
             </Button>
 

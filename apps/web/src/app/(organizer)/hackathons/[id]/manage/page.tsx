@@ -238,7 +238,7 @@ export default function OrganizerManageHackathonPage() {
                 </div>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" pending={submitting}>
                 {submitting ? "Adding…" : "Add Team"}
               </Button>
             </form>

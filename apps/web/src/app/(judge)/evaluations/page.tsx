@@ -110,7 +110,10 @@ function SubmissionRow({ submission }: { submission: JudgeQueueEntry }) {
     <DataRow
       // The whole row is the target. It previously ended in a small "Evaluate →" text
       // link, which is a needlessly precise thing to ask someone to hit repeatedly.
-      href={`/submissions/${submission.submission_id}?hackathonId=${submission.hackathon_id}`}
+      // `team` rides along so the scoring page can title itself with the team's
+      // name instead of printing the raw submission UUID at the judge. It has no
+      // endpoint of its own to resolve a submission to a team.
+      href={`/submissions/${submission.submission_id}?hackathonId=${submission.hackathon_id}&team=${encodeURIComponent(submission.team_name)}`}
       title={submission.team_name}
       subtitle={submission.hackathon_name}
       meta={
