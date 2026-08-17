@@ -134,7 +134,7 @@ function AssignAssessmentDialog({
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button
                 className="w-full"
-                disabled={submitting}
+                pending={submitting}
                 onClick={handleAssign}
               >
                 {submitting ? "Assigning…" : "Assign"}

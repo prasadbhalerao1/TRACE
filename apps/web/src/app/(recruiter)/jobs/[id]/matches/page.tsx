@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams } from "next/navigation";
@@ -95,24 +97,21 @@ export default function RecruiterMatchesPage() {
   const isProcessing = matchingStatus?.status === "processing";
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Ranked Candidate Matches
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Review AI-matched and ranked candidates with the full 4-term score
-            breakdown.
-          </p>
-        </div>
-        <Button
-          render={<Link href={`/pipeline/${params.id}`} />}
-          variant="outline"
-        >
-          View Pipeline
-        </Button>
-      </div>
+    <Page>
+      <PageHeader
+        title="Matches"
+        // "the full 4-term score breakdown" described the implementation. What a
+        // recruiter needs to know is that no ranking is shown without its reasons.
+        description="Candidates ranked against this role. Every score is shown with the evidence behind it, never as a bare percentage."
+        actions={
+          <Button
+            render={<Link href={`/pipeline/${params.id}`} />}
+            variant="outline"
+          >
+            View pipeline
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 space-y-4">
@@ -120,9 +119,11 @@ export default function RecruiterMatchesPage() {
             <CardTitle className="text-base font-semibold">
               Matched Candidates
             </CardTitle>
+            {/* Was the raw formula and an internal doc reference. The four
+                components are already listed per candidate below. */}
             <CardDescription>
-              SkillOverlap + SemanticSimilarity + ExperienceMatch +
-              TalentScoreAlignment (doc 08 §2).
+              Ranked on skill overlap, semantic similarity, experience and
+              talent-score alignment.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -172,11 +173,17 @@ export default function RecruiterMatchesPage() {
                       </Badge>
                     )}
                   </div>
+                  {/* Was always `text-success`, so a 21% match was rendered in the
+                      same affirmative green as a 94% one. Match strength is
+                      carried by the number itself. */}
                   <div className="text-right">
-                    <span className="text-xs text-muted-foreground block">
-                      Match %
+                    <span className="block text-meta text-muted-foreground">
+                      Match
                     </span>
-                    <span className="font-semibold text-success text-lg">
+                    <span
+                      data-numeric
+                      className="text-section font-medium tabular-nums text-foreground"
+                    >
                       {match.match_percentage?.toFixed(0) ?? "—"}%
                     </span>
                   </div>
@@ -237,6 +244,6 @@ export default function RecruiterMatchesPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

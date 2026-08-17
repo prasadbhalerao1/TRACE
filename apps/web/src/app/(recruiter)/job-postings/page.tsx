@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 import { useCallback } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
@@ -30,19 +32,14 @@ export default function RecruiterJobsListPage() {
   );
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            My Job Postings
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Every job you&apos;ve posted, with quick links to matches and the
-            pipeline.
-          </p>
-        </div>
-        <Button render={<Link href="/jobs/new" />}>Post a Job</Button>
-      </div>
+    <Page>
+      <PageHeader
+        title="Job postings"
+        description="Every role you've posted, with links straight to its matches and pipeline."
+        actions={
+          <Button render={<Link href="/jobs/new" />}>Post a job</Button>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -93,6 +90,6 @@ export default function RecruiterJobsListPage() {
           ))}
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }

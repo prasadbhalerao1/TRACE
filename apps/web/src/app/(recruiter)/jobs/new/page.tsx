@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 import { toast } from "sonner";
 
 import { useState } from "react";
@@ -66,15 +68,11 @@ export default function RecruiterNewJobPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Post a New Job Posting
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Add a job listing to search, rank, and match candidates.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="New job posting"
+        description="Publish a role, then match and rank candidates against it."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">
@@ -157,7 +155,7 @@ export default function RecruiterNewJobPage() {
                   Remote OK
                 </label>
                 {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="w-full" disabled={submitting}>
+                <Button type="submit" className="w-full" pending={submitting}>
                   {submitting ? "Publishing…" : "Publish Job Posting"}
                 </Button>
               </form>
@@ -223,6 +221,6 @@ export default function RecruiterNewJobPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { Page, PageHeader } from "@/components/common/PageHeader";
+
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -68,15 +70,11 @@ export default function RecruiterCopilotPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Recruiter Copilot
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Search for talent using conversational natural language commands.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Copilot"
+        description="Describe who you are looking for in plain language and search across verified evidence."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 flex flex-col h-[500px]">
@@ -178,6 +176,6 @@ export default function RecruiterCopilotPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

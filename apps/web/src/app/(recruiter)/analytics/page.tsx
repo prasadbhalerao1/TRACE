@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
+
 import { useAuth } from "@/components/AuthProvider";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
   Card,
   CardContent,
@@ -12,49 +14,40 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { FunnelChart } from "@/components/FunnelChart";
 import { TimeToHireHistogram } from "@/components/TimeToHireHistogram";
+import { Page, PageHeader } from "@/components/common/PageHeader";
+import { SectionError } from "@/components/common/SectionError";
+import { Metric, MetricGrid } from "@/components/common/Metric";
 import {
   fetchHiringFunnel,
   fetchSourceBreakdown,
   fetchTimeToHire,
-  type HiringFunnelResponse,
-  type SourceBreakdownResponse,
-  type TimeToHireResponse,
 } from "@/lib/api";
 
 export default function RecruiterAnalyticsPage() {
   const { getToken } = useAuth();
-  const [funnel, setFunnel] = useState<HiringFunnelResponse | null>(null);
-  const [timeToHire, setTimeToHire] = useState<TimeToHireResponse | null>(null);
-  const [sourceBreakdown, setSourceBreakdown] =
-    useState<SourceBreakdownResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error("No session token");
-        const [f, t, s] = await Promise.all([
-          fetchHiringFunnel(token),
-          fetchTimeToHire(token),
-          fetchSourceBreakdown(token),
-        ]);
-        if (cancelled) return;
-        setFunnel(f);
-        setTimeToHire(t);
-        setSourceBreakdown(s);
-      } catch (err) {
-        if (!cancelled)
-          setError(
-            err instanceof Error ? err.message : "Failed to load analytics",
-          );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // Was a hand-rolled useEffect/useState triple, so this page alone had no retry
+  // or backoff on a transient 502/503 — the three requests just failed silently
+  // into one error string. useAsyncResource owns the fetch, retry and cancellation.
+  const fetcher = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error("No session token");
+    const [funnel, timeToHire, sourceBreakdown] = await Promise.all([
+      fetchHiringFunnel(token),
+      fetchTimeToHire(token),
+      fetchSourceBreakdown(token),
+    ]);
+    return { funnel, timeToHire, sourceBreakdown };
   }, [getToken]);
+
+  const { data, error, loading, retry } = useAsyncResource(
+    fetcher,
+    "recruiter:analytics",
+  );
+
+  const funnel = data?.funnel ?? null;
+  const timeToHire = data?.timeToHire ?? null;
+  const sourceBreakdown = data?.sourceBreakdown ?? null;
 
   const totalSourced = sourceBreakdown
     ? sourceBreakdown.direct +
@@ -66,64 +59,60 @@ export default function RecruiterAnalyticsPage() {
   const sourcedCount =
     funnel?.stages.find((s) => s.stage === "sourced")?.count ?? 0;
 
-  const metrics = [
-    { label: "Total Applications", value: String(sourcedCount) },
-    { label: "Hired", value: String(hiredCount) },
-    {
-      label: "Avg. Time to Hire",
-      value:
-        timeToHire?.median_days !== null &&
-        timeToHire?.median_days !== undefined
-          ? `${timeToHire.median_days.toFixed(0)} days`
-          : "—",
-    },
-    {
-      label: "Copilot-Sourced",
-      value:
-        totalSourced > 0
-          ? `${Math.round((100 * (sourceBreakdown?.copilot_search ?? 0)) / totalSourced)}%`
-          : "—",
-    },
-  ];
+  const medianDays = timeToHire?.median_days;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Recruitment Analytics
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Analyze hiring funnels, time-to-hire, and source-of-hire across your
-          job postings.
-        </p>
-      </div>
+    <Page>
+      <PageHeader
+        title="Analytics"
+        description="Funnel conversion, time to hire, and where your candidates come from — across all your job postings."
+      />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error ? (
+        <SectionError
+          message={error}
+          onRetry={retry}
+          retrying={loading}
+          className="mb-4"
+        />
+      ) : null}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {metrics.map((m, i) => (
-          <Card key={i}>
-            <CardHeader className="pb-2">
-              <CardDescription className="text-xs">{m.label}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <span className="text-2xl font-bold text-foreground">
-                {m.value}
-              </span>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <MetricGrid>
+        <Metric label="Total applications" value={sourcedCount} />
+        <Metric label="Hired" value={hiredCount} />
+        <Metric
+          label="Median time to hire"
+          // `median_days` is legitimately null until something has actually been
+          // hired — reported as "not yet computable", never as a zero.
+          value={
+            medianDays === null || medianDays === undefined
+              ? "—"
+              : `${medianDays.toFixed(0)}d`
+          }
+          hint={
+            medianDays === null || medianDays === undefined
+              ? "No hires yet"
+              : undefined
+          }
+        />
+        <Metric
+          label="Copilot-sourced"
+          value={
+            totalSourced > 0
+              ? `${Math.round((100 * (sourceBreakdown?.copilot_search ?? 0)) / totalSourced)}%`
+              : "—"
+          }
+        />
+      </MetricGrid>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-semibold">
-              Hiring Funnel
+              Hiring funnel
             </CardTitle>
             <CardDescription>
-              Conversion from sourced through hired, across all your job
-              postings.
+              Conversion from sourced through hired.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -138,10 +127,10 @@ export default function RecruiterAnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-semibold">
-              Time to Hire
+              Time to hire
             </CardTitle>
             <CardDescription>
-              Days from application to the &quot;Hired&quot; stage.
+              Days from application to the hired stage.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -157,38 +146,23 @@ export default function RecruiterAnalyticsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-semibold">
-            Source of Hire
+            Source of hire
           </CardTitle>
           <CardDescription>
-            Direct application vs. Recruiter Copilot search vs.
-            hackathon-sourced (FR-4.3).
+            Where the candidates in your pipeline came from.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-3 gap-4 text-sm text-muted-foreground">
-          <div>
-            <span className="text-xs text-muted-foreground block">Direct</span>
-            <span className="font-semibold text-foreground">
-              {sourceBreakdown?.direct ?? "—"}
-            </span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">
-              Copilot Search
-            </span>
-            <span className="font-semibold text-foreground">
-              {sourceBreakdown?.copilot_search ?? "—"}
-            </span>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block">
-              Hackathon
-            </span>
-            <span className="font-semibold text-foreground">
-              {sourceBreakdown?.hackathon ?? "—"}
-            </span>
-          </div>
+        {/* Was a bare grid-cols-3 with no breakpoint: at 375px "Copilot Search"
+            wrapped and the three columns collapsed into unreadable slivers. */}
+        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Metric label="Direct" value={sourceBreakdown?.direct ?? "—"} />
+          <Metric
+            label="Copilot search"
+            value={sourceBreakdown?.copilot_search ?? "—"}
+          />
+          <Metric label="Hackathon" value={sourceBreakdown?.hackathon ?? "—"} />
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }
