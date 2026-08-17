@@ -71,7 +71,7 @@ export function ConfirmDialog({
             size="sm"
             variant={destructive ? "destructive" : "default"}
             onClick={handleConfirm}
-            disabled={busy}
+            pending={busy}
           >
             {busy ? "Working…" : confirmLabel}
           </Button>

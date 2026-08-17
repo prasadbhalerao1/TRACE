@@ -40,16 +40,29 @@ const buttonVariants = cva(
   },
 );
 
+/** `pending` marks a button whose label swaps while an async action runs
+ * ("Save changes" → "Saving…"). Screen readers otherwise announce nothing when
+ * that text changes, so the button carries its own polite live region: the
+ * label is the status. `aria-busy` additionally exposes the in-flight state to
+ * assistive tech that reports it, and `disabled` prevents double-submits.
+ *
+ * Wired here rather than at each call site so all of them behave identically. */
 function Button({
   className,
   variant = "default",
   size = "default",
+  pending,
+  disabled,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & { pending?: boolean }) {
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      aria-live={pending === undefined ? undefined : "polite"}
+      aria-busy={pending || undefined}
+      disabled={disabled || pending}
       {...props}
     />
   );
