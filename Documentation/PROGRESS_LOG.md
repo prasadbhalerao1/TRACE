@@ -352,3 +352,106 @@ is awkward to reconstruct if the tree is lost.
 - `seed_db.py` and `seed_candidates_hardcoded.py` are **not** idempotent — re-running
   raises `UniqueViolationError`. `seed_realistic_population.py` **is** (skips existing
   emails, deterministic vector ids), so it is safe to re-run.
+
+---
+
+## UI/UX redesign pass (2026-08-17)
+
+Followed `apps/web/DESIGN.md`, written first as the specification the build answers to.
+Behavior was preserved throughout: no API, permission, or business-logic changes, and the
+optimistic pipeline updates, `useAsyncResource` retry semantics and interview
+resource-cleanup fixes are untouched.
+
+### Measured outcomes
+
+| | Before | After |
+| :--- | ---: | ---: |
+| `dark:` variants (app code) | 364 | 0 |
+| Hardcoded `slate/zinc/indigo` | 772 | 0 |
+| Hex literals | 12 | 0 |
+| Hand-rolled fetchers in pages | 15 | 2 (both justified) |
+| Pages using `PageHeader` | 0 | 35 |
+| Raw `<h1>` in pages | 33 | 2 (landing hero, root `error.tsx`) |
+| `error.tsx` boundaries | 1 | 7 |
+| `aria-live` regions | 1 | 5 |
+| Native `confirm()` | 1 | 0 |
+
+### Bugs found and fixed while redesigning
+
+These were defects, not styling:
+
+- **Data loss on timed assessments.** `(candidate)/assessments/[id]` had `if (error) return`
+  above the render, so a *submission* failure unmounted the editor and destroyed the
+  candidate's typed code. Load and submit errors are now separate states.
+- **Silent admin privilege escalation.** `(admin)/users` committed a role change the instant
+  the `<select>` changed — granting full admin took one stray interaction with no undo.
+  Now confirms, and states what the role grants.
+- **Judge score scale mismatch.** The scoring form asked for 0–100 while the evaluation queue
+  rendered the same value as `/10`, so entering 90 displayed "90/10". The backend takes an
+  unbounded `float`, so the UI was the only place the scale was defined. Aligned to `/10`.
+- **Fabricated personal data in a production path.** `AtsResumeBuilder` shipped a fully
+  populated `INITIAL_RESUME` for a named individual — real-looking name, email, phone,
+  LinkedIn/GitHub, employment history, CGPA — that was never replaced by the signed-in
+  user's data. Every candidate opened the builder prefilled with a stranger's details and
+  "Export PDF" would produce that as their resume. Now starts empty and seeds from the
+  user's own profile.
+- **`WARNING`-level accessibility failure.** `--color-amber-pending #c98a2c` measured
+  **2.93:1 on white — fails WCAG AA** while encoding "pending" status. Darkened to
+  `#96661c` (4.98:1).
+- **Frontend dropped `confidence`.** `TalentScoreResponse` was missing the field the backend
+  has always returned, so the data that exists specifically to stop a recruiter reading a
+  sparse profile as a weak candidate never reached the UI.
+- **Broken navigation for two roles.** Recruiter `/recruiter/interviews` 404'd and organizer
+  "My Hackathons" bounced to `/home`; route groups contribute nothing to the URL, so both
+  paths could never resolve. Built the two missing pages, which also unlocked two complete
+  backends that had no UI (`fetchMyHackathons` had no caller at all).
+- **Errors swallowed as empty states.** `(candidate)/interviews` caught every fetch failure
+  and rendered "no open interviews", so a candidate with invitations waiting saw an empty
+  page and no retry.
+- **Rankings weights disagreed with the code.** The UI described `0.40/0.30/0.20/0.10` while
+  the request sent `0.25` each.
+- **Scores styled as verdicts.** Match percentage, ATS readiness and submission score were
+  hardcoded `text-success`, so a 21% match rendered in the same affirmative green as 94%.
+
+Also removed internal leakage that was reaching users: architecture doc paths
+(`doc/SRS/00-Master-Architecture...`), requirement IDs (`FR-7a`, `FR-4.3`), raw scoring
+formulas, unrendered literal `**markdown**`, an invented product name ("CVInsight Engine"),
+and UUIDs used as page titles.
+
+### Verification
+
+- `npx tsc --noEmit`, `npx eslint src`, `npm run build` — all clean; 33 pages compile.
+- `check-nav.js` — 25 nav hrefs resolved against 45 routes, all pass.
+- 28 routes probed live, all 200, no runtime errors in the dev log.
+- **Responsive verified by measurement, not by reading classes**: a Playwright script
+  loaded all 28 routes at 375 / 768 / 1280 and compared `documentElement.scrollWidth`
+  against the viewport. **No horizontal overflow anywhere.** This caught three real
+  breaks that source review had missed (unprefixed `grid-cols-3`/`grid-cols-2` in
+  analytics, the hackathon join form, and the resume builder).
+
+### Deliberately not converted
+
+Two pages keep hand-rolled `useEffect` fetching, because converting them would regress
+working fixes rather than improve anything:
+
+- `(candidate)/interview/[sessionId]` — six effects carrying the media-cleanup and
+  TTS-deduplication fixes from the previous pass.
+- `(candidate)/profile/edit` — a sequenced load with a one-time `fullName` seed gated on
+  `me` arriving, which `useAsyncResource` cannot express.
+
+Three `dark:` variants and seven icons without `aria-hidden` remain inside vendored
+`ui/*` primitives. Editing those would conflict with future `shadcn` updates for no
+user-facing gain; application code is at zero.
+
+### Test-suite collection fix (2026-08-18)
+
+`uv run pytest -q` failed collection on a clean checkout with
+`ModuleNotFoundError: No module named 'services'` across 7 test modules. Tests import
+their subjects as `services.*` / `packages.*`, which resolves only with the repo root on
+`sys.path`; because the project is declared virtual (`[tool.uv] package = false`), nothing
+is installed into site-packages to supply it.
+
+The suite was only ever passing for callers who happened to have the root on `PYTHONPATH`.
+Fixed by adding `pythonpath = ["."]` to `[tool.pytest.ini_options]`. A bare
+`uv run pytest -q` now collects and passes 82 tests with no environment setup, which is
+what the verification steps in the plan and this log assume.

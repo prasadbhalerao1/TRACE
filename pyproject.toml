@@ -93,3 +93,9 @@ package = false
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["services", "packages"]
+# Tests import their subjects as `services.*` / `packages.*`, which only resolves
+# with the repo root on sys.path. Nothing is installed (`package = false` above),
+# so there is no site-packages entry to supply it and collection fails with
+# ModuleNotFoundError on a clean checkout. Adding the root here makes a bare
+# `uv run pytest` work without callers having to set PYTHONPATH themselves.
+pythonpath = ["."]

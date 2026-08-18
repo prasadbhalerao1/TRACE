@@ -53,9 +53,21 @@ function Button({
   size = "default",
   pending,
   disabled,
+  nativeButton,
+  render,
   ...props
 }: ButtonPrimitive.Props &
   VariantProps<typeof buttonVariants> & { pending?: boolean }) {
+  /** Base UI defaults `nativeButton` to `true`, which asserts the rendered element
+   * really is a `<button>`. Every `render={<Link …/>}` call site renders an `<a>`
+   * instead, so that default was wrong and Base UI logged an accessibility warning on
+   * each one ("Rendering a non-<button> removes native button semantics"). More than a
+   * console nuisance: with the flag wrong, Base UI skips the keyboard and role handling
+   * that makes a non-button behave like one.
+   *
+   * Inferred from `render` rather than fixed at the call sites so links get correct
+   * semantics automatically; an explicit `nativeButton` still wins for the rare case
+   * that renders some other genuine button element. */
   return (
     <ButtonPrimitive
       data-slot="button"
@@ -63,6 +75,8 @@ function Button({
       aria-live={pending === undefined ? undefined : "polite"}
       aria-busy={pending || undefined}
       disabled={disabled || pending}
+      nativeButton={nativeButton ?? render === undefined}
+      render={render}
       {...props}
     />
   );

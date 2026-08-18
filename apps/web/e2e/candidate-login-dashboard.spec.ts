@@ -38,7 +38,14 @@ test.describe("candidate authentication", () => {
     // The hub lists every capability for the signed-in role, so a known card proves
     // both that /me resolved and that the correct role catalog rendered.
     await expect(page.getByRole("heading", { name: /everything you can do/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /talent dashboard/i })).toBeVisible();
+
+    // Scoped to <main>: "Talent dashboard" is now both a sidebar item and a card in the
+    // hub's capability grid, so an unscoped match is ambiguous. The card is the thing
+    // this test is actually about — it proves the role catalog rendered, which the
+    // sidebar (which renders before /me resolves) would not.
+    await expect(
+      page.getByRole("main").getByRole("link", { name: /talent dashboard/i }),
+    ).toBeVisible();
   });
 
   test("shows the workspace sidebar on authenticated pages", async ({ page }) => {
@@ -50,10 +57,17 @@ test.describe("candidate authentication", () => {
     // The sidebar is the app's primary navigation and used to be gated behind GET /me,
     // so it vanished on every route change. Asserting it here would catch a regression
     // back to that behaviour.
+    // "Talent dashboard", not "Dashboard": the redesign grouped the candidate's flat
+    // nav into sections and renamed this item, since "Dashboard" alone said nothing
+    // about whose data it showed. Kept `exact` so a future duplicate label is caught.
     const sidebar = page.getByRole("complementary");
-    await expect(sidebar.getByRole("link", { name: "Dashboard", exact: true })).toBeVisible();
+    const dashboard = sidebar.getByRole("link", {
+      name: "Talent dashboard",
+      exact: true,
+    });
+    await expect(dashboard).toBeVisible();
 
-    await sidebar.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await dashboard.click();
     await page.waitForURL(/\/dashboard/, { timeout: 30_000, waitUntil: "commit" });
 
     // Still visible after navigating: the shell must not blank out between routes.

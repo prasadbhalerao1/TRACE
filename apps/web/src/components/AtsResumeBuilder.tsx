@@ -1,15 +1,18 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/AuthProvider";
+import { useCurrentUser } from "@/components/CurrentUserProvider";
 import { calculateATSScore, type ATSScoreDetail } from "@/lib/atsScoring";
 import {
   DocumentGenerationError,
+  fetchMyProfile,
   generateResume,
   type GeneratedResumeContent,
 } from "@/lib/api";
@@ -63,87 +66,43 @@ export interface ResumeData {
   education: EducationItem[];
 }
 
-const INITIAL_RESUME: ResumeData = {
-  fullName: "Naveen Beniwal",
-  roleTitle: "Software & AI Systems Engineer",
-  phone: "+91 99999 99999",
-  email: "naveen@trace-platform.ai",
-  location: "Kurukshetra, India",
-  linkedin: "linkedin.com/in/naveenbeniwal",
-  github: "github.com/naveenbeniwal",
-  portfolio: "cvinsight.me",
-  summary:
-    "Computer Engineering graduate with 2+ years of experience in full-stack engineering and AI integration. Proven track record of scaling high-throughput SaaS platforms using Next.js 16, TypeScript, FastAPI, PostgreSQL, and Qdrant Vector DB.",
+/** An empty resume.
+ *
+ * This was previously a fully populated sample belonging to a named individual —
+ * real-looking name, email, phone, LinkedIn/GitHub handles, employment history and
+ * a CGPA. It was never replaced by the signed-in user's own data, so every
+ * candidate opened the builder prefilled with a stranger's details, and "Export
+ * PDF" would produce that as their resume. Starting empty is the only safe
+ * default; the seeding effect below fills in what we already know about the user. */
+const EMPTY_RESUME: ResumeData = {
+  fullName: "",
+  roleTitle: "",
+  phone: "",
+  email: "",
+  location: "",
+  linkedin: "",
+  github: "",
+  portfolio: "",
+  summary: "",
   skills: {
-    languages: "TypeScript, JavaScript (ES6+), Python, C++, SQL, HTML5/CSS3",
-    frameworks:
-      "Next.js 16, React 19, FastAPI, Tailwind CSS, Redux Toolkit, Express.js",
-    tools: "Git, Docker, Postman, VS Code, Jest, Pyodide, Qdrant Vector DB",
-    databases: "PostgreSQL, Redis, Qdrant Vector DB",
-    cloud: "Google Cloud Platform, AWS, Vercel, Render, Cloudinary",
+    languages: "",
+    frameworks: "",
+    tools: "",
+    databases: "",
+    cloud: "",
   },
-  experience: [
-    {
-      id: "exp-1",
-      company: "TRACE AI Systems",
-      role: "Lead Full-Stack AI Engineer",
-      location: "Remote",
-      dates: "2025 – Present",
-      bullets: [
-        "Architected multi-agent AI verification engine processing candidate portfolios and code repos using Python FastAPI, Groq LLM, and Qdrant Vector DB.",
-        "Built responsive Next.js 16 control-plane UI handling real-time candidate search, career roadmaps, and drag-and-drop recruitment pipelines.",
-        "Engineered zero-downtime background task processing with Redis worker queues for pitch deck document analysis.",
-      ],
-    },
-    {
-      id: "exp-2",
-      company: "Innovation Cell, NIT Kurukshetra",
-      role: "Co-Head, Technical Team",
-      location: "Kurukshetra, HR",
-      dates: "2024 – 2025",
-      bullets: [
-        "Spearheaded technical workshops on Git/GitHub version control and open-source contributions for 50+ junior engineering students.",
-        "Mentored student developers in full-stack software development best practices, accelerating project delivery timelines by 40%.",
-      ],
-    },
-  ],
-  projects: [
-    {
-      id: "proj-1",
-      title: "CVInsight – AI Career & ATS Platform",
-      technologies: "TypeScript, React, FastAPI, PostgreSQL, Qdrant",
-      dates: "2025",
-      bullets: [
-        "Engineered SaaS resume analysis platform serving 2,200+ active candidates with automated ATS scoring and bullet optimization.",
-        "Implemented multi-provider LLM failover gateway for continuous AI availability across Anthropic, OpenAI, and Groq APIs.",
-        "Integrated high-density PDF exporter generating pixel-perfect 1-page ATS resumes formatted for enterprise Applicant Tracking Systems.",
-      ],
-    },
-    {
-      id: "proj-2",
-      title: "Campus Placement & Recruitment Portal",
-      technologies: "Next.js, Tailwind CSS, PostgreSQL, Vercel",
-      dates: "2024",
-      bullets: [
-        "Developed university recruitment portal for 1,000+ students and 250+ enterprise recruiters with role-based access control.",
-        "Created interactive applicant tracking Kanban board with automated stage transitions and interview evaluation scorecards.",
-      ],
-    },
-  ],
-  education: [
-    {
-      id: "edu-1",
-      institution: "National Institute of Technology (NIT), Kurukshetra",
-      degree: "B.Tech in Computer Engineering",
-      dates: "2023 – 2027",
-      gpa: "CGPA: 9.38 / 10.0",
-    },
-  ],
+  experience: [],
+  projects: [],
+  education: [],
 };
 
 export function AtsResumeBuilder() {
   const { getToken } = useAuth();
-  const [data, setData] = useState<ResumeData>(INITIAL_RESUME);
+  const { me } = useCurrentUser();
+  const [data, setData] = useState<ResumeData>(EMPTY_RESUME);
+  // A "has this already run" latch, not rendered state — a ref keeps it out of the
+  // render cycle instead of triggering a cascading re-render from inside the effect.
+  const seededRef = useRef(false);
   const [template, setTemplate] = useState<ResumeTemplateStyle>("apex");
   const [targetJd, setTargetJd] = useState("");
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -157,6 +116,52 @@ export function AtsResumeBuilder() {
     "contact" | "skills" | "experience" | "projects" | "education"
   >("contact");
   const [showAtsDetails, setShowAtsDetails] = useState(false);
+
+  // Fills in what the platform already knows about the signed-in candidate, so the
+  // builder opens with their own details rather than a blank form. Runs once: after
+  // that the user's edits own the document, and a late-arriving profile must not
+  // overwrite something they have already typed.
+  useEffect(() => {
+    if (seededRef.current || !me?.profile) return;
+    seededRef.current = true;
+
+    const user = me.profile;
+    setData((prev) => ({
+      ...prev,
+      fullName: user.full_name ?? "",
+      email: user.email ?? "",
+    }));
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const profile = await fetchMyProfile(token);
+        if (cancelled) return;
+        setData((prev) => ({
+          ...prev,
+          roleTitle: prev.roleTitle || (profile.headline ?? ""),
+          location: prev.location || (profile.location ?? ""),
+          github: prev.github || (profile.github_username
+            ? `github.com/${profile.github_username}`
+            : ""),
+          skills: {
+            ...prev.skills,
+            languages:
+              prev.skills.languages ||
+              (profile.skills ?? []).map((s) => s.name).join(", "),
+          },
+        }));
+      } catch {
+        // Seeding is a convenience. If the profile can't be read the user just
+        // fills the form in themselves — never block the builder on it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [me, getToken]);
 
   const atsScoreDetail = useMemo<ATSScoreDetail>(() => {
     const result = calculateATSScore(data);
@@ -318,46 +323,32 @@ export function AtsResumeBuilder() {
 
   return (
     <div className="space-y-6 font-sans">
-      {/* Header bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border p-5 rounded-xl shadow-flat print:hidden">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold font-heading text-foreground">
-              ATS Resume Generator & AI Tailor
-            </h1>
-            <Badge
-              variant="outline"
-              className="border-primary/40 text-primary bg-primary/10 font-mono text-xs"
-            >
-              CVInsight Engine
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Engineered 1-page ATS layouts designed to pass enterprise Applicant
-            Tracking Systems (Workday, Greenhouse, Lever).
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowAtsDetails(!showAtsDetails)}
-            className="flex items-center gap-2 bg-success/10 border border-success/20 px-3 py-1.5 rounded-lg hover:bg-success/10 transition-colors cursor-pointer"
-          >
-            <span className="text-xs font-medium text-success">
-              ATS Readiness:
-            </span>
-            <span className="text-sm font-bold font-mono text-success">
-              {atsScoreDetail.score}/100
-            </span>
-            <span className="text-xs text-success">ⓘ</span>
-          </button>
-          <Button
-            onClick={handlePrint}
-            className="cursor-pointer font-medium shadow-flat"
-          >
-            Export 1-Page PDF
-          </Button>
-        </div>
+      {/* Was a bordered header bar carrying an invented product name ("CVInsight
+          Engine") and a title written as marketing copy. The page owns the title
+          now, so this is just the toolbar. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowAtsDetails(!showAtsDetails)}
+          aria-expanded={showAtsDetails}
+        >
+          <span className="text-muted-foreground">ATS readiness</span>
+          {/* Was hard-coded `text-success`, so a 30/100 rendered in the same
+              affirmative green as a 95/100. */}
+          <span data-numeric className="font-medium tabular-nums">
+            {atsScoreDetail.score}/100
+          </span>
+          <ChevronDown
+            aria-hidden
+            className={
+              showAtsDetails
+                ? "size-3.5 rotate-180 transition-transform"
+                : "size-3.5 transition-transform"
+            }
+          />
+        </Button>
+        <Button onClick={handlePrint}>Export PDF</Button>
       </div>
 
       {/* ATS Score Details Panel */}
@@ -466,7 +457,12 @@ export function AtsResumeBuilder() {
               )}
               {Object.values(atsScoreDetail.breakdown).every(
                 (b) => b.issues.length === 0,
-              ) && <p className="text-success">✓ No issues detected!</p>}
+              ) && (
+                <p className="flex items-center gap-1.5 text-success">
+                  <Check aria-hidden className="size-3.5" />
+                  No issues detected
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -477,6 +473,7 @@ export function AtsResumeBuilder() {
         <button
           type="button"
           onClick={() => setTemplate("apex")}
+          aria-pressed={template === "apex"}
           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
             template === "apex"
               ? "border-primary bg-primary/10 ring-2 ring-ring"
@@ -501,6 +498,7 @@ export function AtsResumeBuilder() {
         <button
           type="button"
           onClick={() => setTemplate("modern")}
+          aria-pressed={template === "modern"}
           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
             template === "modern"
               ? "border-primary bg-primary/10 ring-2 ring-ring"
@@ -525,6 +523,7 @@ export function AtsResumeBuilder() {
         <button
           type="button"
           onClick={() => setTemplate("creative")}
+          aria-pressed={template === "creative"}
           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
             template === "creative"
               ? "border-primary bg-primary/10 ring-2 ring-ring"
@@ -549,6 +548,7 @@ export function AtsResumeBuilder() {
         <button
           type="button"
           onClick={() => setTemplate("minimalist")}
+          aria-pressed={template === "minimalist"}
           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
             template === "minimalist"
               ? "border-primary bg-primary/10 ring-2 ring-ring"
@@ -629,6 +629,7 @@ export function AtsResumeBuilder() {
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
+                aria-pressed={activeTab === tab}
                 className={`py-2 px-3 capitalize border-b-2 font-medium transition-colors cursor-pointer ${
                   activeTab === tab
                     ? "border-primary text-foreground"
@@ -650,6 +651,7 @@ export function AtsResumeBuilder() {
                   </label>
                   <Input
                     value={data.fullName}
+                    placeholder="Ada Lovelace"
                     onChange={(e) =>
                       setData({ ...data, fullName: e.target.value })
                     }
@@ -661,18 +663,20 @@ export function AtsResumeBuilder() {
                   </label>
                   <Input
                     value={data.roleTitle}
+                    placeholder="Backend Engineer"
                     onChange={(e) =>
                       setData({ ...data, roleTitle: e.target.value })
                     }
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className="text-muted-foreground font-medium">
                       Email
                     </label>
                     <Input
                       value={data.email}
+                      placeholder="you@example.com"
                       onChange={(e) =>
                         setData({ ...data, email: e.target.value })
                       }
@@ -684,19 +688,21 @@ export function AtsResumeBuilder() {
                     </label>
                     <Input
                       value={data.phone}
+                      placeholder="+91 98765 43210"
                       onChange={(e) =>
                         setData({ ...data, phone: e.target.value })
                       }
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className="text-muted-foreground font-medium">
                       LinkedIn
                     </label>
                     <Input
                       value={data.linkedin}
+                      placeholder="linkedin.com/in/yourname"
                       onChange={(e) =>
                         setData({ ...data, linkedin: e.target.value })
                       }
@@ -708,6 +714,7 @@ export function AtsResumeBuilder() {
                     </label>
                     <Input
                       value={data.github}
+                      placeholder="github.com/yourname"
                       onChange={(e) =>
                         setData({ ...data, github: e.target.value })
                       }
@@ -967,7 +974,7 @@ export function AtsResumeBuilder() {
                         }));
                       }}
                     />
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Input
                         placeholder="Dates"
                         value={edu.dates}
