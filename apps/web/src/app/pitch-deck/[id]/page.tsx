@@ -14,8 +14,8 @@ import { Page, PageHeader } from "@/components/common/PageHeader";
 import { SectionError } from "@/components/common/SectionError";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 import {
-  fetchPresentationReport,
   PITCH_SCORE_LABELS,
+  pollPresentationReport,
   type PresentationReportResponse,
 } from "@/lib/api";
 
@@ -43,36 +43,34 @@ export default function PitchDeckReportPage() {
       return;
     }
 
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Was a hand-rolled `setTimeout(load, 2000)` loop, which skipped `pollDelay` and
+    // therefore kept polling in a hidden tab. The shared helper also gives this path
+    // backoff and error tolerance, so a single blip no longer surfaces as a hard error
+    // on a report that is merely still being computed.
+    const controller = new AbortController();
 
-    async function load() {
+    void (async () => {
       try {
         const token = await getToken();
         if (!token) throw new Error("No session token");
-        const data = await fetchPresentationReport(token, params.id);
-        if (cancelled) return;
-        setReport(data);
-        // Synchronous pipeline today (see graph.py docstring) — status is already
-        // "done"/"failed" by the time upload returns, but poll briefly in case this
-        // page is reached by a shared link before that request resolves.
-        if (data.status === "processing") {
-          timer = setTimeout(load, 2000);
-        }
+        await pollPresentationReport(token, params.id, {
+          signal: controller.signal,
+          // Render the first response immediately — the pipeline is synchronous today,
+          // so it is usually already terminal, and waiting for the poll to settle would
+          // hold the skeleton up for no reason.
+          onUpdate: (data) => {
+            if (!controller.signal.aborted) setReport(data);
+          },
+        });
       } catch (err) {
-        if (!cancelled)
+        if (!controller.signal.aborted)
           setError(
             err instanceof Error ? err.message : "Failed to load report",
           );
       }
-    }
+    })();
 
-    load();
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
+    return () => controller.abort();
   }, [isLoaded, isSignedIn, me, getToken, router, params.id]);
 
   // `meError` and a report failure are both terminal for this page, so they share
@@ -235,7 +233,10 @@ export default function PitchDeckReportPage() {
           <CardTitle className="font-heading">Plagiarism matches</CardTitle>
         </CardHeader>
         <CardContent>
-          <PlagiarismMatchList matches={report.plagiarism_matches} />
+          <PlagiarismMatchList
+            matches={report.plagiarism_matches}
+            checked={report.plagiarism_checked}
+          />
         </CardContent>
       </Card>
 

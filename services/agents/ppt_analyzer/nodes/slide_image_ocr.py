@@ -8,10 +8,11 @@ import asyncio
 
 from services.agents.ppt_analyzer.state import PitchAnalysisState
 from services.agents.ppt_analyzer.tools.ocr import ocr_image_async, vision_diagram_summary
+from services.api.core.config import get_settings
 
 # Bounds concurrent slide processing: a large deck would otherwise fire N Tesseract
 # threads and N Claude-vision calls at once, exhausting the threadpool / hitting rate limits.
-_MAX_CONCURRENT_SLIDES = 5
+_MAX_CONCURRENT_SLIDES = get_settings().agent_max_concurrency
 
 
 async def _process_slide(index: int, images: list, semaphore: asyncio.Semaphore) -> dict | None:

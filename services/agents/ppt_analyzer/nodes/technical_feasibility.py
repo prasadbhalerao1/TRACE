@@ -14,6 +14,7 @@ from services.agents.ppt_analyzer.tools.rubric_scoring import (
     score_technical_feasibility,
 )
 from services.agents.ppt_analyzer.tools.text import slides_text
+from services.api.core.llm import validated_score
 
 
 def _ocr_context(slide_ocr_notes: list[dict]) -> str | None:
@@ -39,7 +40,7 @@ async def run(state: PitchAnalysisState) -> dict:
         result = await score_technical_feasibility(slides_text(slides), ocr_context, repo_evidence)
         return {
             "technical_feasibility": {
-                "value": float(result["score"]),
+                "value": validated_score(result.get("score")),
                 "rationale": result.get("rationale"),
                 "gaps": result.get("gaps", []),
             }

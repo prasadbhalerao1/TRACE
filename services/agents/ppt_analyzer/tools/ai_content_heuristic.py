@@ -19,6 +19,8 @@ and every score ships with a rationale + which sections were flagged, per FR-6/Â
 import re
 import statistics
 
+from services.api.common.constants import AI_CONTENT_FLAG_THRESHOLD
+
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _WORD_RE = re.compile(r"[A-Za-z']+")
 
@@ -73,7 +75,7 @@ def compute_ai_content_signal(slides: list[dict]) -> dict:
         }
 
     avg_score = round(sum(s for _, s in per_slide) / len(per_slide), 1)
-    flagged = [f"slide_{i}" for i, s in per_slide if s >= 70.0]
+    flagged = [f"slide_{i}" for i, s in per_slide if s >= AI_CONTENT_FLAG_THRESHOLD]
 
     # Confidence in the SIGNAL (not in "is it AI"): more slides with enough text -> more
     # confidence the average is representative, capped at "medium" since this heuristic

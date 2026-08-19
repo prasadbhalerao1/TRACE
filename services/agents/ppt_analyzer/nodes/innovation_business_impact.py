@@ -10,12 +10,7 @@ from services.agents.ppt_analyzer.tools.rubric_scoring import (
     score_innovation_business,
 )
 from services.agents.ppt_analyzer.tools.text import slides_text
-
-
-def _novelty_context(plagiarism_matches: list[dict]) -> str | None:
-    if not plagiarism_matches:
-        return None
-    return f"{len(plagiarism_matches)} slide(s) matched prior submissions above the similarity threshold."
+from services.api.core.llm import validated_score
 
 
 async def run(state: PitchAnalysisState) -> dict:
@@ -29,21 +24,32 @@ async def run(state: PitchAnalysisState) -> dict:
         }
 
     try:
-        # Note: plagiarism_matches is written by a sibling parallel branch off
-        # slide_embedding, not a predecessor of this node — it may not have landed in
-        # this superstep yet. Only used as optional soft context when already present.
-        novelty_context = _novelty_context(state.get("plagiarism_matches") or [])
-        result = await score_innovation_business(slides_text(slides), novelty_context)
+        # Scored on the deck alone, with no novelty context.
+        #
+        # This node used to read `state["plagiarism_matches"]` and fold a "N slides matched
+        # prior submissions" line into the prompt, described in a comment as data that "may
+        # not have landed in this superstep yet". It never had: `similarity_plagiarism` sits
+        # a full superstep further down a parallel branch
+        # (content_extraction -> slide_embedding -> similarity_plagiarism), while this node
+        # runs immediately after content_extraction. So the context was always None, and had
+        # the scheduling ever changed, the same deck would have scored differently run to run
+        # — nondeterminism in a number persisted against a real submission and shown to
+        # organizers.
+        #
+        # The novelty signal is not lost. `similarity_plagiarism` is joined by `aggregation`,
+        # and the matches are surfaced to the reader directly as `plagiarism_matches` rather
+        # than silently discounted inside a score they cannot inspect.
+        result = await score_innovation_business(slides_text(slides))
         gaps = result.get("gaps", [])
         return {
             "innovation_business": {
                 "innovation": {
-                    "value": float(result["innovation_score"]),
+                    "value": validated_score(result.get("innovation_score")),
                     "rationale": result.get("innovation_rationale"),
                     "gaps": gaps,
                 },
                 "business_potential": {
-                    "value": float(result["business_potential_score"]),
+                    "value": validated_score(result.get("business_potential_score")),
                     "rationale": result.get("business_potential_rationale"),
                     "gaps": gaps,
                 },

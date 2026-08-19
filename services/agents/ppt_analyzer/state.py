@@ -37,6 +37,10 @@ class PitchAnalysisState(TypedDict):
 
     # Similarity/Plagiarism Agent output
     plagiarism_matches: list[dict]  # [{matched_presentation_id, slide_idx, similarity}]
+    # False when the check could not run at all. An empty `plagiarism_matches` alone is
+    # ambiguous — it reads to the user as "nothing matched", which is a positive claim
+    # this flag prevents us from making when we simply do not know.
+    plagiarism_checked: bool
 
     # Problem & Solution Clarity Agent output -> becomes "presentation_quality" score
     presentation_quality: Optional[dict]  # {value, rationale, gaps}

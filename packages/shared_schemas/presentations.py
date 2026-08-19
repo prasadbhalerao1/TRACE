@@ -82,4 +82,8 @@ class PresentationReportResponse(BaseModel):
     suggestions: list[str]
     ai_content_signal: AIContentSignal | None
     plagiarism_matches: list[PlagiarismMatchOut]
+    # False when the similarity check could not run. Without this the UI renders an empty
+    # match list as "No similarity matches found against prior submissions" — an
+    # affirmative all-clear for a check that never happened.
+    plagiarism_checked: bool = True
     computed_at: datetime | None

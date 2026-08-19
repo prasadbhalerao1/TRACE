@@ -7,20 +7,26 @@ callers (the node functions) catch this and degrade to a `None`-valued RubricSco
 never a fabricated number.
 """
 
+from services.agents.prompts_loader import load_prompt
+from services.api.core.config import get_settings
 from services.api.core.llm import LLMUnavailable, generate_structured
 
 # Raised when a rubric-scoring LLM call can't run (e.g. no/misconfigured provider key).
 PitchScoringUnavailable = LLMUnavailable
 
+# Blank line between the deck text, diagram understanding and repo evidence blocks.
+SECTION_SEPARATOR = '\n\n'
 
-async def _call(schema_name: str, schema_description: str, parameters: dict, prompt: str, max_tokens: int = 1024) -> dict:
+
+async def _call(schema_name: str, schema_description: str, parameters: dict, prompt: str, max_tokens: int | None = None) -> dict:
+    settings = get_settings()
     return await generate_structured(
         schema_name=schema_name,
         schema_description=schema_description,
         parameters=parameters,
         prompt=prompt,
-        max_tokens=max_tokens,
-        temperature=0,
+        max_tokens=max_tokens or settings.llm_max_tokens_default,
+        temperature=settings.llm_temperature_deterministic,
         agent_name=f"ppt_analyzer.rubric.{schema_name}",
     )
 
@@ -41,13 +47,7 @@ _PROBLEM_SOLUTION_PARAMETERS = {
 
 
 async def score_problem_solution(slides_text: str) -> dict:
-    prompt = (
-        "You are scoring a pitch deck against a rubric for PROBLEM UNDERSTANDING and SOLUTION "
-        "CLARITY (0-100). Ground your score and gaps only in what's actually written below — do not "
-        "speculate about content that isn't there. List concrete gaps (missing quantification, unclear "
-        "audience, vague solution mechanics, etc.), not generic advice.\n\n"
-        f"Deck content (per slide):\n{slides_text}"
-    )
+    prompt = load_prompt("ppt_analyzer", "problem_solution", slides_text=slides_text)
     return await _call(
         "problem_solution_clarity",
         "Rubric-score how clearly a pitch deck states the problem and its proposed solution.",
@@ -76,12 +76,17 @@ _INNOVATION_BUSINESS_PARAMETERS = {
 
 
 async def score_innovation_business(slides_text: str, novelty_context: str | None = None) -> dict:
+    """Rubric-score innovation and business potential.
+
+    `novelty_context` is currently never supplied. Its only caller used to pass a summary
+    of `plagiarism_matches`, which is produced by a graph branch that does not complete
+    before the scoring node runs — see the comment in nodes/innovation_business_impact.py.
+    The parameter is kept because the prompt has a slot for it and a reordered graph could
+    supply it legitimately; it is not dead by oversight.
+    """
     context = f"\n\nNovelty signal vs prior submissions: {novelty_context}" if novelty_context else ""
-    prompt = (
-        "You are scoring a pitch deck against a rubric for INNOVATION (novelty vs existing solutions) "
-        "and BUSINESS POTENTIAL (market size, revenue model, go-to-market clarity), each 0-100. Ground "
-        "both scores and gaps only in what's actually written below.\n\n"
-        f"Deck content (per slide):\n{slides_text}{context}"
+    prompt = load_prompt(
+        "ppt_analyzer", "innovation_business", slides_text=slides_text, novelty_context=context
     )
     return await _call(
         "innovation_business_impact",
@@ -113,11 +118,10 @@ async def score_technical_feasibility(slides_text: str, ocr_context: str | None,
             "No linked repository evidence is available — score technical feasibility from the deck's "
             "own claims alone and note in gaps that claims are unverified against real code."
         )
-    prompt = (
-        "You are scoring a pitch deck against a rubric for TECHNICAL DEPTH and FEASIBILITY (0-100). "
-        "Cross-check any technical claims in the deck against the repo evidence if provided — if the "
-        "deck claims a technology/architecture that the repo evidence doesn't support, call that out "
-        "as a gap rather than trusting the deck's claim at face value.\n\n" + "\n\n".join(parts)
+    prompt = load_prompt(
+        "ppt_analyzer",
+        "technical_feasibility",
+        context_blocks=SECTION_SEPARATOR.join(parts),
     )
     return await _call(
         "technical_feasibility",
@@ -140,12 +144,7 @@ _SUMMARY_PARAMETERS = {
 
 
 async def generate_summary(slides_text: str) -> str:
-    prompt = (
-        "Write a 2-3 sentence summary PER SECTION of this pitch deck (e.g. problem, solution, market, "
-        "technology, team) — not a slide-by-slide restatement. Ground it only in what's written; do not "
-        "invent details.\n\n"
-        f"Deck content (per slide):\n{slides_text}"
-    )
+    prompt = load_prompt("ppt_analyzer", "deck_summary", slides_text=slides_text)
     return (await _call(
         "pitch_summary",
         "Write a grounded per-section summary of a pitch deck.",

@@ -232,6 +232,7 @@ async def _run_and_persist_analysis(
         "slide_ocr_notes": [],
         "slide_embeddings": None,
         "plagiarism_matches": [],
+        "plagiarism_checked": True,
         "presentation_quality": None,
         "innovation_business": None,
         "technical_feasibility": None,
@@ -287,6 +288,7 @@ async def _run_and_persist_analysis(
             summary=result_state.get("summary"),
             suggestions=result_state.get("suggestions", []),
             ai_content_signal=ai_content_signal,
+            plagiarism_checked=result_state.get("plagiarism_checked", True),
         )
     )
 
@@ -395,6 +397,10 @@ async def get_report(
             suggestions=[],
             ai_content_signal=None,
             plagiarism_matches=matches,
+            # No score row yet: the analysis has not finished, so the check has not run.
+            # The UI keys off `status` here, but claiming a completed check would be a
+            # lie in the one state where it is most obviously untrue.
+            plagiarism_checked=False,
             computed_at=None,
         )
 
@@ -418,6 +424,7 @@ async def get_report(
         suggestions=score.suggestions or [],
         ai_content_signal=ai_signal,
         plagiarism_matches=matches,
+        plagiarism_checked=score.plagiarism_checked,
         computed_at=score.computed_at,
     )
 

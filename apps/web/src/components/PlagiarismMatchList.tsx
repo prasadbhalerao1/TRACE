@@ -12,9 +12,26 @@ import type { PlagiarismMatchOut } from "@/lib/api";
  * plagiarism yes/no — same "signal with evidence" requirement as FR-6 (doc 04 §9). */
 export function PlagiarismMatchList({
   matches,
+  checked = true,
 }: {
   matches: PlagiarismMatchOut[];
+  /** Whether the check actually ran. An empty list means nothing on its own. */
+  checked?: boolean;
 }) {
+  // Distinguished deliberately from the empty case below. Both used to render the same
+  // "no matches found" line, so a deck whose check errored out was presented as having
+  // passed it — the reader had no way to tell, and neither did the organizer relying on
+  // it. Undetermined is its own answer.
+  if (!checked) {
+    return (
+      <p className="text-sm text-warning">
+        The similarity check could not be completed for this deck, so it has not been
+        compared against prior submissions. This is not a pass — try re-running the
+        analysis.
+      </p>
+    );
+  }
+
   if (matches.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">

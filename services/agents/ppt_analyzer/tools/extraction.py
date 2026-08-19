@@ -17,6 +17,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 from pptx import Presentation as PptxPresentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from services.api.core.config import get_settings
 
 
 class UnsupportedDeckFormat(ValueError):
@@ -66,7 +67,7 @@ def convert_ppt_to_pptx(file_bytes: bytes, binary: str = "soffice") -> bytes:
                 [resolved, "--headless", "--convert-to", "pptx", "--outdir", tmpdir, str(src)],
                 check=True,
                 capture_output=True,
-                timeout=60,
+                timeout=get_settings().libreoffice_timeout_seconds,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             raise LegacyPptConversionUnavailable(f"LibreOffice conversion failed: {exc}") from exc

@@ -17,12 +17,25 @@ from qdrant_client.http import models as qmodels
 
 from services.api.core.qdrant import ensure_payload_indexes
 from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
+from services.api.core.config import get_settings
 
 _QDRANT_COLLECTION = "presentation_slide_embeddings"
 # Tunable default (doc 08 §3 uses 0.75 for code AST-winnowing similarity; slide-text
 # cosine similarity is a different signal so a higher bar is used here to reduce false
 # positives from generically-worded slides like "Problem Statement" / "Thank You").
-SIMILARITY_THRESHOLD = 0.90
+SIMILARITY_THRESHOLD = get_settings().deck_plagiarism_similarity_threshold
+
+
+class PlagiarismCheckUnavailable(RuntimeError):
+    """The plagiarism check could not run.
+
+    Distinct from "ran and found nothing". This module used to return `[]` for both, and
+    `[]` renders to the reader as "No similarity matches found against prior submissions"
+    — an affirmative all-clear. A removed-in-1.18 client method once raised AttributeError
+    in here and every deck was reported clean until someone noticed by hand.
+
+    Callers must surface this as an undetermined state, never as a passing check.
+    """
 
 
 def _get_client() -> QdrantClient | None:
@@ -40,9 +53,14 @@ def find_and_record_matches(
     if not embeddings:
         return []
 
-    client = _get_client()
+    try:
+        client = _get_client()
+    except Exception as exc:  # noqa: BLE001 - client construction failure is undetermined
+        raise PlagiarismCheckUnavailable(f"Qdrant client unavailable: {exc}") from exc
     if client is None:
-        return []  # Qdrant unreachable — cold-start degrade, not an error
+        # Was `return []`, i.e. an all-clear. A deployment with no Qdrant cannot check
+        # plagiarism at all, so every deck it ever saw was reported clean.
+        raise PlagiarismCheckUnavailable("Qdrant is not configured or unreachable")
 
     try:
         if not client.collection_exists(_QDRANT_COLLECTION):
@@ -102,5 +120,8 @@ def find_and_record_matches(
             ],
         )
         return matches
-    except Exception:
-        return []
+    except Exception as exc:  # noqa: BLE001 - any backend failure is undetermined
+        # Deliberately not `return []`. See PlagiarismCheckUnavailable's docstring: an
+        # empty list is a positive claim to the reader, and swallowing failures into it
+        # is what let a broken client method report every deck as clean.
+        raise PlagiarismCheckUnavailable(f"plagiarism check failed: {exc}") from exc

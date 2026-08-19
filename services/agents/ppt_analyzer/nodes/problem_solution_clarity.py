@@ -7,6 +7,7 @@ Its output becomes the "Presentation Quality" component of the Overall Pitch Sco
 from services.agents.ppt_analyzer.state import PitchAnalysisState
 from services.agents.ppt_analyzer.tools.rubric_scoring import PitchScoringUnavailable, score_problem_solution
 from services.agents.ppt_analyzer.tools.text import slides_text
+from services.api.core.llm import validated_score
 
 
 async def run(state: PitchAnalysisState) -> dict:
@@ -18,7 +19,7 @@ async def run(state: PitchAnalysisState) -> dict:
         result = await score_problem_solution(slides_text(slides))
         return {
             "presentation_quality": {
-                "value": float(result["score"]),
+                "value": validated_score(result.get("score")),
                 "rationale": result.get("rationale"),
                 "gaps": result.get("gaps", []),
             }
