@@ -114,12 +114,23 @@ _MAX_SCORE_HISTORY = 30
 
 logger = logging.getLogger(__name__)
 
+# Handles that would shadow a real route on the public portfolio (`/[username]` sits
+# beside these paths), plus the role names, which must never be claimable as a personal
+# handle because a profile at `/admin` reads as an official page.
+#
+# MUST stay in sync with RESERVED_USERNAMES in apps/web/src/lib/constants.ts. The client
+# check is a courtesy that fails fast in the form; this set is the one that actually
+# enforces, because the API is reachable directly. An earlier revision had six names
+# ("home", "admin", "recruiter", "organizer", "judge", "settings") on the client only,
+# so `POST /auth/signup` with username="admin" returned 201.
+# tests/test_reserved_usernames.py asserts the two lists match.
 _RESERVED_USERNAMES = {
     "api", "dashboard", "onboarding", "sign-in", "sign-up", "hackathons",
     "profile", "career", "resume-builder", "assessments", "interview", "my-flags",
     "applications", "jobs", "copilot", "pipeline", "analytics", "top-performers",
     "reports", "evaluations", "submissions", "fraud-review", "users", "audit-log",
     "candidates", "public", "me", "health",
+    "home", "admin", "recruiter", "organizer", "judge", "settings",
 }
 _USERNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$")
 
@@ -143,6 +154,19 @@ async def update_profile(
     if body.full_name is not None:
         user.full_name = body.full_name
         db.add(user)
+
+    if body.username is not None:
+        username = body.username.strip().lower()
+        if not _USERNAME_PATTERN.match(username) or username in _RESERVED_USERNAMES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_username")
+        existing_username = await db.execute(
+            select(CandidateProfile).where(
+                CandidateProfile.username == username, CandidateProfile.id != profile.id
+            )
+        )
+        if existing_username.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username_taken")
+        profile.username = username
         
     if body.headline is not None:
         profile.headline = body.headline
@@ -565,6 +589,46 @@ async def get_my_profile(
     return await _get_or_create_profile(db, user)
 
 
+# Content types each ingestion path can actually parse. Resume text extraction
+# (tools/resume.py) handles PDF and Word; certificate OCR (tools/certificate.py) opens
+# the bytes with Pillow, so it needs a real image. Anything else raises deep inside the
+# parser *after* the file has been read into memory and enqueued, surfacing to the
+# candidate as a failed background job rather than a rejected upload.
+_RESUME_CONTENT_TYPES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+}
+_CERTIFICATE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/tiff"}
+
+
+async def _read_upload_or_400(
+    file: UploadFile, *, allowed_types: set[str], max_mb: int, kind: str
+) -> bytes:
+    """Read an upload, rejecting the wrong type or an oversized body.
+
+    Mirrors the presentation upload route's guard (`detect_format` + a size ceiling),
+    which these two routes were missing entirely. Size is checked after the read because
+    Starlette has already spooled the body to disk by the time the handler runs — the
+    ceiling bounds what is held in memory and copied into the queue payload, which is
+    what actually costs.
+    """
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported_{kind}_type: {file.content_type or 'unknown'}",
+        )
+    file_bytes = await file.read()
+    if len(file_bytes) > max_mb * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"file_too_large: max {max_mb}MB",
+        )
+    if not file_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="empty_file")
+    return file_bytes
+
+
 @router.post("/me/ingest/resume", response_model=CandidateProfileResponse)
 async def ingest_resume(
     file: UploadFile,
@@ -573,7 +637,12 @@ async def ingest_resume(
     db: AsyncSession = Depends(get_db),
 ) -> CandidateProfile:
     profile = await _get_or_create_profile(db, user)
-    file_bytes = await file.read()
+    file_bytes = await _read_upload_or_400(
+        file,
+        allowed_types=_RESUME_CONTENT_TYPES,
+        max_mb=get_settings().resume_max_file_size_mb,
+        kind="resume",
+    )
     profile.ingestion_status = "processing"
     profile.ingestion_error = None
     await db.commit()
@@ -598,7 +667,12 @@ async def ingest_certificate(
     db: AsyncSession = Depends(get_db),
 ) -> CandidateProfile:
     profile = await _get_or_create_profile(db, user)
-    file_bytes = await file.read()
+    file_bytes = await _read_upload_or_400(
+        file,
+        allowed_types=_CERTIFICATE_CONTENT_TYPES,
+        max_mb=get_settings().certificate_max_file_size_mb,
+        kind="certificate",
+    )
     profile.ingestion_status = "processing"
     profile.ingestion_error = None
     await db.commit()

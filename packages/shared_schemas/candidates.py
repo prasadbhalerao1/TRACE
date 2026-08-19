@@ -192,6 +192,7 @@ class PortfolioPublishRequest(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     """PATCH /candidates/me — all fields optional; only supplied fields are applied."""
     full_name: str | None = None
+    username: str | None = None
     headline: str | None = None
     location: str | None = None
     college: str | None = None
