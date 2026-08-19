@@ -23,7 +23,16 @@ PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
 
 
 def _placeholders(agent: str, name: str) -> list[str]:
+    """Real placeholders in a prompt file, excluding escaped literal braces.
+
+    `{{name}}` is the loader's escape for a literal `{name}` in prompt prose — needed
+    because examples inside prompts contain real code (a FastAPI route
+    `@app.get("/items/{item_id}")`, a JSON template) whose braces must reach the model
+    verbatim rather than being treated as template variables. Blanking the escaped forms
+    before scanning keeps this test asserting on actual placeholders.
+    """
     text = (PROMPTS_ROOT / agent / "prompts" / f"{name}.md").read_text(encoding="utf-8")
+    text = text.replace("{{", "<ESC>").replace("}}", "<ESC>")
     return sorted(set(PLACEHOLDER_RE.findall(text)))
 
 

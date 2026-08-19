@@ -44,12 +44,13 @@ from packages.db.models import (
     RecruiterWatchlist,
 )
 from services.api.core.db import async_session
+from services.api.core.config import get_settings
 
 logger = logging.getLogger("event_consumer")
 
 _HACKATHON_RANKINGS_FINALIZED = "hackathon.rankings.finalized"
 
-DEFAULT_POLL_INTERVAL_SECONDS = 30.0
+DEFAULT_POLL_INTERVAL_SECONDS = get_settings().event_poll_interval_seconds
 
 
 async def process_pending_events(db: AsyncSession) -> dict:

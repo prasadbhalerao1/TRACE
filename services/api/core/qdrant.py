@@ -61,7 +61,7 @@ def get_qdrant_client(*, raise_on_unavailable: bool = True) -> QdrantClient | No
             client = QdrantClient(
                 url=settings.qdrant_url,
                 api_key=settings.qdrant_api_key or None,
-                timeout=5.0,
+                timeout=get_settings().qdrant_timeout_seconds,
                 prefer_grpc=False
             )
             client.get_collections()

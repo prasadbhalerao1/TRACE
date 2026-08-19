@@ -55,6 +55,37 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_model_fast: str = "claude-haiku-4-5-20251001"
     llm_model_judgment: str = "claude-sonnet-4-6"
+
+    # --- LLM reliability (services/api/core/llm.py) ---
+    #
+    # Before these existed the gateway had no timeout, no retry and no output
+    # validation: a hung provider connection held a request open indefinitely, one
+    # transient 429 permanently failed an agent run, and a model answering `8.5` for a
+    # field documented as 0-100 was written to the database verbatim.
+    #
+    # Per-call ceiling passed to both provider SDKs. Generous, because judgment-tier
+    # calls over a long interview transcript legitimately take tens of seconds — this is
+    # a backstop against a hung socket, not a latency target.
+    llm_timeout_seconds: float = 60.0
+    # Retries are *additional* attempts after the first. Only failures that could
+    # plausibly succeed on an identical retry are re-issued (rate limits, timeouts,
+    # provider overload, malformed structured output); an exhausted quota or a bad API
+    # key is never retried. 2 is deliberately low: agent pipelines chain many calls, so
+    # a high per-call retry count multiplies into minutes of user-visible wait.
+    llm_max_retries: int = 2
+    # Base for exponential backoff (doubled per attempt, plus jitter). A provider-sent
+    # `Retry-After` header always overrides this.
+    llm_retry_base_delay_seconds: float = 1.0
+    # Output-token budgets. These replace 17 scattered literals across the agent tools,
+    # where 8 distinct values had accumulated with no rationale for the differences.
+    # They are the single largest per-call cost driver, so they belong next to the
+    # provider/model settings rather than buried in individual agent modules.
+    llm_max_tokens_small: int = 256      # one-sentence rationales, short classifications
+    llm_max_tokens_default: int = 1024   # ordinary structured scoring/extraction
+    llm_max_tokens_large: int = 2048     # resume/cover-letter generation, long reports
+    # Temperature for calls that must be reproducible (rubric scoring). Anything scored
+    # and persisted should not vary between two runs over identical input.
+    llm_temperature_deterministic: float = 0.0
     github_client_id: str = ""
     github_client_secret: str = ""
     github_oauth_redirect_uri: str = ""
@@ -62,6 +93,106 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""
     embedding_model: str = "BAAI/bge-large-en-v1.5"
+
+    # --- Scoring weights & thresholds ---
+    #
+    # These were Python literals scattered across services/agents/**, so tuning the
+    # product's core output required a code deploy. Every default below is exactly the
+    # value that was previously hardcoded, so a stock .env reproduces prior behaviour
+    # byte for byte (services/api/tests/test_config_parity.py asserts this).
+    #
+    # Talent Score sub-score weights (doc 08 SS1). Renormalized over whichever sub-scores
+    # actually resolved, so they need not sum to 1.0 after an override — but they should.
+    weight_coding_ability: float = 0.16
+    weight_problem_solving: float = 0.16
+    weight_project_quality: float = 0.12
+    weight_innovation: float = 0.12
+    weight_technical_consistency: float = 0.08
+    weight_community_participation: float = 0.08
+    weight_leadership: float = 0.08
+    weight_open_source_contributions: float = 0.10
+    weight_hackathon_performance: float = 0.10
+
+    # Job-match weights (doc 08 SS2). The matching module docstring already described
+    # these as "tunable defaults", which is precisely an argument for configurability.
+    match_weight_skill_overlap: float = 0.35
+    match_weight_semantic_similarity: float = 0.30
+    match_weight_experience_match: float = 0.15
+    match_weight_talent_score_alignment: float = 0.20
+    # SemanticSimilarity = alpha*cosine + (1-alpha)*filter_match_ratio.
+    match_semantic_alpha: float = 0.70
+
+    # How much of a judgment sub-score comes from mechanical signals vs. the LLM's
+    # reading of the same evidence. Previously bare inline literals inside expressions.
+    project_quality_mechanical_weight: float = 0.6
+    innovation_novelty_weight: float = 0.5
+
+    # Similarity thresholds. Five values lived in five modules, two of them sharing the
+    # identifier `SIMILARITY_FLAG_THRESHOLD` with *different* values — a genuine footgun
+    # when read side by side. Named per purpose here so the differences are deliberate.
+    #
+    # Note `skill_similarity_threshold` is only meaningful for the configured
+    # `embedding_model`: changing the model silently invalidates the calibration, which
+    # is why the two now sit together in one file.
+    skill_similarity_threshold: float = 0.80        # recruiter search / matching
+    skill_gap_similarity_threshold: float = 0.72    # career-guidance gap detection
+    text_fingerprint_similarity_threshold: float = 0.80   # duplicate-profile fraud
+    structural_similarity_threshold: float = 0.75   # code-plagiarism fraud
+    deck_plagiarism_similarity_threshold: float = 0.90    # pitch-deck plagiarism
+    photo_hash_distance_threshold: int = 4          # duplicate-photo Hamming distance
+
+    # Percentile normalization needs a population large enough to be meaningful; below
+    # it, `percentile_normalize` returns a neutral midpoint instead of a false signal.
+    # This existed as three literals (30/30/10) across two modules, with a comment
+    # asking humans to keep them in sync.
+    min_population_for_percentile: int = 30
+    min_population_for_assessment_percentile: int = 10
+
+    # --- Agent bounds (cost, latency and loop-termination controls) ---
+    # Follow-ups per interview topic. Total interview turns is bounded by
+    # 2 x len(topic_plan), so this is one of the two numbers deciding worst-case cost.
+    max_followups_per_topic: int = 1
+    # Generate -> fact-check -> regenerate attempts in the resume/cover-letter graph.
+    document_generation_max_attempts: int = 2
+    # How many candidates survive retrieval to reach the expensive judgment-tier rerank.
+    recruitment_shortlist_limit: int = 50
+    # Interview history sent verbatim before older turns are collapsed to a summary.
+    interview_max_verbatim_turns: int = 6
+    interview_max_turn_chars: int = 1200
+    # Ceiling on a caller-supplied interview topic plan. Without it, a large plan yields
+    # an arbitrarily long interview at two judgment-tier LLM calls per turn.
+    interview_max_topics: int = 12
+    # Repositories crawled per candidate during ingestion (bounded for the <30s NFR).
+    github_max_repos: int = 15
+    # Concurrent outbound work in fan-out nodes — protects third-party rate limits.
+    agent_max_concurrency: int = 5
+
+    # --- Outbound HTTP timeouts (seconds) ---
+    # Five different values were scattered across the agents and routers with no stated
+    # policy. Grouped here so the differences are visible and intentional.
+    github_http_timeout_seconds: float = 15.0
+    leetcode_http_timeout_seconds: float = 15.0
+    issuer_lookup_timeout_seconds: float = 6.0
+    photo_fetch_timeout_seconds: float = 8.0
+    oauth_exchange_timeout_seconds: float = 10.0
+    qdrant_timeout_seconds: float = 5.0
+    libreoffice_timeout_seconds: int = 60
+
+    # --- Router TTLs, cooldowns and page caps ---
+    career_recommendation_ttl_hours: int = 24
+    github_oauth_state_ttl_seconds: int = 600
+    stats_refresh_cooldown_minutes: int = 15
+    max_dashboard_projects: int = 50
+    max_score_history: int = 30
+    candidate_pool_cache_ttl_seconds: int = 30
+    max_candidate_pool: int = 5000
+    event_poll_interval_seconds: float = 30.0
+
+    # Salary prediction. `salary_currency` was hardcoded "USD" on every prediction even
+    # though the underlying model is trained on a global survey.
+    salary_currency: str = "USD"
+    salary_talent_score_max_adjustment: float = 0.15
+    salary_talent_score_baseline: float = 50.0
 
     # FR-4.4 salary regression — see tools/train_salary_model.py for how this artifact
     # gets produced (offline, from a downloaded Stack Overflow Developer Survey CSV).
