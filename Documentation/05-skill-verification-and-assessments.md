@@ -32,7 +32,7 @@ Candidate receives coding problem (signature + tests provided)
 **Key Code**:
 - Submission: `POST /assessments/{id}/submit` in router
 - Grading: `services/agents/assessment/tools/static_analysis.py` (radon, lizard)
-- LLM review: `services/agents/assessment/tools/llm_code_review.py` (judgment-tier)
+- LLM review: `services/agents/assessment/nodes/llm_code_review.py` (judgment-tier)
 - Storage: `Submission` model (code_or_answers, static_analysis, llm_review, score)
 
 ## How Project Analysis works
@@ -61,8 +61,8 @@ Candidate submits GitHub repo link
 
 **Key Code**:
 - Static analysis: `services/agents/assessment/tools/static_analysis.py`
-- Plagiarism: `services/agents/assessment/tools/structural_similarity.py` (copydetect)
-- LLM review: `services/agents/assessment/tools/llm_code_review.py`
+- Plagiarism: `services/agents/fraud/tools/structural_similarity.py` (copydetect)
+- LLM review: `services/agents/assessment/nodes/llm_code_review.py`
 
 ## How Team Contribution Analytics works
 
@@ -86,9 +86,9 @@ Hackathon team submits GitHub repo
 ```
 
 **Key Code**:
-- Commit parsing: `services/agents/assessment/tools/commit_attribution.py`
+- Commit parsing: `services/agents/assessment/nodes/commit_attribution.py`
 - Weighting: `services/agents/assessment/tools/contribution_weighting.py`
-- Report generation: `services/agents/assessment/tools/contribution_report.py`
+- Report generation: `services/agents/assessment/nodes/contribution_report.py`
 
 ## Key design decisions
 
@@ -125,11 +125,11 @@ Hackathon team submits GitHub repo
 |---|---|
 | Coding assessment submission | `services/api/modules/assessments/router.py` |
 | Static analysis (radon, lizard) | `services/agents/assessment/tools/static_analysis.py` |
-| LLM code review | `services/agents/assessment/tools/llm_code_review.py` |
-| Plagiarism (copydetect) | `services/agents/assessment/tools/structural_similarity.py` |
-| Commit attribution | `services/agents/assessment/tools/commit_attribution.py` |
+| LLM code review | `services/agents/assessment/nodes/llm_code_review.py` |
+| Plagiarism (copydetect) | `services/agents/fraud/tools/structural_similarity.py` |
+| Commit attribution | `services/agents/assessment/nodes/commit_attribution.py` |
 | Contribution weighting | `services/agents/assessment/tools/contribution_weighting.py` |
-| Contribution report | `services/agents/assessment/tools/contribution_report.py` |
+| Contribution report | `services/agents/assessment/nodes/contribution_report.py` |
 | Frontend: Assessments | `apps/web/src/app/(candidate)/assessments/page.tsx` |
 | DB: Submission model | `packages/db/models/assessment.py::Submission` |
 | DB: Contribution report | `packages/db/models/assessment.py::ContributionReport` |

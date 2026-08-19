@@ -181,7 +181,7 @@ Start Interview Session
 | Component | File |
 |---|---|
 | Supervisor graph | `services/agents/supervisor/graph.py` |
-| Supervisor routing | `services/agents/supervisor/nodes/intent_classifier.py` |
+| Supervisor routing | `services/agents/supervisor/nodes/classify_intent.py` |
 | Interview graph | `services/agents/assessment/interview_graph.py` |
 | Interview definition / report graphs | `services/agents/assessment/interview_definition_graph.py`, `interview_report_graph.py` |
 | Fraud cert graph | `services/agents/fraud/cert_graph.py` |

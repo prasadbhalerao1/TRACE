@@ -25,27 +25,43 @@ the code that calls it.
 Each agent module owns its own `prompts/` directory:
 
 ```
-services/agents/
-├── recruitment/prompts/
-│   ├── understand_query.md
-│   ├── rerank_candidates.md
-│   └── explain_matches.md
-├── candidate_intelligence/prompts/
-│   ├── resume_extraction.md
-│   ├── judgment_scores.md
-│   └── fact_check.md
+services/agents/                          24 prompts, one per LLM operation
 ├── assessment/prompts/
-│   ├── generate_question.md
 │   ├── evaluate_turn.md
+│   ├── generate_definition_questions.md
 │   ├── generate_followup.md
-│   └── interview_report.md
+│   ├── generate_question.md
+│   ├── grading_rationale.md
+│   ├── interview_report.md
+│   └── llm_code_review.md
+├── candidate_intelligence/prompts/
+│   ├── career_roadmap.md
+│   ├── cover_letter.md
+│   ├── fact_check.md
+│   ├── judgment_scores.md
+│   ├── resume_content.md
+│   └── resume_extraction.md
 ├── fraud/prompts/
+│   ├── dispute_review.md
 │   └── risk_report.md
-├── supervisor/prompts/
-│   └── classifier.md
+├── hackathon/prompts/
+│   └── normalize_submission.md
 ├── ppt_analyzer/prompts/
-└── hackathon/prompts/
+│   ├── deck_summary.md
+│   ├── innovation_business.md
+│   ├── problem_solution.md
+│   └── technical_feasibility.md
+├── recruitment/prompts/
+│   ├── explain_matches.md
+│   ├── rerank_candidates.md
+│   └── understand_query.md
+└── supervisor/prompts/
+    └── classifier.md
 ```
+
+Every LLM call site has a prompt file. Eleven of these were previously inline Python
+strings — including all four `ppt_analyzer` rubric scorers, whose output is persisted and
+shown to hackathon organizers.
 
 A prompt lives at `services/agents/{module}/prompts/{prompt_name}.md`. There's no shared
 top-level prompt directory — each module's prompts live next to the code that uses them,
@@ -116,6 +132,45 @@ Notes on the mechanics:
 > substitution, heading retention, and the missing-variable error live in
 > `services/agents/tests/test_prompts_loader.py`.
 
+## The prompt authoring standard
+
+The file convention says where a prompt lives; this says what goes in it. Every one of the
+24 files follows the same structure, and `services/api/tests/test_prompt_standard.py`
+enforces it — a new prompt missing a section fails the suite rather than shipping.
+
+```
+<role>           who the agent is, what it decides, and what depends on the output
+<context>        the inputs and what each one means
+<instructions>   numbered decision procedure
+<tool_rules>     when tools may and must not be used (where applicable)
+<output_format>  exact schema, field semantics, and the scale ("0-100", not "a score")
+<guardrails>     never-do list, each item WITH its reason
+<edge_cases>     empty / missing / contradictory input, low confidence → what to emit
+<examples>       4+ tagged examples: typical, edge case, adversarial, malformed input
+<input>          the interpolated {variables}
+```
+
+Three things this structure is deliberately doing:
+
+**Guardrails state the reason, not just the rule.** "Never invent a citation" generalizes
+poorly; "never invent a citation, because a fabricated citation in a fraud flag is a made-up
+basis for an accusation against a real person" generalizes to cases the rule did not
+anticipate. Models follow reasons further than they follow prohibitions.
+
+**Examples cover failure, not just success.** Nine of the thirteen pre-existing prompts had
+zero examples. The ones that matter most are the adversarial and malformed-input cases,
+because that is exactly where an unguided model invents something plausible.
+
+**Every prompt states the honest-failure rule explicitly.** The repo's core convention is
+*never fabricate* — emit `null` plus a rationale rather than a confident guess. A scoring
+prompt must also name its scale: a model answering `8.5` on an implied 0–10 scale, persisted
+into a 0–100 column, is the exact bug `validated_score()` now backstops.
+
+A description is not a constraint. `fraud/prompts/risk_report.md` told the model that
+`cited_evidence` "must never be invented" — and the code now *enforces* that by intersecting
+the model's citations with the supplied evidence. Where a rule matters, it belongs in code
+as well as in prose.
+
 ## Adding a new prompt
 
 1. Create `services/agents/{agent_name}/prompts/{prompt_name}.md` with the prompt text and
@@ -131,13 +186,13 @@ Notes on the mechanics:
 
 ## What this replaced
 
-An earlier iteration of the codebase used a mix of inline prompt strings and Jinja2
-templates under `packages/prompts/templates/`, with a `packages/prompts/registry.py` that
-tracked which template belonged to which use case. That layer is no longer used —
-`packages/prompts_loader.py`'s file-path convention (module name + prompt name) does the
-same job without a separate registry to keep in sync, and every prompt-consuming module
-listed above (`copilot_llm.py`, `resume.py`, `judgment_scores.py`, `fact_check.py`,
-`interview_llm.py`, `report_llm.py`, `classifier_llm.py`) calls `load_prompt` uniformly.
+An earlier iteration used a mix of inline prompt strings and Jinja2 templates under
+`packages/prompts/templates/`, with a `packages/prompts/registry.py` mapping templates to
+use cases. **That package has been deleted.** It had zero importers and imported `jinja2`,
+which was not a declared dependency — a second, dead prompt system shadowing the real one.
+`services/agents/prompts_loader.py`'s file-path convention (module name + prompt name) does
+the same job with no registry to keep in sync, and every prompt-consuming module calls
+`load_prompt` uniformly.
 
 ## Where this lives
 

@@ -58,7 +58,7 @@ Recruiter Query: "Python engineers in SF with 5+ years, Talent Score 70+"
 ```
 
 **Key Code**:
-- Copilot graph: `services/agents/recruitment/graph.py::copilot_graph()`
+- Copilot graph: `services/agents/recruitment/matching_graph.py::copilot_graph()`
 - Nodes: query_understanding, hybrid_search, reranking, explanation
 - API: `POST /copilot/query` (natural language → ranked candidates)
 
@@ -99,7 +99,7 @@ Recruiter Query: "Python engineers in SF with 5+ years, Talent Score 70+"
 | Skill embeddings | `services/agents/recruitment/tools/embeddings.py` |
 | Skill descriptions | `services/agents/recruitment/tools/skill_descriptions.py` |
 | Matching graph | `services/agents/recruitment/nodes/hybrid_search.py` |
-| Copilot graph | `services/agents/recruitment/graph.py` |
+| Copilot graph | `services/agents/recruitment/matching_graph.py` |
 | API: Matching | `services/api/modules/recruitment/router.py:POST /jobs/{id}/matches` |
 | API: Copilot | `services/api/modules/recruitment/router.py:POST /copilot/query` |
 | Frontend: Matches | `apps/web/src/app/(recruiter)/jobs/[id]/matches/page.tsx` |

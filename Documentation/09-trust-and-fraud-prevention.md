@@ -101,7 +101,7 @@ This is the part of the module that was just rebuilt this session, replacing a h
 
 **Why a hardcoded dict was a real problem, not just an aesthetic one.** Every new legitimate issuer — a university, a smaller bootcamp, an employer-issued credential — required a code change and a deploy to add. That's not just an inconvenience; it silently strengthened the platform's *false-positive* rate over time, since every issuer a hackathon judge's own resume might legitimately cite that wasn't in the dict fell through to Visual Forensics with no way for anyone (other than an engineer touching the source file) to fix it. A registry that a non-technical admin can edit is the difference between a system that adapts to reality and one that only tracks what its last code freeze happened to include.
 
-**The table** (`packages/db/models/fraud.py::TrustedIssuer`): `name` (unique), `aliases` (JSONB list), `verification_url_template` (nullable — an issuer can be trusted/known without an automated verification path, e.g. no public credential-lookup page exists), `trust_tier` (`platform`/`university`/`employer`/`community`, DB-constrained), `notes`, and `added_by_user_id` for accountability. The `l7m8n9o0p1q2` migration seeds it with the same 6 issuers the old dict had (Coursera, freeCodeCamp, AWS, Credly, Udemy, HackerRank), so nothing regressed on deploy — existing recognized issuers stayed recognized.
+**The table** (`packages/db/models/fraud.py::TrustedIssuer`): `name` (unique), `aliases` (JSONB list), `verification_url_template` (nullable — an issuer can be trusted/known without an automated verification path, e.g. no public credential-lookup page exists), `trust_tier` (`platform`/`university`/`employer`/`community`, DB-constrained), `notes`, and `added_by_user_id` for accountability. The baseline migration creates it and `scripts/seed_db.py` seeds it with the same 6 issuers the old dict had (Coursera, freeCodeCamp, AWS, Credly, Udemy, HackerRank), so nothing regressed on deploy — existing recognized issuers stayed recognized.
 
 **Matching logic** (`resolve_issuer` in `tools/issuer_lookup.py`): case-insensitive substring matching, checked against both the canonical `name` and every alias — a candidate entering "Amazon Web Services (AWS)" still matches the "AWS" registry row because the alias "aws" is checked as a substring in both directions (`name in key or key in name`). This preserves the old dict's matching flexibility exactly; the registry swap changed *where* the data lives, not the matching semantics candidates already experienced.
 
@@ -219,7 +219,8 @@ core design principle above.
 | Fraud Risk Report (LLM narrative) | `services/agents/fraud/tools/report_llm.py` |
 | Dispute Review Agent (assistive only) | `services/agents/fraud/tools/dispute_review_llm.py` |
 | DB models (VerificationRecord, FraudFlag, AuthenticityScore, TrustedIssuer, Dispute) | `packages/db/models/fraud.py` |
-| Trusted issuer registry migration + seed data | `packages/db/migrations/versions/l7m8n9o0p1q2_trusted_issuers_registry.py` |
+| Trusted issuer registry table | `packages/db/migrations/versions/e8c387ea8123_baseline_schema.py` (squashed baseline) |
+| Trusted issuer seed data | `scripts/seed_db.py` |
 | API router (all endpoints) | `services/api/modules/fraud/router.py` |
 | Admin fraud review queue UI | `apps/web/src/app/(admin)/fraud-review/page.tsx` |
 | Admin flag audit/resolution UI | `apps/web/src/app/(admin)/fraud-review/[flagId]/page.tsx` |

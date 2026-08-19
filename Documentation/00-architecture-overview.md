@@ -93,7 +93,6 @@ services/api/          FastAPI backend — core/, modules/ (routers), integratio
 services/agents/       LangGraph agent modules (7 domains, 12 graphs total)
 services/workers/      Background task definitions; no real distributed queue consumer
 packages/db/           Shared SQLAlchemy models/ + Alembic migrations/
-packages/prompts/       Legacy prompt registry, superseded by services/agents/prompts_loader.py
 packages/shared_schemas/ Shared Pydantic schemas between api/ and agents/
 infra/                  docker-compose.yml (local-dev-only)
 scripts/                dev-up.ps1, seed_db.py, seed_candidates_hardcoded.py — dev/seed helpers

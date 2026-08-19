@@ -23,7 +23,8 @@ Team uploads PowerPoint/PDF
     │   │
     │   ├─ Solution Innovation (0-100)
     │   │   "How novel is the approach?"
-    │   │   (Uses Qdrant to check novelty vs past hackathon pitches)
+    │   │   (Scored from the deck alone — see "Innovation is scored
+    │   │    without the novelty signal" below)
     │   │
     │   ├─ Business Viability (0-100)
     │   │   "Is this a real business problem?"
@@ -32,9 +33,11 @@ Team uploads PowerPoint/PDF
     │       "Can it actually be built in a weekend?"
     │
     ├─→ Plagiarism Check
-    │   - Structural similarity: MinHash fingerprint vs Qdrant corpus
-    │   - Semantic similarity: slide embeddings vs existing pitches
-    │   └─ Flag if similarity > threshold (0.85)
+    │   - Semantic similarity: slide embeddings vs prior submissions
+    │   - One batched query_batch_points() call for the whole deck
+    │   - Flag if cosine similarity >= DECK_PLAGIARISM_SIMILARITY_THRESHOLD (0.90)
+    │   └─ On failure: raises, recorded as plagiarism_checked=false
+    │      (NOT reported as "no matches" — see below)
     │
     ├─→ AI-Content Detection (heuristics)
     │   - Perplexity score: low perplexity = AI-generated
@@ -67,7 +70,32 @@ Team uploads PowerPoint/PDF
    - After 50+ submissions: corpus becomes useful
    - Acknowledged limitation, not a bug
 
-4. **AI-content is heuristic, not auto-flagging**:
+4. **A failed plagiarism check is not a pass**:
+   - `find_and_record_matches()` raises `PlagiarismCheckUnavailable` rather than returning
+     an empty list, and the node records `plagiarism_checked=false` on the score row.
+   - Why this needed fixing: an empty match list renders to the reader as *"No similarity
+     matches found against prior submissions"* — an affirmative all-clear. The old
+     `except Exception: return []` made "checked, clean" and "check exploded" the same
+     value. That is not hypothetical: a Qdrant client method removed in 1.18 raised
+     `AttributeError` inside that swallow, and **every deck was reported clean**.
+   - The analysis still completes when the check fails — the four rubric scores are
+     independent and worth showing — but the UI says the deck could not be compared
+     instead of claiming it passed.
+
+5. **Innovation is scored without the novelty signal**:
+   - The innovation scorer used to read `state["plagiarism_matches"]` to build a "N slides
+     matched prior submissions" hint for the LLM, with a comment noting the data "may not
+     have landed in this superstep yet".
+   - It never had. `similarity_plagiarism` sits a full superstep further down a parallel
+     branch (`content_extraction → slide_embedding → similarity_plagiarism`), while the
+     innovation node runs immediately after `content_extraction`. The hint was always
+     `None`.
+   - Worse than dead code: had the scheduling ever changed, the same deck would score
+     differently run to run — nondeterminism in a number persisted against a real
+     submission. The read is gone; plagiarism matches are surfaced to the reader directly
+     rather than silently discounted inside a score they cannot inspect.
+
+6. **AI-content is heuristic, not auto-flagging**:
    - Signal recorded (via verification_records), never auto-rejects
    - Human reviewer judges whether high perplexity score = suspicious or just formal writing
    - Similar to fraud engine: evidence → human review
@@ -75,7 +103,8 @@ Team uploads PowerPoint/PDF
 ## Limitations
 
 - LibreOffice dependency for legacy .ppt (not all .ppt types fully supported)
-- Rubric is hardcoded (should be per-hackathon configurable)
+- Rubric weights are equal (0.25 each) and not yet per-hackathon configurable; the
+  similarity threshold and LLM token/timeout budgets *are* now env-tunable
 - Plagiarism corpus is within-platform only (not checked against internet)
 - AI-content detection is statistical, not forensic (imperfect)
 
@@ -95,3 +124,6 @@ Team uploads PowerPoint/PDF
 | Frontend: Results | `apps/web/src/app/pitch-deck/[id]/page.tsx` |
 | DB: Presentation model | `packages/db/models/presentation.py::Presentation` |
 | DB: Score model | `packages/db/models/presentation.py::PresentationScore` |
+| Migration: `plagiarism_checked` | `packages/db/migrations/versions/c7e2a4f81b30_plagiarism_checked.py` |
+| Tests: graph ordering | `services/api/tests/test_ppt_graph_ordering.py` |
+| Tests: plagiarism disclosure | `services/api/tests/test_plagiarism_failure_disclosure.py` |

@@ -104,6 +104,61 @@ Why separate? Budget constraints + UX.
     - Judgment-tier is 3-5x slower; reserve for decisions
 ```
 
+## LLM reliability: typed errors, retry, timeouts, validation
+
+The gateway originally collapsed every failure into a single `LLMUnavailable` with no
+retry, no timeout and no validation of what came back. Callers therefore could not tell a
+missing API key from an exhausted billing balance from "slow down", and the client retried
+all of them identically — including the two that can never succeed by waiting.
+
+**Typed error taxonomy.** All subclass `LLMUnavailable`, so pre-existing
+`except LLMUnavailable` handlers keep working unchanged:
+
+| Exception | Retryable | Meaning |
+|---|---|---|
+| `LLMNotConfigured` | no | Missing/invalid API key — a deployment problem, not a transient one |
+| `LLMQuotaExhausted` | **no** | Billing/credit exhausted. Retrying spends time on a guaranteed failure |
+| `LLMRateLimited` | yes | Provider 429; carries `retry_after` when the provider supplies one |
+| `LLMTimeout` | yes | Call exceeded `LLM_TIMEOUT_SECONDS` |
+| `LLMOverloaded` | yes | Provider 503/529 |
+| `LLMInvalidOutput` | yes | Response failed schema validation |
+
+`_classify_provider_error()` maps each provider's SDK exceptions onto these in one place.
+Quota markers (`insufficient_quota`, `exceeded your current quota`, `billing`,
+`credit balance`) are checked **first**, because quota exhaustion arrives as a 429 that is
+otherwise indistinguishable from an ordinary rate limit — and the two need opposite
+handling.
+
+**Retry.** `_call_with_retry()` wraps both `generate_completion` and
+`generate_structured`: exponential backoff with jitter, bounded by `LLM_MAX_RETRIES`,
+honouring the provider's `Retry-After`. Only retryable classes are retried.
+
+**Output validation** — the highest-impact fix. `float(result["score"])` was written
+straight to DB columns at six sites, so a model answering `8.5` on a 0–100 scale persisted
+as 8.5/100 and fed recruiter matching, salary prediction and hackathon rankings.
+
+- `validated_score(raw)` clamps to `[0,100]` and returns `None` for null/bool/non-numeric/
+  NaN/inf rather than raising out of a graph node.
+- `validate_structured(result, parameters)` checks required keys and JSON types before the
+  result is returned, raising `LLMInvalidOutput` (which triggers one retry).
+
+**How this surfaces to the user.** `_LLM_ERROR_RESPONSES` in `services/api/main.py` maps
+each type to a status, a stable `code`, and an explicit `retryable` flag:
+
+| Exception | HTTP | `code` | `retryable` |
+|---|---|---|---|
+| `LLMQuotaExhausted` | 402 | `LLM_QUOTA_EXHAUSTED` | false |
+| `LLMRateLimited` | 429 | `LLM_RATE_LIMITED` | true |
+| `LLMNotConfigured` | 503 | `LLM_NOT_CONFIGURED` | false |
+| `LLMTimeout` | 504 | `LLM_TIMEOUT` | true |
+| `LLMInvalidOutput`, `LLMUnavailable` | 503 | `LLM_UNAVAILABLE` | true |
+
+The handler walks `type(exc).__mro__`, so a future subclass inherits its parent's treatment
+rather than falling through to a generic 500. On the frontend, `apps/web/src/lib/errors.ts`
+reads `code` and `retryable` and refuses to auto-retry the two that cannot succeed — a
+user staring at a spinner during four backoff attempts against a billing failure learns
+nothing, while the admin who could actually fix it is never told.
+
 ## The shared scoring aggregation helper
 
 ```
@@ -203,14 +258,22 @@ when it's in the request path of a recruiter loading a matches page.
    - All embeddings use same model (reproducible)
 
 3. **Skill descriptions are hand-maintained, not auto-generated**:
-   - ~40 curated skills with descriptions
+   - ~45 curated skills with descriptions
    - New skills fall back to bare name (degrades gracefully)
    - Not generated via LLM (consistency + cost)
+   - Now stored in the `skill_descriptions` table rather than a Python dict, so curating
+     them is an operational action instead of a code change + redeploy. Seeded by
+     `scripts/seed_db.py`; falls back to the built-in seed data (with a warning) when the
+     DB is unreachable, so agents still run on a cold start.
 
 4. **Weights are config but validated**:
-   - Hackathon weights now configurable via `scoring_config`
-   - But if invalid (don't sum to 1.0), they're silently fixed
-   - Conservative: better to wrong-normalize than crash
+   - Hackathon weights configurable via `scoring_config` (organizer-editable JSONB)
+   - Malformed input (partial keys, unknown keys, negative, non-numeric, all-zero) falls
+     back to defaults and renormalizes rather than raising. A partial config previously
+     raised `KeyError` inside `compute_composite_score`, which failed finalization for the
+     *entire event* — every team, not just the affected component.
+   - The `breakdown` returned alongside the score reports whether renormalization occurred,
+     so the adjustment is inspectable rather than silent.
 
 ## Limitations
 
@@ -226,8 +289,10 @@ when it's in the request path of a recruiter loading a matches page.
 | Qdrant client helper | `services/api/core/qdrant.py` |
 | LLM gateway | `services/api/core/llm.py` |
 | Embedding model loader | `services/agents/recruitment/tools/embeddings.py::get_embedder()` |
-| Skill descriptions | `services/agents/recruitment/tools/skill_descriptions.py` |
+| Skill descriptions | `skill_descriptions` table, read via `services/agents/catalogs.py` |
 | Shared scoring helper | `services/agents/common/scoring.py` |
-| Role taxonomy | `services/agents/candidate_intelligence/tools/role_taxonomy.py` |
+| Role taxonomy | `role_skill_requirements` table, read via `services/agents/catalogs.py` |
+| LLM error taxonomy | `services/api/core/llm.py` (raised), `services/api/main.py::_LLM_ERROR_RESPONSES` (mapped to HTTP) |
+| Frontend error classification | `apps/web/src/lib/errors.ts` |
 | Config: LLM provider | `services/api/core/config.py::LLM_PROVIDER, LLM_MODEL_*` |
 | Config: Qdrant endpoint | `services/api/core/config.py::QDRANT_URL` |

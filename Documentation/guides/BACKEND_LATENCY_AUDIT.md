@@ -224,12 +224,15 @@ Sequential `structural_similarity → public_repo_crosscheck → plagiarism_verd
 
 Per-slide sequential `client.search()` calls to Qdrant instead of `search_batch` — the exact batching fix already applied elsewhere in this codebase (`recruitment/tools/embeddings.py:batch_candidate_project_relevance`). Individually fast, but N serial round trips add up for large decks.
 
+> **Fixed.** `plagiarism.py` now issues one `query_batch_points()` call for the whole deck. Note the method name: `search_batch` was removed in qdrant-client 1.18, and calling it raised `AttributeError` inside a blanket `except Exception: return []` — so plagiarism checking reported "no matches" for **every** deck rather than surfacing the breakage. Both halves are fixed: the call, and the swallow that hid it (see doc 07).
+
 ---
 
 ## Verified NOT bugs (ruled out)
 
 - `candidate_intelligence/graph.py`, `ppt_analyzer/graph.py`, `assessment/verification_graph.py`, `recruitment/matching_graph.py` all correctly fan out independent nodes.
-- `services/api/core/llm.py` has **no retry/backoff decorator** — single-attempt, fails fast (`LLMUnavailable`). No retry-amplification risk in the shared gateway.
+- ~~`services/api/core/llm.py` has **no retry/backoff decorator** — single-attempt, fails fast (`LLMUnavailable`). No retry-amplification risk in the shared gateway.~~
+  **Superseded 2026-08-19.** This was accurate when audited and is no longer true. The gateway now retries via `_call_with_retry()`: exponential backoff with jitter, bounded by `LLM_MAX_RETRIES` (default 2), and *only* for error classes that can actually succeed on a second attempt. `LLMQuotaExhausted` and `LLMNotConfigured` are explicitly never retried, so the retry-amplification concern noted here does not apply to the two failure modes where amplification would be pure waste. Calls are also bounded by `LLM_TIMEOUT_SECONDS` (default 60), which the single-attempt version lacked entirely — an unbounded call could hold a request open indefinitely. See doc 11 for the full taxonomy.
 - `recruitment/copilot_graph.py`, `assessment/interview_graph.py`, `hackathon/graph.py`, `fraud/duplicate_graph.py`, `fraud/cert_graph.py` are inherently sequential (genuine data dependencies or well-justified low-cost tradeoffs) — not bugs.
 - `get_llm_client()`'s per-call SDK client rebuild (known, lower-severity finding) does **not** cover the two hand-rolled `anthropic.Anthropic()` sites above (`ocr.py`, `visual_forensics.py`) — those bypass the gateway entirely and need their own fix.
 - DB indexes on hot paths (candidates, jobs, match_scores) were checked separately and found adequate — this is not primarily a database bottleneck.

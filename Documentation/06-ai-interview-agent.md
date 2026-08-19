@@ -40,7 +40,9 @@ Start Interview Session
 **Key Code**:
 - Graph: `services/agents/assessment/interview_graph.py`
 - Turn evaluation: `services/agents/assessment/nodes/turn_evaluation.py`
-- Topic planning: `services/agents/assessment/nodes/topic_planning.py`
+- Topic plan: built by the router (`_default_topic_plan`, or derived from an interview
+  template's questions), not a graph node — the graph receives it in state. Capped at
+  `INTERVIEW_MAX_TOPICS`, since worst-case interview length is `2 x len(topic_plan)` turns
 - Report generation: `services/agents/assessment/nodes/interview_report.py`
 - API: `POST /interviews/sessions/{id}/turn` (candidate answers → LLM evaluates → next question)
 
@@ -97,7 +99,7 @@ Option B: Turn-based routing (chosen)
 |---|---|
 | Interview graph | `services/agents/assessment/interview_graph.py` |
 | Turn evaluation | `services/agents/assessment/nodes/turn_evaluation.py` |
-| Topic planning | `services/agents/assessment/nodes/topic_planning.py` |
+| Topic plan construction | `services/api/modules/assessments/router.py::_default_topic_plan` |
 | Report generation | `services/agents/assessment/nodes/interview_report.py` |
 | API: Submit turn | `services/api/modules/assessments/router.py:POST /interviews/{id}/turn` |
 | API: Get report | `services/api/modules/assessments/router.py:GET /interviews/{id}/report` |

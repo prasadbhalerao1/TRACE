@@ -1690,7 +1690,12 @@ There is no statistical validation of the scoring weights against hiring outcome
 | PostgreSQL | Request fails with 500 | Total — the one hard dependency |
 | Redis | Queue falls back to in-process; rate limiter to in-memory | Degraded: no durability, per-process limits |
 | Qdrant | `QdrantUnavailable` raised | Semantic search and skill gap unavailable; exact matching still works |
-| LLM provider | `LLMUnavailable` → HTTP 503 with `LLM_UNAVAILABLE` | AI features unavailable; mechanical scores unaffected |
+| LLM provider (generic) | `LLMUnavailable` → HTTP 503 `LLM_UNAVAILABLE`, `retryable: true` | AI features unavailable; mechanical scores unaffected |
+| LLM quota exhausted | `LLMQuotaExhausted` → HTTP 402 `LLM_QUOTA_EXHAUSTED`, `retryable: false` | Client does **not** retry — waiting cannot fix a billing failure; message names the admin action |
+| LLM rate limited | `LLMRateLimited` → HTTP 429, `retryable: true` | Retried with backoff honouring `Retry-After` |
+| LLM not configured | `LLMNotConfigured` → HTTP 503 `LLM_NOT_CONFIGURED`, `retryable: false` | Missing API key; not retried |
+| LLM timeout | `LLMTimeout` → HTTP 504, `retryable: true` | Bounded by `LLM_TIMEOUT_SECONDS` |
+| LLM malformed output | `LLMInvalidOutput` → HTTP 503, `retryable: true` | Schema validation failed; retried once |
 | Cloudinary | `StorageUnavailable` → 503 | Uploads and PDF export unavailable |
 | GitHub API | Retried if transient | Ingestion retries, then records the error |
 | Tesseract | Typed error | Certificate OCR unavailable |
@@ -1741,6 +1746,14 @@ Missing signals renormalize instead of zero-filling. Every score is clamped to $
 ---
 
 # 9. Multi-Platform Deployment & DevOps Pipeline
+
+> **Scope note.** This section is a deployment *design*, not a description of files in the
+> repository. The configs shown below — `apps/web/vercel.json`,
+> `infra/docker-compose.prod.yml`, `infra/nginx.conf`, `apps/web/next.config.mobile.ts`,
+> `apps/web/capacitor.config.ts`, and the Android manifest — are proposed content, not
+> committed files. What *is* committed today is `infra/docker-compose.yml` (local
+> development only). Treat the following as the intended production topology and a
+> ready-to-use starting point, not as a description of current state.
 
 Three deployment targets. The frontend is a Next.js app deployable to any Node host; the backend and worker are containerized; the mobile target wraps the web build with Capacitor.
 
@@ -2465,7 +2478,7 @@ The register is ordered by severity. Each entry names the failure, its mechanism
 
 **Mechanism.** A prompt loader that returns raw template text without substituting variables sends the model literal `{{ candidate_skills }}` placeholders. The model answers around them, producing output that is generic but entirely coherent — so it reads as an LLM quality problem, not a bug, and can survive a long time undetected.
 
-**Mitigation.** `packages/prompts/registry.py` renders through Jinja2 with strict undefined behaviour, so a missing variable raises rather than passing through. A dedicated test asserts that rendered output contains no residual delimiters.
+**Mitigation.** `services/agents/prompts_loader.py` interpolates `{variable}` placeholders and raises `ValueError` naming the prompt and every missing key, so a missing variable fails loudly rather than shipping a literal `{merged_profile_json}` to a paid LLM call. (The Jinja2 registry this originally described was deleted — it had no importers and pulled in an undeclared dependency.) `services/agents/tests/test_prompts_loader.py` asserts substitution, heading retention, and the missing-variable error.
 
 **Principle.** A bug that quietly degrades output without ever raising is far harder to find than one that crashes. It needs a test written specifically for it, because nothing else will catch it.
 

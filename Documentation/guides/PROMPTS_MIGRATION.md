@@ -1,5 +1,16 @@
 # Prompts Migration Summary
 
+> **Historical record — completed 2026-08. Superseded by
+> [14-prompts-architecture.md](../14-prompts-architecture.md).**
+>
+> This documents a one-time migration off Jinja2 templates. Every `packages/prompts/*`
+> path named below is gone: that package was deleted outright in the 2026-08-19 audit
+> (zero importers, and it imported an undeclared `jinja2` dependency). The prompt count
+> here is also out of date — there are now 24 prompt files, one per LLM call site, all
+> conforming to the authoring standard described in doc 14. Kept for the "why" behind the
+> move; read doc 14 for how prompts work today.
+
+
 ## Overview
 All prompts have been migrated from inline definitions and Jinja2 templates to a centralized markdown-based system. This makes prompts:
 - **Easy to read and modify** - Plain markdown files
