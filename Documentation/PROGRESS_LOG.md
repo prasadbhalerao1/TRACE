@@ -455,3 +455,70 @@ The suite was only ever passing for callers who happened to have the root on `PY
 Fixed by adding `pythonpath = ["."]` to `[tool.pytest.ini_options]`. A bare
 `uv run pytest -q` now collects and passes 82 tests with no environment setup, which is
 what the verification steps in the plan and this log assume.
+
+## Security & consistency audit (2026-08-18)
+
+Triggered by a cross-agent change set (onboarding revamp, handle enforcement, role
+centralization). Everything below was **confirmed by exploiting it against the running
+API**, then re-tested after the fix — not inferred from reading code.
+
+### 1. Reserved-handle lists had drifted apart (privilege-adjacent)
+
+`RESERVED_USERNAMES` (frontend) held 34 names; `_RESERVED_USERNAMES` (backend) held 28.
+Six were client-only: `home`, `admin`, `recruiter`, `organizer`, `judge`, `settings`.
+
+The client is not a security boundary. `POST /auth/signup` with `username="admin"`
+returned **201**, so a candidate could claim `/admin` as their public portfolio handle —
+`/[username]` is a sibling route of the real ones, so the profile both shadows a route and
+reads as an official page.
+
+Fixed by adding the six to the backend set. Both lists now agree at 34, and
+`services/api/tests/test_reserved_usernames.py` parses `constants.ts` and fails if they
+ever diverge again — in *either* direction, plus a pattern-equality check. The test was
+verified to actually fail by temporarily removing one name.
+
+### 2. Deactivation revoked nothing (authorization)
+
+`is_active` was checked only in the login handler. Tokens live for
+`jwt_expiry_seconds` = **604800s (7 days)** and were never re-checked, so deactivating an
+account left the user with full access until their token expired on its own. Verified:
+flipped `is_active=false` in the database, and `/me` still returned 200.
+
+Fixed in `get_current_user` (`services/api/core/rbac.py`), which every protected route
+resolves through. `GET /me` needed the check repeated because it depends on
+`get_auth_context` directly — a deliberate bypass so it can report `onboarding_required`
+for a user with no profile row. It was the only such bypass in the codebase.
+
+After: `/me` and `/candidates/me` both 403 while deactivated, 200 again once restored.
+
+### 3. `POST /hackathons/{id}/webhook` accepted unauthenticated writes
+
+No auth, no signature, no shared secret. Anyone who knew a hackathon ID could create
+teams; because `_upsert_team` matches on team name, a request could also **overwrite an
+existing team's members**. Verified with a bare `curl` — HTTP 201, row created, then
+removed.
+
+It cannot use `require_role` (the caller is another service, not a user), so it now
+requires an `X-Webhook-Secret` header compared with `secrets.compare_digest` — a
+short-circuiting `!=` would leak the secret a byte at a time. An unset secret **disables**
+the endpoint (503) rather than leaving it open, so no deployment is silently exposed.
+Documented in `.env.example`.
+
+After: no secret → 401, wrong secret → 401, correct secret → 201.
+
+### What was verified as already correct
+
+- Role comes from the **database**, never from JWT claims — a forged or stale token cannot
+  escalate.
+- A candidate token gets 403 on all of `/admin/*`, `/analytics/hiring-funnel`,
+  `/judging/queue`, `/hackathons`, `/interview-definitions/mine`.
+- Self-promotion via `PATCH /candidates/me` with `{"role":"admin"}` is ignored; the role
+  stays `candidate`.
+- Reserved handles are rejected on the **update** path too, not just signup.
+
+### Known gap, not fixed here
+
+Public routes render no `<main>` landmark (only `WorkspaceShell` provides one), so
+`getByRole("main")` finds nothing on `/sign-in`. Screen-reader users get no main-content
+skip target on public pages. Out of scope for this pass; the e2e specs scope by `form`
+instead.
