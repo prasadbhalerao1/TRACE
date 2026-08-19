@@ -37,7 +37,14 @@ interface WorkspaceShellProps {
  * every navigation between route groups blanked the entire chrome and repainted it —
  * the single biggest source of perceived jank in the app. Only `children` is gated
  * now: the nav is static markup that never depended on `me` in the first place, and
- * the role check still runs exactly as before (plus server-side on every request).
+ * the role check still runs exactly as before.
+ *
+ * This gate is UX, not security, and nothing here should be mistaken for a second line
+ * of defence: there is no Next.js middleware, and per `lib/api.ts` the frontend never
+ * guards routes server-side — components call FastAPI directly with a bearer token.
+ * Authorization is enforced solely by `require_role` on the API. (An earlier version of
+ * this comment claimed the check also ran "server-side on every request", which read as
+ * defence-in-depth that does not exist.)
  */
 export function WorkspaceShell({ role, children }: WorkspaceShellProps) {
   const router = useRouter();

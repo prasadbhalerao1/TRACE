@@ -23,6 +23,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { ROLE_METADATA, type Role } from "@/lib/constants";
 
 export interface WorkspaceNavItem {
   href: string;
@@ -39,15 +40,14 @@ export interface WorkspaceNavSection {
   items: WorkspaceNavItem[];
 }
 
-export type WorkspaceRole =
-  "candidate" | "recruiter" | "admin" | "organizer" | "judge";
+export type WorkspaceRole = Role;
 
 export const ROLE_LABELS: Record<WorkspaceRole, string> = {
-  candidate: "Candidate",
-  recruiter: "Recruiter",
-  admin: "Admin",
-  organizer: "Organizer",
-  judge: "Judge",
+  candidate: ROLE_METADATA.candidate.shortLabel,
+  recruiter: ROLE_METADATA.recruiter.shortLabel,
+  admin: ROLE_METADATA.admin.shortLabel,
+  organizer: ROLE_METADATA.organizer.shortLabel,
+  judge: ROLE_METADATA.judge.shortLabel,
 };
 
 /** Sidebar contents per role.

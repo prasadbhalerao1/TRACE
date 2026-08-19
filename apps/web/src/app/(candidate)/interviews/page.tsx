@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Page, PageHeader } from "@/components/common/PageHeader";
 import { SectionError } from "@/components/common/SectionError";
 import { InterviewLobby } from "@/components/interview/InterviewLobby";
@@ -213,14 +214,26 @@ export default function CandidateInterviewsPage() {
             />
           )}
           {loadingDefinitions && !fetchedDefinitions && (
-            // The spinner's ring used `border-slate`, a colour that no longer
-            // exists in the token layer, so it rendered as a transparent circle.
-            <div
-              aria-live="polite"
-              className="flex items-center justify-center gap-2 py-6 text-muted-foreground"
-            >
-              <span className="size-4 animate-spin rounded-full border-2 border-border border-t-primary" />
-              <span className="text-body">Loading open interviews…</span>
+            /* Skeleton rows rather than a centred spinner: this was the last list in
+               the app still using one, and a spinner gives no hint of the shape that
+               is coming, so the layout jumps when data lands. The placeholders mirror
+               the real row below — title, meta line, trailing action — at the same
+               heights, so arrival is a swap rather than a reflow.
+               `aria-busy` + a label carry the same announcement the spinner's
+               aria-live did, so nothing is lost for screen readers. */
+            <div className="space-y-3" aria-busy="true" aria-label="Loading open interviews">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex flex-col justify-between gap-4 rounded-md border bg-card p-4 shadow-flat sm:flex-row sm:items-center"
+                >
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/5" />
+                    <Skeleton className="h-3 w-1/4" />
+                  </div>
+                  <Skeleton className="h-8 w-20 shrink-0" />
+                </div>
+              ))}
             </div>
           )}
           {!loadingDefinitions && openDefinitions?.length === 0 && (

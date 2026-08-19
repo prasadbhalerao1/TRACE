@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 // GitBranch, not Github: lucide-react no longer ships brand icons.
-import { ArrowLeft, ArrowRight, Check, GitBranch, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileText, GitBranch, Loader2, Upload } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -19,11 +19,13 @@ import {
   fetchGithubOAuthUrl,
   fetchMyProfile,
   updateProfile,
+  uploadResume,
   type CandidateProfileResponse,
 } from "@/lib/api";
+import { RESERVED_USERNAMES, USERNAME_PATTERN } from "@/lib/constants";
 
 const STEPS: readonly WizardStep[] = [
-  { id: "identity", title: "Identity", blurb: "How you appear to recruiters." },
+  { id: "identity", title: "Identity", blurb: "How you appear to recruiters and public search." },
   {
     id: "background",
     title: "Background",
@@ -38,6 +40,7 @@ const STEPS: readonly WizardStep[] = [
 
 type Values = {
   fullName: string;
+  username: string;
   headline: string;
   college: string;
   degree: string;
@@ -47,6 +50,7 @@ type Values = {
 
 const EMPTY: Values = {
   fullName: "",
+  username: "",
   headline: "",
   college: "",
   degree: "",
@@ -58,13 +62,14 @@ const EMPTY: Values = {
  * it's required-but-skippable (see the step 3 copy), because a misconfigured or
  * rate-limited OAuth app would otherwise strand the user with no way into the app. */
 const REQUIRED_BY_STEP: readonly (keyof Values)[][] = [
-  ["fullName", "headline"],
+  ["fullName", "username", "headline"],
   ["college", "degree", "location"],
   [],
 ];
 
 const LABELS: Record<keyof Values, string> = {
   fullName: "Full name",
+  username: "Portfolio username",
   headline: "Headline",
   college: "College / University",
   degree: "Degree",
@@ -87,6 +92,7 @@ export function OnboardingWizard() {
   const [profile, setProfile] = useState<CandidateProfileResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resumeUploaded, setResumeUploaded] = useState(false);
   const [notice, setNotice] = useState<string | null>(
     githubParam === "connected"
       ? "GitHub connected — analyzing your repositories in the background."
@@ -124,6 +130,7 @@ export function OnboardingWizard() {
         setProfile(existing);
         setValues({
           fullName,
+          username: existing.username ?? "",
           headline: existing.headline ?? "",
           college: edu.institution ?? "",
           degree: edu.degree ?? "",
@@ -166,10 +173,17 @@ export function OnboardingWizard() {
 
   const saveProfile = useCallback(async () => {
     if (!isCandidate) return;
+    const cleanUsername = values.username.trim().toLowerCase();
+    if (cleanUsername) {
+      if (RESERVED_USERNAMES.has(cleanUsername) || !USERNAME_PATTERN.test(cleanUsername)) {
+        throw new Error("Username must be 3-40 lowercase characters (a-z, 0-9, hyphens).");
+      }
+    }
     const token = await getToken();
     if (!token) throw new Error("No session token");
     const updated = await updateProfile(token, {
       full_name: values.fullName.trim(),
+      username: cleanUsername || undefined,
       headline: values.headline.trim(),
       location: values.location.trim(),
       college: values.college.trim(),
@@ -202,9 +216,12 @@ export function OnboardingWizard() {
       reloadMe();
       router.replace("/home");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not save your profile",
-      );
+      const msg = err instanceof Error ? err.message : "Could not save your profile";
+      if (msg.includes("username_taken")) {
+        setError("That username is already taken. Please choose another portfolio handle.");
+      } else {
+        setError(msg);
+      }
       setBusy(null);
     }
   }, [
@@ -234,9 +251,12 @@ export function OnboardingWizard() {
       setTouched(false);
       setStep((s) => s + 1);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not save your details",
-      );
+      const msg = err instanceof Error ? err.message : "Could not save your details";
+      if (msg.includes("username_taken")) {
+        setError("That username is already taken. Please choose a different portfolio handle.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(null);
     }
@@ -262,6 +282,24 @@ export function OnboardingWizard() {
       setBusy(null);
     }
   }, [getToken, saveProfile]);
+
+  const handleResumeUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy("resume");
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("No session token");
+      await uploadResume(token, file);
+      setResumeUploaded(true);
+      setNotice("Resume uploaded! Ingesting skills and experience in the background.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload resume");
+    } finally {
+      setBusy(null);
+    }
+  }, [getToken]);
 
   if (!isLoaded || !me?.profile) {
     return (
@@ -315,6 +353,23 @@ export function OnboardingWizard() {
                     : null
                 }
               />
+
+              <Field
+                label={LABELS.username}
+                value={values.username}
+                onChange={(v) => set("username", v.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                placeholder="e.g. janedoe"
+                required
+                hint="Your unique handle at trace.dev/yourname"
+                error={
+                  touched && !values.username.trim()
+                    ? "A portfolio username is required."
+                    : touched && !USERNAME_PATTERN.test(values.username.trim())
+                      ? "Use 3-40 lowercase letters, numbers, or hyphens."
+                      : null
+                }
+              />
+
               <Field
                 label={LABELS.headline}
                 value={values.headline}
@@ -403,6 +458,49 @@ export function OnboardingWizard() {
                       "Connect GitHub"
                     )}
                   </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <FileText className="size-4" />
+                    Resume PDF (Optional)
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {resumeUploaded
+                      ? "Resume uploaded — extracting skills and history."
+                      : "Upload a PDF resume to populate experience and skills automatically."}
+                  </p>
+                </div>
+                {resumeUploaded ? (
+                  <span className="flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
+                    <Check className="size-3.5" strokeWidth={3} />
+                    Uploaded
+                  </span>
+                ) : (
+                  <label className="cursor-pointer">
+                    <Button variant="outline" render={<span />} disabled={busy === "resume"}>
+                      {busy === "resume" ? (
+                        <>
+                          <Loader2 className="mr-1.5 size-4 animate-spin" />
+                          Uploading…
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="mr-1.5 size-4" />
+                          Upload PDF
+                        </>
+                      )}
+                    </Button>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      className="sr-only"
+                      onChange={handleResumeUpload}
+                      disabled={busy === "resume"}
+                    />
+                  </label>
                 )}
               </div>
 

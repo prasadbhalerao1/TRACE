@@ -21,15 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Role } from "@/lib/api";
-
-const ROLES: { value: Role; label: string }[] = [
-  { value: "candidate", label: "Candidate" },
-  { value: "recruiter", label: "Recruiter" },
-  { value: "organizer", label: "Hackathon Organizer" },
-  { value: "judge", label: "Judge" },
-  { value: "admin", label: "Admin" },
-];
+import {
+  SIGNUP_ROLE_OPTIONS,
+  RESERVED_USERNAMES,
+  USERNAME_PATTERN,
+  type Role,
+} from "@/lib/constants";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -45,6 +42,19 @@ export default function SignUpPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!role) return;
+
+    if (role === "candidate") {
+      const cleanUsername = username.trim().toLowerCase();
+      if (!cleanUsername) {
+        setError("A portfolio username is required for candidates.");
+        return;
+      }
+      if (RESERVED_USERNAMES.has(cleanUsername) || !USERNAME_PATTERN.test(cleanUsername)) {
+        setError("Username must be 3-40 lowercase characters (a-z, 0-9, hyphens) and not a system reserved name.");
+        return;
+      }
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -54,12 +64,21 @@ export default function SignUpPage() {
         full_name: fullName || undefined,
         role,
         username:
-          role === "candidate" && username.trim() ? username.trim() : undefined,
+          role === "candidate" && username.trim() ? username.trim().toLowerCase() : undefined,
       };
       await signup(input);
       router.replace("/home");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed");
+      const msg = err instanceof Error ? err.message : "Sign up failed";
+      if (msg.includes("username_taken")) {
+        setError("That username is already taken. Please choose a different portfolio handle.");
+      } else if (msg.includes("invalid_username")) {
+        setError("Invalid username. Use 3-40 lowercase letters, numbers, or hyphens.");
+      } else if (msg.includes("email_taken")) {
+        setError("An account with this email already exists.");
+      } else {
+        setError(msg);
+      }
       setSubmitting(false);
     }
   }
@@ -110,6 +129,7 @@ export default function SignUpPage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Your Name"
+                required
               />
             </div>
 
@@ -120,7 +140,7 @@ export default function SignUpPage() {
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
+                  {SIGNUP_ROLE_OPTIONS.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
                       {r.label}
                     </SelectItem>
@@ -132,14 +152,14 @@ export default function SignUpPage() {
             {role === "candidate" && (
               <div className="space-y-2">
                 <Label htmlFor="username">
-                  Username{" "}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    (optional — sets your public URL)
+                  Portfolio Username{" "}
+                  <span className="text-xs font-normal text-destructive">
+                    (required)
                   </span>
                 </Label>
                 <div className="flex items-center rounded-md border border-input bg-background ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
                   <span className="select-none pl-3 text-sm text-muted-foreground">
-                    yourdomain.com/
+                    trace.dev/
                   </span>
                   <Input
                     id="username"
@@ -150,6 +170,7 @@ export default function SignUpPage() {
                       )
                     }
                     placeholder="yourname"
+                    required
                     className="border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 pl-1"
                     autoComplete="off"
                     spellCheck={false}
@@ -162,7 +183,7 @@ export default function SignUpPage() {
             <Button
               type="submit"
               pending={submitting}
-              disabled={!role}
+              disabled={!role || (role === "candidate" && !username.trim())}
               className="w-full"
             >
               {submitting ? "Creating account…" : "Sign Up"}

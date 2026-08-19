@@ -21,7 +21,12 @@ async function signIn(page: import("@playwright/test").Page) {
   await page.goto("/sign-in");
   await page.getByLabel(/email/i).fill(EMAIL);
   await page.getByLabel(/password/i).fill(PASSWORD);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  // Scoped to the form: the site header also has a "Sign in" control, and it now
+  // correctly exposes role="button", so an unscoped match is ambiguous.
+  await page
+    .locator("form")
+    .getByRole("button", { name: /sign in/i })
+    .click();
 }
 
 test.describe("candidate authentication", () => {
@@ -37,7 +42,9 @@ test.describe("candidate authentication", () => {
 
     // The hub lists every capability for the signed-in role, so a known card proves
     // both that /me resolved and that the correct role catalog rendered.
-    await expect(page.getByRole("heading", { name: /everything you can do/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /everything you can do/i }),
+    ).toBeVisible();
 
     // Scoped to <main>: "Talent dashboard" is now both a sidebar item and a card in the
     // hub's capability grid, so an unscoped match is ambiguous. The card is the thing
@@ -48,7 +55,9 @@ test.describe("candidate authentication", () => {
     ).toBeVisible();
   });
 
-  test("shows the workspace sidebar on authenticated pages", async ({ page }) => {
+  test("shows the workspace sidebar on authenticated pages", async ({
+    page,
+  }) => {
     await signIn(page);
     // waitUntil: "commit" because sign-in navigates via next/navigation's router.replace,
     // a client-side transition that never fires a `load` event — the default wait state.
@@ -68,17 +77,25 @@ test.describe("candidate authentication", () => {
     await expect(dashboard).toBeVisible();
 
     await dashboard.click();
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000, waitUntil: "commit" });
+    await page.waitForURL(/\/dashboard/, {
+      timeout: 30_000,
+      waitUntil: "commit",
+    });
 
     // Still visible after navigating: the shell must not blank out between routes.
-    await expect(sidebar.getByRole("link", { name: "Home", exact: true })).toBeVisible();
+    await expect(
+      sidebar.getByRole("link", { name: "Home", exact: true }),
+    ).toBeVisible();
   });
 
   test("rejects bad credentials without navigating", async ({ page }) => {
     await page.goto("/sign-in");
     await page.getByLabel(/email/i).fill(EMAIL);
     await page.getByLabel(/password/i).fill("definitely-not-the-password");
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await page
+      .locator("form")
+      .getByRole("button", { name: /sign in/i })
+      .click();
 
     // The form surfaces the API's raw error detail, which is `invalid_credentials`
     // for a wrong password (verified against POST /auth/login, which 401s with that

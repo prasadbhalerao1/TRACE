@@ -97,7 +97,12 @@ async function signIn(page: Page) {
   await password.fill(PASSWORD);
   await expect(password).toHaveValue(PASSWORD);
 
-  await page.getByRole("button", { name: /sign in/i }).click();
+  // Scoped to the form: the site header also has a "Sign in" control, and it now
+  // correctly exposes role="button", so an unscoped match is ambiguous.
+  await page
+    .locator("form")
+    .getByRole("button", { name: /sign in/i })
+    .click();
   // Client-side router.replace never fires `load`; see candidate-login-dashboard.spec.ts.
   await page.waitForURL(/\/home/, { timeout: 30_000, waitUntil: "commit" });
 
@@ -105,10 +110,13 @@ async function signIn(page: Page) {
   // written the token to localStorage. Navigating on that signal alone raced the write
   // and landed on /interviews signed-out. Waiting for the token itself is the honest
   // barrier — it is the exact state the next navigation depends on.
-  await page
-    .waitForFunction(() => !!localStorage.getItem("access_token"), null, {
+  await page.waitForFunction(
+    () => !!localStorage.getItem("access_token"),
+    null,
+    {
       timeout: 30_000,
-    });
+    },
+  );
 }
 
 /** Drives the practice-interview form, which is the reachable route into the lobby.
@@ -119,7 +127,9 @@ async function signIn(page: Page) {
 async function openLobby(page: Page) {
   await page.goto("/interviews");
   // The form is collapsed behind a disclosure button until requested.
-  await page.getByRole("button", { name: /create practice interview/i }).click();
+  await page
+    .getByRole("button", { name: /create practice interview/i })
+    .click();
 
   await page.getByLabel(/role title/i).fill("Backend Engineer");
   await page
@@ -139,7 +149,9 @@ async function openLobby(page: Page) {
 }
 
 test.describe("interview lobby — device permission states", () => {
-  test("granted: preview is live and both toggles are usable", async ({ page }) => {
+  test("granted: preview is live and both toggles are usable", async ({
+    page,
+  }) => {
     await stubGetUserMedia(page, "grant");
     await signIn(page);
     await openLobby(page);
@@ -154,53 +166,73 @@ test.describe("interview lobby — device permission states", () => {
 
     // Toggling flips the track's `enabled` flag, which drives the label.
     await camera.click();
-    await expect(page.getByRole("button", { name: /camera off/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /camera off/i }),
+    ).toBeVisible();
     await expect(page.getByText(/camera is off/i)).toBeVisible();
 
     await mic.click();
     await expect(page.getByRole("button", { name: /mic off/i })).toBeVisible();
   });
 
-  test("denied: explains how to re-enable and still allows joining", async ({ page }) => {
+  test("denied: explains how to re-enable and still allows joining", async ({
+    page,
+  }) => {
     await stubGetUserMedia(page, "deny");
     await signIn(page);
     await openLobby(page);
 
-    await expect(page.getByText(/camera and microphone blocked/i)).toBeVisible();
+    await expect(
+      page.getByText(/camera and microphone blocked/i),
+    ).toBeVisible();
     await expect(page.getByText(/allow access in your browser/i)).toBeVisible();
     await expect(page.locator("video")).toHaveCount(0);
 
     // Toggles are meaningless without a stream, so they must be disabled rather than
     // throwing when clicked.
-    await expect(page.getByRole("button", { name: /camera on/i })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: /camera on/i }),
+    ).toBeDisabled();
     await expect(page.getByRole("button", { name: /mic on/i })).toBeDisabled();
 
     // The load-bearing assertion: the interview is answerable by text, so a refused
     // camera must never strand the candidate.
-    await expect(page.getByRole("button", { name: /join interview/i })).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: /join interview/i }),
+    ).toBeEnabled();
   });
 
-  test("no device: distinguishes missing hardware from refusal", async ({ page }) => {
+  test("no device: distinguishes missing hardware from refusal", async ({
+    page,
+  }) => {
     await stubGetUserMedia(page, "no-device");
     await signIn(page);
     await openLobby(page);
 
-    await expect(page.getByText(/no camera or microphone found/i)).toBeVisible();
+    await expect(
+      page.getByText(/no camera or microphone found/i),
+    ).toBeVisible();
     // The remedy differs from the denied case, so the copy must too — this is the
     // assertion that would catch the two branches being collapsed into one.
     await expect(page.getByText(/works entirely by text/i)).toBeVisible();
-    await expect(page.getByText(/allow access in your browser/i)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /join interview/i })).toBeEnabled();
+    await expect(page.getByText(/allow access in your browser/i)).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("button", { name: /join interview/i }),
+    ).toBeEnabled();
   });
 
-  test("unsupported: degrades without throwing when the API is absent", async ({ page }) => {
+  test("unsupported: degrades without throwing when the API is absent", async ({
+    page,
+  }) => {
     await stubGetUserMedia(page, "unsupported");
     await signIn(page);
     await openLobby(page);
 
+    await expect(page.getByText(/can't access media devices/i)).toBeVisible();
     await expect(
-      page.getByText(/can't access media devices/i),
-    ).toBeVisible();
-    await expect(page.getByRole("button", { name: /join interview/i })).toBeEnabled();
+      page.getByRole("button", { name: /join interview/i }),
+    ).toBeEnabled();
   });
 });

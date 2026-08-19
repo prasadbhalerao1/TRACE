@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ConflictResolver } from "@/components/ConflictResolver";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
@@ -389,8 +390,33 @@ export default function ProfileEditPage() {
   }
 
   if (!profile) {
+    /* Mirrors the loaded layout's wrapper and card exactly, so the page doesn't jump
+       when the profile arrives — the previous bare "Loading your profile…" line sat at
+       the top-left of an otherwise empty page and was replaced by a full-width card.
+       `aria-busy` + label preserve the announcement that plain text gave. */
     return (
-      <div className="p-8 text-muted-foreground">Loading your profile…</div>
+      <div
+        className="mx-auto w-full max-w-2xl space-y-6 p-8"
+        aria-busy="true"
+        aria-label="Loading your profile"
+      >
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between gap-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-36" />
+                </div>
+                <Skeleton className="h-8 w-24 shrink-0" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

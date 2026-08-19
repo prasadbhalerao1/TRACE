@@ -2380,6 +2380,7 @@ export async function deleteTrustedIssuer(
 
 export interface ProfileUpdateRequest {
   full_name?: string | null;
+  username?: string | null;
   headline?: string | null;
   location?: string | null;
   college?: string | null;
