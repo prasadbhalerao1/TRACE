@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { fetchMe, type MeResponse } from "@/lib/api";
+import { MAX_AUTO_RETRIES, isRetryable, retryDelayMs } from "@/lib/errors";
 
 interface CurrentUserContextValue {
   // undefined = auth/fetch not settled yet, null = signed out, MeResponse = resolved.
@@ -26,18 +27,13 @@ interface CurrentUserContextValue {
   reload: () => void;
 }
 
-const _MAX_ME_RETRIES = 4;
+/** Retry budget for GET /me. Shared with useAsyncResource — these were two separate
+ * constants holding the same value for the same purpose. */
+const _MAX_ME_RETRIES = MAX_AUTO_RETRIES;
 
-/** Distinguishes "the request never reached the server" from a real API error. A failed
- * connection rejects with a bare `TypeError: Failed to fetch` and carries no status
- * code, whereas `fetchMe` throws `GET /me failed: 500` when the server did answer. */
-function isTransientMeError(message: string): boolean {
-  if (/\b(429|502|503|504)\b/.test(message)) return true;
-  return (
-    /failed to fetch|networkerror|load failed/i.test(message) &&
-    !/\b[45]\d\d\b/.test(message)
-  );
-}
+/** Distinguishes "the request never reached the server" from a real API error, via the
+ * shared classifier so /me and every other fetch agree on what is worth retrying. */
+const isTransientMeError = (message: string) => isRetryable(message);
 
 const CurrentUserContext = createContext<CurrentUserContextValue | null>(null);
 
@@ -162,7 +158,7 @@ export function CurrentUserProvider({
             () => {
               if (!cancelled) void load(attempt + 1);
             },
-            Math.min(1000 * 2 ** attempt, 8000),
+            retryDelayMs(attempt),
           );
           return;
         }

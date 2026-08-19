@@ -9,8 +9,7 @@
 // `solve_problem` taking one argument.
 
 import type { HiddenTest, TestResult } from "@/lib/api";
-
-const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
+import { PYODIDE_INDEX_URL } from "@/lib/env";
 
 let pyodidePromise: Promise<PyodideInterface> | null = null;
 

@@ -19,7 +19,7 @@ import { CardListSkeleton } from "@/components/CardListSkeleton";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
   fetchJobMatches,
-  fetchMatchingStatus,
+  pollMatchingStatus,
   type MatchingStatusResponse,
 } from "@/lib/api";
 
@@ -64,34 +64,37 @@ export default function RecruiterMatchesPage() {
   }, [retry]);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    // Was a hand-rolled `setTimeout(poll, 3000)` loop. It re-implemented the shared
+    // helper minus the one property that matters: `pollUntil` sleeps via `pollDelay`,
+    // which pauses while the tab is hidden. Without it a backgrounded matches tab kept
+    // hitting the endpoint every 3s indefinitely.
+    const controller = new AbortController();
     let wasProcessing = false;
 
-    const poll = async () => {
+    void (async () => {
       try {
         const token = await getToken();
-        if (!token || cancelled) return;
-        const status = await fetchMatchingStatus(token, params.id);
-        if (cancelled) return;
-        setMatchingStatus(status);
-        if (status.status === "processing") {
-          wasProcessing = true;
-          timer = setTimeout(poll, 3000);
-        } else if (wasProcessing) {
-          // Matching just finished — pull the newly persisted rows in.
+        if (!token || controller.signal.aborted) return;
+        const final = await pollMatchingStatus(token, params.id, {
+          signal: controller.signal,
+          // Render each intermediate status so the "matching in progress" state appears
+          // immediately rather than only once polling settles.
+          onUpdate: (status) => {
+            if (controller.signal.aborted) return;
+            setMatchingStatus(status);
+            if (status.status === "processing") wasProcessing = true;
+          },
+        });
+        // Matching just finished — pull the newly persisted rows in.
+        if (!controller.signal.aborted && wasProcessing && final.status !== "processing") {
           retryRef.current();
         }
       } catch {
         // Status is supplementary: a failure here must not blank out the match list.
       }
-    };
+    })();
 
-    poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    return () => controller.abort();
   }, [getToken, params.id]);
 
   const isProcessing = matchingStatus?.status === "processing";

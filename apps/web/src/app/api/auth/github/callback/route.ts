@@ -5,7 +5,7 @@
 // the GitHub App settings this session doesn't have.
 import { type NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+import { BACKEND_URL } from "@/lib/env";
 
 export async function GET(request: NextRequest) {
   const target = new URL("/candidates/github/oauth/callback", BACKEND_URL);

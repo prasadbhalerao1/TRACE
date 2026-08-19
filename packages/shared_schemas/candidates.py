@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 SUB_SCORE_NAMES = (
     "coding_ability",
@@ -42,6 +42,18 @@ class HackathonExperienceRequest(BaseModel):
     date: str
 
 
+def _stats_refresh_cooldown_seconds() -> int:
+    """Read the cooldown from Settings at response-construction time.
+
+    Imported lazily inside the function on purpose: this package is deliberately free of
+    service-layer dependencies so the agents and the schema codegen can import it without
+    pulling in FastAPI settings. A module-level import would invert that.
+    """
+    from services.api.core.config import get_settings
+
+    return get_settings().stats_refresh_cooldown_minutes * 60
+
+
 class EvidenceConfidence(BaseModel):
     """How much of the Talent Score is backed by real evidence vs. cold-start gaps.
 
@@ -75,6 +87,13 @@ class CandidateProfileResponse(BaseModel):
     github_stats: dict | None
     leetcode_stats: dict | None
     stats_refreshed_at: datetime | None
+    # Published so the client can render the refresh countdown without hardcoding the
+    # cooldown. It is env-tunable (`STATS_REFRESH_COOLDOWN_MINUTES`), so a client-side
+    # copy silently disagrees with the API the moment a deployment changes it — enabling
+    # the button early and earning a 429.
+    stats_refresh_cooldown_seconds: int = Field(
+        default_factory=_stats_refresh_cooldown_seconds
+    )
     ingestion_status: str
     ingestion_error: str | None
     updated_at: datetime

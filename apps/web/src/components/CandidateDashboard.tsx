@@ -84,10 +84,6 @@ const ScoreTrendLine = dynamic(
   },
 );
 
-// Mirrors the backend's `_STATS_REFRESH_COOLDOWN` (services/api/modules/candidates/router.py)
-// so the countdown is accurate without waiting on a 429 to learn the retry time.
-const STATS_REFRESH_COOLDOWN_MS = 15 * 60 * 1000;
-
 export function CandidateDashboard() {
   const { getToken } = useAuth();
   const [refreshBusy, setRefreshBusy] = useState(false);
@@ -213,10 +209,14 @@ export function CandidateDashboard() {
     }
   }
 
+  // The cooldown comes from the profile response rather than a local constant. It is
+  // env-tunable on the backend (`STATS_REFRESH_COOLDOWN_MINUTES`), so a mirrored literal
+  // here would enable the button early after any deployment that changed it, and the
+  // refresh would come back 429.
   const refreshCooldownUntil = profile?.stats_refreshed_at
     ? new Date(
         new Date(profile.stats_refreshed_at).getTime() +
-          STATS_REFRESH_COOLDOWN_MS,
+          profile.stats_refresh_cooldown_seconds * 1000,
       )
     : null;
 

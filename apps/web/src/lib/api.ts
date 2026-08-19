@@ -2,8 +2,9 @@
 // guards routes itself; components call FastAPI directly with the bearer token they
 // already have client-side. No Server Actions, no app/api/* proxying.
 
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { API_URL } from "@/lib/env";
+
+export { API_URL };
 
 export type Role = "candidate" | "recruiter" | "organizer" | "judge" | "admin";
 
@@ -154,6 +155,8 @@ export interface CandidateProfileResponse {
   github_stats: GithubStats | null;
   leetcode_stats: LeetcodeStats | null;
   stats_refreshed_at: string | null;
+  /** Server-owned refresh cooldown. Env-tunable, so never mirror it client-side. */
+  stats_refresh_cooldown_seconds: number;
   ingestion_status: "idle" | "processing" | "done" | "failed";
   ingestion_error: string | null;
   updated_at: string;
@@ -233,42 +236,89 @@ export async function fetchIngestionStatus(
  * abort a 3-minute wait. Callers must still handle a returned "processing" (genuine
  * timeout) by showing a "still working, refresh later" state, never a blank/stale one.
  */
-export async function pollIngestionStatus(
-  token: string,
+/** Shared defaults for every status poll in this file.
+ *
+ * These four numbers were re-declared inside each of the four polling helpers below, and
+ * two page components hand-rolled their own loops with *different* values and no backoff
+ * at all. One definition means a change to polling behaviour actually applies everywhere.
+ */
+export const POLL_DEFAULTS = {
+  /** First interval. Short, because most jobs finish quickly. */
+  intervalMs: 2000,
+  /** Ceiling after backoff. Polling every 2s for minutes is needless load on an endpoint
+   * whose answer changes once. */
+  maxIntervalMs: 5000,
+  /** Total wall-clock budget. A full GitHub crawl regularly runs past a 60s ceiling. */
+  timeoutMs: 180_000,
+  /** Multiplier applied to the interval after each attempt. */
+  backoffFactor: 1.5,
+  /** Consecutive failures tolerated before giving up. One blip must not abort a
+   * three-minute wait; a genuinely dead endpoint should still surface. */
+  maxConsecutiveErrors: 5,
+} as const;
+
+export interface PollOptions<T> {
+  intervalMs?: number;
+  maxIntervalMs?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  onUpdate?: (value: T) => void;
+}
+
+/** Poll `fetchOnce` until `isDone` or the deadline, with backoff and error tolerance.
+ *
+ * Delegates its sleep to `pollDelay`, which pauses while the tab is hidden — the single
+ * most important property here, and precisely what the hand-rolled `setTimeout` loops in
+ * the matches and pitch-deck pages were missing. Without it every background tab kept
+ * issuing requests indefinitely.
+ *
+ * Returns the last value seen. A caller that gets back a still-unfinished value has hit
+ * the timeout and must render a "still working" state — never a blank or stale one.
+ */
+export async function pollUntil<T>(
+  fetchOnce: () => Promise<T>,
+  isDone: (value: T) => boolean,
+  initial: T,
   {
-    intervalMs = 2000,
-    maxIntervalMs = 5000,
-    timeoutMs = 180_000,
+    intervalMs = POLL_DEFAULTS.intervalMs,
+    maxIntervalMs = POLL_DEFAULTS.maxIntervalMs,
+    timeoutMs = POLL_DEFAULTS.timeoutMs,
     signal,
     onUpdate,
-  }: {
-    intervalMs?: number;
-    maxIntervalMs?: number;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    onUpdate?: (status: IngestionStatusResponse) => void;
-  } = {},
-): Promise<IngestionStatusResponse> {
+  }: PollOptions<T> = {},
+): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   let delay = intervalMs;
-  let last: IngestionStatusResponse = { status: "processing", error: null };
+  let last = initial;
   let consecutiveErrors = 0;
 
   while (Date.now() < deadline) {
     if (signal?.aborted) return last;
     try {
-      last = await fetchIngestionStatus(token);
+      last = await fetchOnce();
       consecutiveErrors = 0;
       onUpdate?.(last);
-      if (last.status !== "processing") return last;
+      if (isDone(last)) return last;
     } catch (err) {
-      // Tolerate transient failures; give up only if they persist.
-      if (++consecutiveErrors >= 5) throw err;
+      // Tolerate transient failures; give up only once they persist.
+      if (++consecutiveErrors >= POLL_DEFAULTS.maxConsecutiveErrors) throw err;
     }
     await pollDelay(delay, signal);
-    delay = Math.min(delay * 1.5, maxIntervalMs);
+    delay = Math.min(delay * POLL_DEFAULTS.backoffFactor, maxIntervalMs);
   }
   return last;
+}
+
+export async function pollIngestionStatus(
+  token: string,
+  options: PollOptions<IngestionStatusResponse> = {},
+): Promise<IngestionStatusResponse> {
+  return pollUntil<IngestionStatusResponse>(
+    () => fetchIngestionStatus(token),
+    (status) => status.status !== "processing",
+    { status: "processing", error: null },
+    options,
+  );
 }
 
 export interface BadgeResponse {
@@ -677,6 +727,8 @@ export interface PublicPortfolioResponse {
   github_summary: GithubSummary;
   leetcode_stats: LeetcodeStats | null;
   stats_refreshed_at: string | null;
+  /** Server-owned refresh cooldown. Env-tunable, so never mirror it client-side. */
+  stats_refresh_cooldown_seconds: number;
   updated_at: string;
 }
 
@@ -836,6 +888,10 @@ export interface PresentationReportResponse {
   suggestions: string[];
   ai_content_signal: AIContentSignal | null;
   plagiarism_matches: PlagiarismMatchOut[];
+  /** False when the similarity check could not run. An empty match list alone cannot be
+   * rendered as "nothing matched" without this — that would be an all-clear for a check
+   * that never happened. */
+  plagiarism_checked: boolean;
   computed_at: string | null;
 }
 
@@ -883,6 +939,44 @@ export async function fetchPresentationReport(
     );
   }
   return res.json();
+}
+
+/** Placeholder returned only if the poll is aborted before its first fetch resolves.
+ *
+ * Deliberately `processing` rather than an empty `done`: the caller renders on status,
+ * and a fabricated terminal state would show an empty report as a finished one. */
+const EMPTY_PRESENTATION_REPORT: PresentationReportResponse = {
+  presentation_id: "",
+  status: "processing",
+  linked_repo: null,
+  slides: [],
+  scores: {},
+  overall_pitch_score: null,
+  renormalized_scores: [],
+  summary: null,
+  suggestions: [],
+  ai_content_signal: null,
+  plagiarism_matches: [],
+  // Nothing has been fetched yet, so certainly nothing has been checked.
+  plagiarism_checked: false,
+  computed_at: null,
+};
+
+export async function pollPresentationReport(
+  token: string,
+  presentationId: string,
+  options: PollOptions<PresentationReportResponse> = {},
+): Promise<PresentationReportResponse> {
+  // The pipeline is synchronous today, so the first fetch usually already returns a
+  // terminal status. Poll anyway: a shared link can be opened before the uploader's
+  // request has resolved. `failed` is terminal too — stopping only on `done` would
+  // spin until the deadline on every deck that could not be processed.
+  return pollUntil<PresentationReportResponse>(
+    () => fetchPresentationReport(token, presentationId),
+    (report) => report.status !== "processing",
+    { ...EMPTY_PRESENTATION_REPORT },
+    options,
+  );
 }
 
 // --- Recruitment (Module 02) ---
@@ -948,39 +1042,14 @@ export async function fetchMatchingStatus(
 export async function pollMatchingStatus(
   token: string,
   jobId: string,
-  {
-    intervalMs = 2000,
-    maxIntervalMs = 5000,
-    timeoutMs = 180_000,
-    signal,
-    onUpdate,
-  }: {
-    intervalMs?: number;
-    maxIntervalMs?: number;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    onUpdate?: (status: MatchingStatusResponse) => void;
-  } = {},
+  options: PollOptions<MatchingStatusResponse> = {},
 ): Promise<MatchingStatusResponse> {
-  const deadline = Date.now() + timeoutMs;
-  let delay = intervalMs;
-  let last: MatchingStatusResponse = { status: "processing", error: null };
-  let consecutiveErrors = 0;
-
-  while (Date.now() < deadline) {
-    if (signal?.aborted) return last;
-    try {
-      last = await fetchMatchingStatus(token, jobId);
-      consecutiveErrors = 0;
-      onUpdate?.(last);
-      if (last.status !== "processing") return last;
-    } catch (err) {
-      if (++consecutiveErrors >= 5) throw err;
-    }
-    await pollDelay(delay, signal);
-    delay = Math.min(delay * 1.5, maxIntervalMs);
-  }
-  return last;
+  return pollUntil<MatchingStatusResponse>(
+    () => fetchMatchingStatus(token, jobId),
+    (status) => status.status !== "processing",
+    { status: "processing", error: null },
+    options,
+  );
 }
 
 export interface JobCreateRequest {
@@ -1361,42 +1430,21 @@ export function fetchSubmission(
 export async function pollSubmissionGrading(
   token: string,
   submissionId: string,
-  {
-    intervalMs = 2000,
-    maxIntervalMs = 5000,
-    timeoutMs = 180_000,
-    signal,
-    onUpdate,
-  }: {
-    intervalMs?: number;
-    maxIntervalMs?: number;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    onUpdate?: (submission: SubmissionResponse) => void;
-  } = {},
+  options: PollOptions<SubmissionResponse> = {},
 ): Promise<SubmissionResponse> {
-  const deadline = Date.now() + timeoutMs;
-  let delay = intervalMs;
-  let last = await fetchSubmission(token, submissionId);
-  let consecutiveErrors = 0;
+  // Grading frequently completes before the first poll interval elapses, so this fetches
+  // once up front and returns immediately when it is already done — otherwise the
+  // candidate waits a needless two seconds staring at a spinner for work that finished.
+  const first = await fetchSubmission(token, submissionId);
+  options.onUpdate?.(first);
+  if (first.grading_status !== "processing") return first;
 
-  onUpdate?.(last);
-  if (last.grading_status !== "processing") return last;
-
-  while (Date.now() < deadline) {
-    if (signal?.aborted) return last;
-    await pollDelay(delay, signal);
-    delay = Math.min(delay * 1.5, maxIntervalMs);
-    try {
-      last = await fetchSubmission(token, submissionId);
-      consecutiveErrors = 0;
-      onUpdate?.(last);
-      if (last.grading_status !== "processing") return last;
-    } catch (err) {
-      if (++consecutiveErrors >= 5) throw err;
-    }
-  }
-  return last;
+  return pollUntil<SubmissionResponse>(
+    () => fetchSubmission(token, submissionId),
+    (submission) => submission.grading_status !== "processing",
+    first,
+    options,
+  );
 }
 
 // --- FR-2: AI Interview Agent ---
@@ -1883,39 +1931,19 @@ export function fetchRankingStatus(
 export async function pollRankingStatus(
   token: string,
   hackathonId: string,
-  {
-    intervalMs = 2000,
-    maxIntervalMs = 5000,
-    timeoutMs = 300_000,
-    signal,
-    onUpdate,
-  }: {
-    intervalMs?: number;
-    maxIntervalMs?: number;
-    timeoutMs?: number;
-    signal?: AbortSignal;
-    onUpdate?: (status: RankingStatusResponse) => void;
-  } = {},
+  options: PollOptions<RankingStatusResponse> = {},
 ): Promise<RankingStatusResponse> {
-  const deadline = Date.now() + timeoutMs;
-  let delay = intervalMs;
-  let last: RankingStatusResponse = { status: "processing", error: null };
-  let consecutiveErrors = 0;
-
-  while (Date.now() < deadline) {
-    if (signal?.aborted) return last;
-    try {
-      last = await fetchRankingStatus(token, hackathonId);
-      consecutiveErrors = 0;
-      onUpdate?.(last);
-      if (last.status !== "processing") return last;
-    } catch (err) {
-      if (++consecutiveErrors >= 5) throw err;
-    }
-    await pollDelay(delay, signal);
-    delay = Math.min(delay * 1.5, maxIntervalMs);
-  }
-  return last;
+  return pollUntil<RankingStatusResponse>(
+    () => fetchRankingStatus(token, hackathonId),
+    (status) => status.status !== "processing",
+    { status: "processing", error: null },
+    {
+      // Finalization runs per-team repo verification plus cross-event novelty search
+      // across the whole event, so it legitimately outlasts the shared 3-minute budget.
+      timeoutMs: 300_000,
+      ...options,
+    },
+  );
 }
 
 export function finalizeHackathonRankings(

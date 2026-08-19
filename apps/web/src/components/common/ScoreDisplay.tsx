@@ -12,8 +12,14 @@ import { cn } from "@/lib/utils";
 import type { EvidenceConfidence, SubScore } from "@/lib/api";
 
 /** Below this share of resolved signals the score reflects a sparse profile rather than
- * a weak candidate. Mirrors the backend threshold documented on `EvidenceConfidence`
- * (`packages/shared_schemas/candidates.py`). */
+ * a weak candidate.
+ *
+ * This is the only definition. `EvidenceConfidence` in packages/shared_schemas mentions a
+ * "50% confidence threshold", but that is prose in a docstring, not a constant — the API
+ * ships the raw `available_signals`/`expected_signals` and takes no action at any cutoff.
+ * The previous comment here claimed to mirror a backend threshold, which would have sent
+ * a future reader looking for something to keep in sync that does not exist. Presentation
+ * is genuinely the frontend's call, so it lives here. */
 const SPARSE_PROFILE_THRESHOLD = 0.5;
 
 export function confidenceRatio(

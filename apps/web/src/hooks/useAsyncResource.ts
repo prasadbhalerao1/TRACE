@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { MAX_AUTO_RETRIES, isRetryable, retryDelayMs } from "@/lib/errors";
+
 interface AsyncResourceState<T> {
   data: T | null;
   error: string | null;
@@ -14,29 +16,15 @@ const _resourceCache = new Map<string, unknown>();
 const _CACHE_TTL_MS = 60_000;
 const _cacheTimestamps = new Map<string, number>();
 
-/** Failures that resolve on their own if we simply wait: the API still warming up
- * (a bare `TypeError: Failed to fetch`, no status code), a rate-limit 429, or a
- * transient gateway error. Retried automatically rather than surfaced — showing a red
- * error box for a condition that clears in two seconds is the wrong call. */
-function isTransient(message: string): boolean {
-  if (
-    /\b(429|502|503|504)\b/.test(message) ||
-    /rate_limit_exceeded/i.test(message)
-  )
-    return true;
-  // A connection-level failure has no HTTP status attached; a real 4xx/5xx does.
-  return (
-    /failed to fetch|networkerror|load failed/i.test(message) &&
-    !/\b[45]\d\d\b/.test(message)
-  );
-}
+/** Failures worth retrying automatically, delegated to the shared classifier.
+ *
+ * Was a local regex over the status code, which retried *every* 503 — including
+ * `LLM_QUOTA_EXHAUSTED` and `LLM_NOT_CONFIGURED`, neither of which resolves by
+ * waiting. The shared version honours the server's explicit `retryable` flag, and is
+ * the single definition `CurrentUserProvider` now uses too. See lib/errors.ts. */
+const isTransient = (message: string) => isRetryable(message);
 
-const _MAX_AUTO_RETRIES = 4;
-/** Exponential backoff, capped. Starts short so a boot-time miss recovers almost
- * invisibly, then backs off so a genuinely-down API isn't hammered. */
-function retryDelayMs(attempt: number): number {
-  return Math.min(1000 * 2 ** attempt, 8000);
-}
+const _MAX_AUTO_RETRIES = MAX_AUTO_RETRIES;
 
 /** Fetches one independent dashboard section. Each call site gets its own loading/error/
  * retry state — a failure here must never block sibling sections from rendering (this is

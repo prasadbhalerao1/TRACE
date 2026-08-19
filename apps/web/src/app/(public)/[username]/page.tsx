@@ -34,7 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchPublicPortfolio } from "@/lib/api";
 
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+import { BACKEND_URL } from "@/lib/env";
 
 interface PageProps {
   params: Promise<{ username: string }>;
