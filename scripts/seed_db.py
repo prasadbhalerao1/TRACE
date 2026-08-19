@@ -28,6 +28,8 @@ from packages.db.models import (
     HackathonTeam,
     Job,
     Organization,
+    RoleSkillRequirement,
+    SkillDescription,
     TalentScore,
     User,
 )
@@ -189,6 +191,55 @@ async def seed_relational_database(session: AsyncSession):
             )
             session.add(course)
             logger.info("Created Course Catalog Entry: %s", title)
+
+    # 5b. Curated catalogs — role requirement sets and skill glosses.
+    #
+    # These were Python dict literals until the catalog migration; the code still carries
+    # them as SEED constants, which are both the fallback when the database is
+    # unreachable and the source for this seeding step. Seeding from the same constants
+    # the fallback uses guarantees a freshly-seeded database behaves identically to a
+    # database-less one.
+    #
+    # Upserted rather than insert-if-absent: unlike a course row (which an admin may
+    # legitimately edit), a seed weight changing in code should propagate on re-seed.
+    # An admin-added role that does not exist in the seed is left untouched.
+    from services.agents.candidate_intelligence.tools.role_taxonomy import ROLE_SKILL_TAXONOMY_SEED
+    from services.agents.recruitment.tools.skill_descriptions import SKILL_DESCRIPTIONS_SEED
+
+    existing_reqs = {
+        (row.role, row.skill_name): row
+        for row in (await session.execute(select(RoleSkillRequirement))).scalars().all()
+    }
+    created_reqs = 0
+    for role, skills in ROLE_SKILL_TAXONOMY_SEED.items():
+        for skill_name, weight in skills:
+            row = existing_reqs.get((role, skill_name))
+            if row is None:
+                session.add(RoleSkillRequirement(role=role, skill_name=skill_name, weight=weight))
+                created_reqs += 1
+            else:
+                row.weight = weight
+    logger.info(
+        "Role skill requirements: %d created, %d refreshed",
+        created_reqs, len(existing_reqs),
+    )
+
+    existing_descriptions = {
+        row.skill_name: row
+        for row in (await session.execute(select(SkillDescription))).scalars().all()
+    }
+    created_descriptions = 0
+    for skill_name, description in SKILL_DESCRIPTIONS_SEED.items():
+        row = existing_descriptions.get(skill_name)
+        if row is None:
+            session.add(SkillDescription(skill_name=skill_name, description=description))
+            created_descriptions += 1
+        else:
+            row.description = description
+    logger.info(
+        "Skill descriptions: %d created, %d refreshed",
+        created_descriptions, len(existing_descriptions),
+    )
 
     # 6. Hackathon Event
     h_stmt = select(Hackathon).where(Hackathon.name == "Global AI Hackathon 2026")

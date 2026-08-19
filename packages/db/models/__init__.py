@@ -23,6 +23,7 @@ from packages.db.models.candidate import (
 from packages.db.models.event import Event
 from packages.db.models.file import File
 from packages.db.models.fraud import (
+    DefaultAvatarHash,
     AuthenticityScore,
     Dispute,
     FraudFlag,
@@ -49,7 +50,9 @@ from packages.db.models.recruitment import (
     CopilotConversation,
     Job,
     LocationAlias,
+    RoleSkillRequirement,
     MatchScore,
+    SkillDescription,
     SkillTaxonomyEntry,
 )
 from packages.db.models.user import User
@@ -80,6 +83,9 @@ __all__ = [
     "CopilotConversation",
     "SkillTaxonomyEntry",
     "LocationAlias",
+    "DefaultAvatarHash",
+    "RoleSkillRequirement",
+    "SkillDescription",
     "Assessment",
     "Submission",
     "InterviewSession",

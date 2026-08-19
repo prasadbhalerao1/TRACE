@@ -119,6 +119,23 @@ class AuthenticityScore(Base):
     __table_args__ = (Index("idx_authenticity_scores_candidate_time", "candidate_id", "computed_at"),)
 
 
+class DefaultAvatarHash(Base):
+    """Perceptual hashes of well-known default/placeholder profile pictures.
+
+    Two candidates both using the GitHub identicon are not evidence of a duplicate
+    account, so these hashes are excluded before photo similarity is scored. The list
+    shipped as an empty `set()` in `fraud/tools/photo_hash.py` carrying the comment
+    "populate with real default-avatar hashes as they're identified in production" —
+    which is precisely what a code literal cannot support, since every addition would
+    need a developer and a redeploy. As a table, an admin adds one when they spot it.
+    """
+
+    __tablename__ = "default_avatar_hashes"
+
+    phash: Mapped[str] = mapped_column(Text, primary_key=True)
+    note: Mapped[str | None] = mapped_column(Text)
+
+
 class TrustedIssuer(Base):
     """FR-1's known-issuer registry — replaces the previous hardcoded Python dict in
     `services/agents/fraud/tools/issuer_lookup.py` with a real, admin-manageable table.

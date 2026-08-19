@@ -57,6 +57,9 @@ class PresentationScore(Base):
     summary: Mapped[str | None] = mapped_column(Text)
     suggestions: Mapped[list | None] = mapped_column(JSONB)
     ai_content_signal: Mapped[dict | None] = mapped_column(JSONB)
+    # Whether the plagiarism check actually ran. Defaults true so existing rows keep
+    # their current meaning; only a genuinely failed check writes false.
+    plagiarism_checked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     computed_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

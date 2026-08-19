@@ -147,6 +147,47 @@ class SkillTaxonomyEntry(Base):
     synonyms: Mapped[list | None] = mapped_column(ARRAY(Text))
 
 
+class RoleSkillRequirement(Base):
+    """FR-4.1 target-role requirement sets — one row per (role, skill).
+
+    Was `ROLE_SKILL_TAXONOMY`, a ~100-entry dict literal in
+    `services/agents/candidate_intelligence/tools/role_taxonomy.py`. Its own docstring
+    described it as "a curated, hand-maintained catalog ... same seed-a-static-table
+    philosophy as the course catalog" — but the course catalog is a real table, so
+    adding a course was a DB insert while adding a *role* required a code change and a
+    redeploy. This closes that inconsistency.
+
+    `weight` (0-1) is how central the skill is to the role, used to rank which gaps
+    matter most. The pair (role, skill_name) is the natural key: `skill_gap.py` derives
+    a deterministic Qdrant point id from exactly that pair, so uniqueness here is what
+    keeps the vector collection from accumulating duplicate points.
+    """
+
+    __tablename__ = "role_skill_requirements"
+
+    role: Mapped[str] = mapped_column(Text, primary_key=True)
+    skill_name: Mapped[str] = mapped_column(Text, primary_key=True)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, server_default="0.5")
+
+    __table_args__ = (
+        CheckConstraint("weight >= 0 AND weight <= 1", name="ck_role_skill_weight_range"),
+    )
+
+
+class SkillDescription(Base):
+    """Human-readable gloss for a skill, used to give embeddings real semantic context.
+
+    Was `SKILL_DESCRIPTIONS` in `services/agents/recruitment/tools/skill_descriptions.py`,
+    whose docstring invited maintainers to "extend as new skills come up in job
+    postings" — an operational activity that should not require a developer.
+    """
+
+    __tablename__ = "skill_descriptions"
+
+    skill_name: Mapped[str] = mapped_column(Text, primary_key=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class LocationAlias(Base):
     """Synonym resolution for location filters (e.g. "Delhi NCR" / "New Delhi")."""
 
