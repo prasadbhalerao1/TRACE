@@ -52,7 +52,7 @@ from services.agents.fraud.tools.report_llm import generate_fraud_risk_report
 from services.api.core.audit import log_action
 from services.api.core.config import get_settings
 from services.api.core.db import get_db, without_db_connection
-from services.api.core.rbac import require_role
+from services.api.core.rbac import get_current_user, require_role
 from services.api.core.tracing import start_agent_trace
 
 router = APIRouter(tags=["Trust & Fraud Prevention"])
@@ -495,9 +495,17 @@ async def check_profile_duplicate(
 @router.get("/candidates/{candidate_id}/authenticity-score", response_model=AuthenticityScoreResponse)
 async def get_authenticity_score(
     candidate_id: uuid.UUID,
-    user: User = Depends(require_role("candidate", "recruiter", "admin", "organizer", "judge")),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AuthenticityScoreResponse:
+    """Authenticity score for a candidate, derived from their upheld fraud flags.
+
+    Open to any signed-in user, with candidates restricted to their own score below.
+    This dependency used to spell out all five roles, which is the same thing as
+    `get_current_user` but reads like a restriction — a reviewer has to enumerate the
+    role list against `Role` to notice it excludes nobody. The ownership branch below is
+    the actual access control.
+    """
     profile = await _candidate_profile_or_404(db, candidate_id)
     if user.role == "candidate" and profile.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="cannot_view_other_candidates_score")
@@ -525,9 +533,15 @@ async def get_authenticity_score(
 @router.get("/candidates/{candidate_id}/flags", response_model=list[FraudFlagResponse])
 async def get_candidate_flags(
     candidate_id: uuid.UUID,
-    user: User = Depends(require_role("candidate", "recruiter", "admin", "organizer", "judge")),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[FraudFlag]:
+    """Fraud flags raised against a candidate.
+
+    Same access rule as `get_authenticity_score` above: any signed-in user, except that
+    a candidate may only read their own. See that docstring for why this is
+    `get_current_user` rather than an all-roles `require_role` list.
+    """
     profile = await _candidate_profile_or_404(db, candidate_id)
     if user.role == "candidate" and profile.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="cannot_view_other_candidates_flags")
@@ -674,6 +688,21 @@ async def review_flag(
     flag.review_notes = body.review_notes
     flag.reviewed_by = user.id
     flag.reviewed_at = datetime.now(timezone.utc)
+
+    # Adjudicating a flag is the single most consequential privileged action in this
+    # module — upholding one is what actually penalizes a candidate's authenticity score
+    # — yet it was the only one not written to the audit log, while the comparatively
+    # minor trusted-issuer CRUD below was. `reviewed_by`/`reviewed_at` on the row are not
+    # a substitute: they hold only the *latest* reviewer, so a flag upheld, disputed and
+    # then dismissed keeps no record of who upheld it. The audit log is append-only and
+    # is where `/admin/audit-log` looks.
+    await log_action(
+        db,
+        actor_user_id=user.id,
+        action=f"fraud_flag_{body.status}",
+        target_type="fraud_flag",
+        target_id=flag.id,
+    )
     await db.commit()
     await db.refresh(flag)
     return flag

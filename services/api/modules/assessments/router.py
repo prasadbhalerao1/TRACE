@@ -62,6 +62,10 @@ from services.api.core.queue import TASK_GRADE_SUBMISSION, enqueue
 from services.api.core.rbac import require_role
 from services.api.core.tracing import start_agent_trace
 from services.api.modules.candidates.router import _get_or_create_profile
+# Single definition of job ownership, shared rather than re-implemented here — the
+# submission-access rule below already documents itself as mirroring it. Safe from a
+# cycle: recruitment/router.py imports nothing from this module.
+from services.api.modules.recruitment.router import _job_owned_by
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +103,21 @@ async def create_assessment(
     user: User = Depends(require_role("recruiter")),
     db: AsyncSession = Depends(get_db),
 ) -> Assessment:
+    """Create an assessment, optionally bound to a job and/or a specific candidate.
+
+    `job_id` is ownership-checked. It was taken straight from the body, so a recruiter
+    could attach an assessment to *another* recruiter's posting — which is not just an
+    unwanted row: `_require_submission_access` derives who may read a submission from
+    the assessment's job, so the resulting submissions became readable by the other
+    org's recruiters, and the candidate saw an assessment attributed to a job its real
+    owner never created.
+
+    `job_id=None` (a reusable template not yet tied to a posting) stays allowed, matching
+    the nullable-by-design contract on `AssessmentCreateRequest`.
+    """
+    if body.job_id is not None:
+        await _job_owned_by(db, body.job_id, user)
+
     assessment = Assessment(
         job_id=body.job_id, candidate_id=body.candidate_id, type=body.type, spec=body.spec
     )
@@ -166,6 +185,15 @@ async def submit_assessment(
     result = await db.execute(select(Assessment).where(Assessment.id == assessment_id))
     assessment = result.scalar_one_or_none()
     if assessment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="assessment_not_found")
+
+    # Same assignment rule `get_assessment` applies to reads. Without it a candidate
+    # could submit against any assessment id, including one assigned to someone else —
+    # and against an unassigned template (`candidate_id is None`), whose submissions
+    # `_require_submission_access` treats as having no owning recruiter and therefore
+    # leaves readable by every recruiter on the platform. 404 rather than 403, so the
+    # response does not confirm that someone else's assessment exists.
+    if assessment.candidate_id != profile.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="assessment_not_found")
 
     submission = Submission(
@@ -299,19 +327,26 @@ async def _require_submission_access(db: AsyncSession, submission: Submission, u
     """Recruiter may read a submission only if they own the job it was assessed for.
 
     Ownership mirrors `recruitment/router.py:_job_owned_by` — same organization, or the
-    recruiter who posted the job. Assessments with no `job_id` (standalone/template
-    assessments not tied to a posting) have no owning recruiter to check against, so
-    they stay readable rather than becoming unreachable for everyone.
+    recruiter who posted the job.
+
+    Every branch refuses rather than returns. The three "no owner to check against"
+    cases (missing assessment, assessment with no `job_id`, dangling `job_id`) used to
+    fall through to an early `return`, which meant *any* recruiter could read the
+    submission — its full code and answers — whenever the owning job could not be
+    resolved. A candidate submitting against an unassigned template hit exactly that
+    branch, so their code was platform-readable by construction. `submit_assessment` now
+    also refuses submissions against assessments the candidate wasn't assigned, which
+    closes the other half.
     """
     assessment = (
         await db.execute(select(Assessment).where(Assessment.id == submission.assessment_id))
     ).scalar_one_or_none()
     if assessment is None or assessment.job_id is None:
-        return
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_job_posting")
 
     job = (await db.execute(select(Job).where(Job.id == assessment.job_id))).scalar_one_or_none()
     if job is None:
-        return
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_job_posting")
     if user.organization_id and job.organization_id == user.organization_id:
         return
     if job.posted_by_user_id == user.id:
@@ -618,6 +653,34 @@ async def start_interview(
     }
 
 
+async def _session_owned_by(
+    db: AsyncSession, session_id: uuid.UUID, user: User
+) -> tuple[InterviewSession, CandidateProfile]:
+    """Load an interview session, enforcing that `user` is the candidate being interviewed.
+
+    Every candidate-facing session route goes through this. The read route checked
+    ownership; `/turn` and `/end` looked the session up by id and never compared it to
+    the caller, so any candidate holding a session UUID could answer questions into
+    someone else's interview and then force-finalize it. `/end` was the worse half: it
+    writes an `InterviewReport` — the technical/communication ratings and hiring
+    recommendation a recruiter later reads as an assessment of the victim — so a third
+    party could author another candidate's evaluation.
+
+    Returns the profile alongside the session because callers need it anyway (to build
+    the candidate summary the graph is prompted with), which keeps this from costing an
+    extra query over the lookup it replaces.
+    """
+    result = await db.execute(select(InterviewSession).where(InterviewSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_session_not_found")
+
+    profile = await _get_or_create_profile(db, user)
+    if session.candidate_id != profile.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_interview_session")
+    return session, profile
+
+
 @router.get("/interview-sessions/{session_id}", response_model=InterviewSessionWithTranscriptResponse)
 async def get_interview_session(
     session_id: uuid.UUID,
@@ -628,14 +691,7 @@ async def get_interview_session(
     page load/reload — e.g. a direct link to /interview/{session_id} — since the initial
     question is otherwise only ever returned once, from the POST /interview-sessions
     response that started it."""
-    result = await db.execute(select(InterviewSession).where(InterviewSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_session_not_found")
-
-    profile = await _get_or_create_profile(db, user)
-    if session.candidate_id != profile.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_interview_session")
+    session, _ = await _session_owned_by(db, session_id, user)
 
     turns_result = await db.execute(
         select(InterviewTranscriptTurn)
@@ -658,15 +714,9 @@ async def interview_turn(
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(select(InterviewSession).where(InterviewSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_session_not_found")
+    session, profile = await _session_owned_by(db, session_id, user)
     if session.status != "in_progress":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="interview_session_not_in_progress")
-
-    profile_result = await db.execute(select(CandidateProfile).where(CandidateProfile.id == session.candidate_id))
-    profile = profile_result.scalar_one()
 
     saved = session.state or {}
     transcript = [*saved.get("transcript", []), {"role": "candidate", "text": body.answer_text}]
@@ -755,10 +805,7 @@ async def end_interview(
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(select(InterviewSession).where(InterviewSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_session_not_found")
+    session, _ = await _session_owned_by(db, session_id, user)
 
     saved = session.state or {}
     report_state: InterviewReportState = {
@@ -841,6 +888,27 @@ async def get_interview_report(
     user: User = Depends(require_role("recruiter")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    """Read a finished interview's report and full transcript.
+
+    Scoped to the recruiter who owns the interview definition the session ran against —
+    the same rule `_definition_owned_by` applies to `/interview-definitions/{id}/attempts`,
+    which is the list this report is opened from. Without it the role check was the only
+    gate, so any recruiter could read any candidate's transcript and hiring
+    recommendation on the platform by session UUID.
+
+    Sessions with no `interview_definition_id` (candidate self-practice runs, started
+    from a bare topic plan) have no owning recruiter to check against. Those are not a
+    recruiter's to read at all, so they are refused rather than left open.
+    """
+    session = (
+        await db.execute(select(InterviewSession).where(InterviewSession.id == session_id))
+    ).scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="interview_session_not_found")
+    if session.interview_definition_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not_your_interview_session")
+    await _definition_owned_by(db, session.interview_definition_id, user)
+
     result = await db.execute(
         select(InterviewReport).where(InterviewReport.session_id == session_id).order_by(InterviewReport.generated_at.desc())
     )

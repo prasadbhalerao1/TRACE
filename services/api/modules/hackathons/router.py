@@ -3,11 +3,12 @@ Hackathon Controller.
 Handles Hackathon Creation, Team Ingestion (CSV, Webhook, Direct), Submissions, Judging Queue, Finalize Rankings, and Top Performers Feed.
 """
 import logging
+import secrets
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -229,7 +230,33 @@ async def receive_webhook(
     hackathon_id: uuid.UUID,
     body: dict,
     db: AsyncSession = Depends(get_db),
+    x_webhook_secret: str | None = Header(default=None),
 ) -> TeamResponse:
+    """Registers a team from an external hackathon platform.
+
+    Authenticated by a shared secret rather than `require_role`: the caller is another
+    service, not a signed-in user. This endpoint previously had no verification at all,
+    so anyone who knew (or guessed) a hackathon ID could create and overwrite teams in
+    it — `_upsert_team` matches on team name, so a request could also mutate an existing
+    team's members.
+
+    A deployment that has not set the secret gets a disabled endpoint, not an open one.
+    """
+    settings = get_settings()
+    if not settings.hackathon_webhook_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="webhook_not_configured",
+        )
+    # compare_digest, not `!=`: the comparison is against attacker-supplied input, and a
+    # short-circuiting compare leaks the secret one byte at a time.
+    if not x_webhook_secret or not secrets.compare_digest(
+        x_webhook_secret, settings.hackathon_webhook_secret
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_webhook_secret"
+        )
+
     await _get_hackathon_or_404(db, hackathon_id)
     try:
         team_input = await normalize_webhook_payload(body)
@@ -249,8 +276,85 @@ async def submit_direct(
     user: User = Depends(require_role("candidate")),
     db: AsyncSession = Depends(get_db),
 ) -> HackathonTeam:
+    """Candidate-facing in-platform team submission (FR-7c).
+
+    `_upsert_team` matches on team *name* and rebuilds the roster from the payload, so
+    posting an existing team's name overwrites that team: its members are deleted and
+    replaced, and its repo/deck are repointed. Unauthenticated callers already have to
+    clear a shared secret for the same primitive on the webhook route; this path is
+    authenticated but was not checked at all, so any candidate could take over any team
+    in any hackathon by guessing its name.
+
+    Two rules make the takeover impossible while leaving normal use unchanged:
+
+    - A candidate may only create a team, or update one they are already a member of.
+      First submission wins the name; everyone else is refused rather than silently
+      overwriting.
+    - `judge_score` is stripped. It exists on the shared input shape because the
+      organizer CSV and platform webhook may carry a score already, but a candidate
+      scoring their own submission is self-evidently not allowed. The join form omits
+      the field by convention — this is what enforces it.
+    """
     await _get_hackathon_or_404(db, hackathon_id)
-    team, _ = await _upsert_team(db, hackathon_id, body)
+
+    profile = (
+        await db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id))
+    ).scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="candidate_profile_required"
+        )
+
+    existing = (
+        await db.execute(
+            select(HackathonTeam).where(
+                HackathonTeam.hackathon_id == hackathon_id,
+                HackathonTeam.team_name == body.team_name,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        is_member = (
+            await db.execute(
+                select(HackathonTeamMember.id).where(
+                    HackathonTeamMember.team_id == existing.id,
+                    HackathonTeamMember.candidate_id == profile.id,
+                )
+            )
+        ).first() is not None
+        if not is_member:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="team_name_taken"
+            )
+
+    team, _ = await _upsert_team(
+        db, hackathon_id, body.model_copy(update={"judge_score": None})
+    )
+
+    # The submitter is always on the roster they just posted. `_upsert_team` resolves
+    # members by GitHub username, so a candidate who has not connected GitHub (or who
+    # left themselves out of the member list) would otherwise create a team they are not
+    # a member of — and would then be locked out of their own next submission by the
+    # membership check above.
+    already_listed = (
+        await db.execute(
+            select(HackathonTeamMember.id).where(
+                HackathonTeamMember.team_id == team.id,
+                HackathonTeamMember.candidate_id == profile.id,
+            )
+        )
+    ).first() is not None
+    if not already_listed:
+        db.add(
+            HackathonTeamMember(
+                team_id=team.id,
+                candidate_id=profile.id,
+                github_username=profile.github_username,
+                display_name=user.full_name,
+                role="member",
+            )
+        )
+
     await db.commit()
     await db.refresh(team)
     return team

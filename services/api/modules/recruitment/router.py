@@ -74,6 +74,19 @@ def _estimate_experience_years(experience: list[dict] | None) -> float:
 _CANDIDATE_POOL_CACHE_TTL_SECONDS = 30
 _candidate_pool_cache: tuple[float, list[dict]] | None = None
 
+# Ceiling on how many candidates one matching/Copilot run considers. The scans below are
+# unfiltered by design — matching has to look at everyone, and there is no
+# recruiter-visibility column to narrow by — so without a bound the pool, and the four
+# result sets feeding it, grow linearly with total platform signups. Every entry is then
+# held in memory (once per uvicorn worker, since the cache is process-local) and passed
+# whole into the matching/Copilot graph as `candidate_pool`.
+#
+# Ordered by most-recently-updated profile so the cut keeps active candidates rather than
+# an arbitrary slice. Well above any realistic pool for this deployment; raise it only
+# alongside a real retrieval step (Qdrant already backs the semantic half of matching),
+# not as a way to postpone one.
+_MAX_CANDIDATE_POOL = 5_000
+
 
 async def _build_candidate_pool(db: AsyncSession, *, use_cache: bool = True) -> list[dict]:
     global _candidate_pool_cache
@@ -86,7 +99,10 @@ async def _build_candidate_pool(db: AsyncSession, *, use_cache: bool = True) -> 
     # changing who's actually eligible for matching (no recruiter-visibility opt-in
     # field exists on this model to filter by instead).
     profiles_result = await db.execute(
-        select(CandidateProfile).where(CandidateProfile.skills.is_not(None))
+        select(CandidateProfile)
+        .where(CandidateProfile.skills.is_not(None))
+        .order_by(CandidateProfile.updated_at.desc())
+        .limit(_MAX_CANDIDATE_POOL)
     )
     profiles = profiles_result.scalars().all()
     candidate_ids = [p.id for p in profiles]
@@ -157,6 +173,26 @@ async def _build_candidate_pool(db: AsyncSession, *, use_cache: bool = True) -> 
         )
     _candidate_pool_cache = (time.monotonic(), pool)
     return pool
+
+
+def _visible_jobs_clause(user: User):
+    """SQL predicate for "jobs this recruiter may see" — the list form of `_job_owned_by`.
+
+    `_job_owned_by` grants access on org membership *or* direct authorship, but the three
+    list/aggregate call sites each rebuilt the rule inline and two of them filtered on
+    `posted_by_user_id` alone. A recruiter in an organization therefore saw an org-mate's
+    job in `GET /jobs` (which did branch on org) while `GET /applications` returned no
+    applicants for it and the analytics endpoints silently excluded it from the funnel,
+    time-to-hire and source breakdown — the same job visible or invisible depending on
+    which endpoint asked. Fetching it by id worked, because that path went through
+    `_job_owned_by`.
+
+    One definition, used everywhere, so the single-row check and the list query cannot
+    drift apart again.
+    """
+    if user.organization_id:
+        return Job.organization_id == user.organization_id
+    return Job.posted_by_user_id == user.id
 
 
 async def _job_owned_by(db: AsyncSession, job_id: uuid.UUID, user: User) -> Job:
@@ -385,14 +421,9 @@ async def list_jobs(
     user: User = Depends(require_role("recruiter")),
     db: AsyncSession = Depends(get_db),
 ) -> list[Job]:
-    if user.organization_id:
-        result = await db.execute(
-            select(Job).where(Job.organization_id == user.organization_id).order_by(Job.created_at.desc())
-        )
-    else:
-        result = await db.execute(
-            select(Job).where(Job.posted_by_user_id == user.id).order_by(Job.created_at.desc())
-        )
+    result = await db.execute(
+        select(Job).where(_visible_jobs_clause(user)).order_by(Job.created_at.desc())
+    )
     return list(result.scalars().all())
 
 
@@ -577,7 +608,7 @@ async def list_applications(
         await _job_owned_by(db, job_id, user)
         query = query.where(Application.job_id == job_id)
     else:
-        my_jobs = await db.execute(select(Job.id).where(Job.posted_by_user_id == user.id))
+        my_jobs = await db.execute(select(Job.id).where(_visible_jobs_clause(user)))
         query = query.where(Application.job_id.in_([row[0] for row in my_jobs.all()]))
     if stage is not None:
         if stage not in router_stage_values:
@@ -756,7 +787,7 @@ async def _recruiter_job_ids(db: AsyncSession, user: User, job_id: uuid.UUID | N
     if job_id is not None:
         await _job_owned_by(db, job_id, user)
         return [job_id]
-    result = await db.execute(select(Job.id).where(Job.posted_by_user_id == user.id))
+    result = await db.execute(select(Job.id).where(_visible_jobs_clause(user)))
     return [row[0] for row in result.all()]
 
 

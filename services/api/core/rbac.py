@@ -55,6 +55,14 @@ async def get_auth_context(
 async def get_current_user(ctx: AuthContext = Depends(get_auth_context)) -> User:
     if ctx.user is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="onboarding_required")
+    # Deactivation has to be enforced here, not only at login. Tokens are valid for
+    # `jwt_expiry_seconds` (7 days) and are never consulted against the database
+    # afterwards, so checking `is_active` only in the login handler meant deactivating an
+    # account revoked nothing: the user kept full access with their existing token until
+    # it expired on its own. Because every protected route resolves through this
+    # dependency, one check covers all of them.
+    if not ctx.user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account_disabled")
     return ctx.user
 
 

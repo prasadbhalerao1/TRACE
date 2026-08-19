@@ -105,7 +105,7 @@ async def upload_presentation(
     max_bytes = settings.presentation_max_file_size_mb * 1024 * 1024
     if len(file_bytes) > max_bytes:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"file_too_large: max {settings.presentation_max_file_size_mb}MB",
         )
 

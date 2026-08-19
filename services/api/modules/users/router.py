@@ -38,7 +38,7 @@ async def _candidate_onboarding_incomplete(db: AsyncSession, user: User) -> bool
     profile = result.scalar_one_or_none()
     if profile is None:
         return True
-    if not profile.headline or not profile.location:
+    if not profile.username or not profile.headline or not profile.location:
         return True
 
     education = profile.education or []
@@ -54,6 +54,15 @@ async def me(
     """Returns the current authenticated user profile."""
     if ctx.user is None:
         return MeResponse(onboarding_required=True)
+
+    # This route depends on `get_auth_context` rather than `get_current_user` so it can
+    # still answer for a token whose `users` row has no profile yet (that is what
+    # `onboarding_required` reports). That bypass also skips the `is_active` check
+    # `get_current_user` performs, so it is repeated here: the frontend treats a
+    # successful /me as "signed in and allowed", and without this a deactivated user
+    # kept a working session — every data route 403s, but the shell renders as normal.
+    if not ctx.user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account_disabled")
 
     # Previously this was hardcoded False whenever a `users` row existed — a state
     # signup makes unreachable, so `onboarding_required` was effectively always False
@@ -75,6 +84,9 @@ async def signup(
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Registers a new user and returns an access token."""
+    if payload.role.value == "candidate" and not (payload.username and payload.username.strip()):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing_username")
+
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="email_taken")

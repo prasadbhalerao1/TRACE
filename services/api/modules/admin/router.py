@@ -5,7 +5,7 @@ Handles Admin User Management, Role/Org Assignment, and Audit Logs.
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.db.models import AuditLog, User
@@ -36,6 +36,20 @@ async def update_user_role(
     target = await db.get(User, user_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+
+    # Demoting the last admin locks everyone out of this endpoint permanently: `admin` is
+    # not self-assignable at signup, so there is no way back in without direct database
+    # access. Refuse rather than let a single mis-click strand the deployment. Counted,
+    # not special-cased on `target.id == admin.id`, because the last admin can also be
+    # demoted by another admin who is themselves mid-demotion.
+    if target.role == "admin" and payload.role.value != "admin":
+        remaining = await db.scalar(
+            select(func.count()).select_from(User).where(User.role == "admin", User.id != target.id)
+        )
+        if not remaining:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="cannot_demote_last_admin"
+            )
 
     target.role = payload.role.value
     await log_action(

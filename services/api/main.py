@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI, Request
@@ -38,7 +39,41 @@ if settings.sentry_dsn and settings.sentry_dsn.strip().lower() not in {"", "chan
 else:
     logger.info("SENTRY_DSN not configured — Sentry error reporting disabled")
 
-app = FastAPI(title="AI Talent Platform API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown wiring.
+
+    Replaces the three `@app.on_event` handlers this used to carry. `on_event` is
+    deprecated in current FastAPI/Starlette and is slated for removal, so the app would
+    eventually have started without its event consumer, without a warm embedder, and
+    without ever closing the queue's Redis pool — silently, since a removed decorator
+    does not error, it just never fires.
+
+    Both startup tasks are deliberately fire-and-forget: neither may delay the app
+    becoming ready, and both already handle their own failures.
+    """
+    # Fixed-interval polling background task — see services/api/core/event_consumer.py's
+    # module docstring and .agents/decisions.md's 2026-07-30 entry for why a plain
+    # asyncio loop was chosen over adding a Celery/Arq dependency for this one job.
+    consumer_task = asyncio.create_task(run_polling_loop())
+    # Pre-load the sentence-transformer model so the first career-guidance request
+    # doesn't timeout waiting for model download/initialization (can take 30+ seconds
+    # depending on network speed). Loaded lazily in background; subsequent requests
+    # benefit from the cached model without blocking startup.
+    embedder_task = asyncio.create_task(_load_embedder_async())
+
+    yield
+
+    consumer_task.cancel()
+    embedder_task.cancel()
+    # Releases the arq/Redis connection pool opened lazily by services/api/core/queue.py.
+    from services.api.core.queue import close_queue_pool
+
+    await close_queue_pool()
+
+
+app = FastAPI(title="AI Talent Platform API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -99,23 +134,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-@app.on_event("startup")
-async def _start_event_consumer() -> None:
-    # Fixed-interval polling background task — see services/api/core/event_consumer.py's
-    # module docstring and .agents/decisions.md's 2026-07-30 entry for why a plain
-    # asyncio loop was chosen over adding a Celery/Arq dependency for this one job.
-    asyncio.create_task(run_polling_loop())
-
-
-@app.on_event("startup")
-async def _warm_embedder() -> None:
-    # Pre-load the sentence-transformer model so the first career-guidance request
-    # doesn't timeout waiting for model download/initialization (can take 30+ seconds
-    # depending on network speed). Loaded lazily in background; subsequent requests
-    # benefit from the cached model without blocking startup.
-    asyncio.create_task(_load_embedder_async())
-
-
 async def _load_embedder_async() -> None:
     try:
         from services.agents.recruitment.tools.embeddings import get_embedder
@@ -128,14 +146,6 @@ async def _load_embedder_async() -> None:
         logger.info("Embedder model pre-loaded successfully")
     except Exception as exc:
         logger.warning("Failed to pre-load embedder model: %s", exc)
-
-
-@app.on_event("shutdown")
-async def _close_queue_pool() -> None:
-    # Releases the arq/Redis connection pool opened lazily by services/api/core/queue.py.
-    from services.api.core.queue import close_queue_pool
-
-    await close_queue_pool()
 
 
 @app.get("/health")

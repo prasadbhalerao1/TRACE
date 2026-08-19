@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiry_seconds: int = 604800
 
+    # Shared secret for POST /hackathons/{id}/webhook, which registers teams from an
+    # external platform (Devfolio/Unstop) and so cannot authenticate as a user. Callers
+    # present it as `X-Webhook-Secret`. Empty means the endpoint is disabled: it performs
+    # unauthenticated writes, so defaulting to open would silently expose every
+    # deployment that has not configured it.
+    hackathon_webhook_secret: str = ""
+
     # Module 1 (Candidate Intelligence) & Multi-Provider LLM Gateway — see doc/SRS/01 §9.
     llm_provider: str = "anthropic"  # "anthropic" | "openai" | "grok" | "gemini" | "openai_compatible"
     anthropic_api_key: str = ""
@@ -59,6 +66,15 @@ class Settings(BaseSettings):
     # FR-4.4 salary regression — see tools/train_salary_model.py for how this artifact
     # gets produced (offline, from a downloaded Stack Overflow Developer Survey CSV).
     salary_model_path: str = "data/models/salary_regressor.joblib"
+
+    # Candidate ingestion uploads (POST /candidates/me/ingest/resume, .../certificate).
+    # Both routes used to call `await file.read()` with no ceiling and no type check,
+    # then hand the bytes straight to pdfplumber/python-docx/Tesseract. An oversized or
+    # wrong-typed upload was therefore read fully into memory, copied again into the
+    # queue payload, and only rejected (if at all) deep inside a parser. The deck route
+    # next door has enforced both since it was written — this is the same guard.
+    resume_max_file_size_mb: int = 10
+    certificate_max_file_size_mb: int = 10
 
     # Module 4 (PPT Analyzer) — see doc/SRS/04 §9.
     presentation_max_file_size_mb: int = 50
