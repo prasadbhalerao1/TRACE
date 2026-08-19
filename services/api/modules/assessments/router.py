@@ -57,6 +57,7 @@ from services.agents.assessment.tools.llm_review import AssessmentUnavailable
 from services.agents.assessment.tools.interview_llm import generate_definition_questions
 from services.agents.assessment.verification_graph import get_verification_graph
 from services.api.core.config import get_settings
+from services.api.common.constants import truncate_error
 from services.api.core.db import async_session, get_db, without_db_connection
 from services.api.core.queue import TASK_GRADE_SUBMISSION, enqueue
 from services.api.core.rbac import require_role
@@ -314,11 +315,11 @@ async def _grade_submission_background(
             )
         except AssessmentUnavailable as exc:
             submission.grading_status = "failed"
-            submission.grading_error = str(exc)[:2000]
+            submission.grading_error = truncate_error(exc)
         except Exception as exc:  # noqa: BLE001 - surfaced via grading_error, never crashes the worker
             logger.exception("grading failed for submission %s", submission_id)
             submission.grading_status = "failed"
-            submission.grading_error = str(exc)[:2000]
+            submission.grading_error = truncate_error(exc)
 
         await db.commit()
 
@@ -576,6 +577,23 @@ async def start_interview(
         }
     else:
         topic_plan = body.topic_plan or _default_topic_plan(profile)
+
+    # Worst-case interview length is 2 x len(topic_plan) turns (one answer plus at most one
+    # follow-up per topic), and every turn costs two serial judgment-tier LLM calls. The
+    # plan is caller-supplied and was accepted at any length, so a 10,000-element list
+    # bought a 20,000-turn interview against the provider account. Truncating rather than
+    # rejecting keeps a legitimate over-long plan usable.
+    max_topics = get_settings().interview_max_topics
+    if len(topic_plan) > max_topics:
+        logger.warning(
+            "Interview topic plan of %d truncated to %d for candidate %s",
+            len(topic_plan), max_topics, profile.id,
+        )
+        topic_plan = topic_plan[:max_topics]
+    if not topic_plan:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="empty_topic_plan"
+        )
 
     session = InterviewSession(
         candidate_id=profile.id,

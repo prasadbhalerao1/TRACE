@@ -18,6 +18,7 @@ from github import Github
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.api.common.constants import truncate_error
 from services.api.core.db import async_session
 
 from packages.db.models import (
@@ -92,8 +93,8 @@ from services.api.core.rbac import require_role
 from services.api.core.storage import StorageUnavailable, upload_file
 from services.api.core.tracing import start_agent_trace
 
-_CAREER_RECOMMENDATION_TTL = timedelta(hours=24)
-_GITHUB_OAUTH_STATE_TTL_SECONDS = 600
+_CAREER_RECOMMENDATION_TTL = timedelta(hours=get_settings().career_recommendation_ttl_hours)
+_GITHUB_OAUTH_STATE_TTL_SECONDS = get_settings().github_oauth_state_ttl_seconds
 # state -> (user_id, expires_at, return_path_key). The return key rides along in this
 # same entry rather than a parallel dict so it is discarded by the same `.pop()` that
 # consumes the state — a second map would leak an entry for every OAuth flow a user
@@ -101,16 +102,16 @@ _GITHUB_OAUTH_STATE_TTL_SECONDS = 600
 _oauth_state_cache: dict[str, tuple[str, float, str]] = {}
 # Third-party stats (GitHub calendar, LeetCode) are cached, not fetched live per view —
 # this bounds how often a candidate can force a re-fetch of LeetCode's unofficial API.
-_STATS_REFRESH_COOLDOWN = timedelta(minutes=15)
+_STATS_REFRESH_COOLDOWN = timedelta(minutes=get_settings().stats_refresh_cooldown_minutes)
 
 # Caps on the two unbounded collections in the dashboard payload. Both were returned in
 # full: every non-fork repo, and the entire append-only TalentScore history. The dashboard
 # cannot render until the whole response arrives, so payload size is felt directly as
 # time-to-first-paint.
-_MAX_DASHBOARD_PROJECTS = 50
+_MAX_DASHBOARD_PROJECTS = get_settings().max_dashboard_projects
 # The score chart plots a trend; older points are compressed to invisibility long before
 # this. `latest_score` is selected separately, so trimming history never affects it.
-_MAX_SCORE_HISTORY = 30
+_MAX_SCORE_HISTORY = get_settings().max_score_history
 
 logger = logging.getLogger(__name__)
 
@@ -563,7 +564,7 @@ async def _run_ingestion_background(
         except Exception as exc:  # noqa: BLE001 - surfaced via ingestion_error, never crashes the worker
             logger.exception("Background ingestion failed for candidate %s", profile_id)
             profile.ingestion_status = "failed"
-            profile.ingestion_error = str(exc)[:2000]
+            profile.ingestion_error = truncate_error(exc)
             profile.ingestion_stage = None
             await bg_db.commit()
             return
@@ -757,7 +758,7 @@ async def github_oauth_callback(
     user_id = cached[0]
     return_path = _oauth_return_path(cached[2])
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=get_settings().oauth_exchange_timeout_seconds) as client:
         token_response = await client.post(
             "https://github.com/login/oauth/access_token",
             data={

@@ -18,8 +18,9 @@ from langgraph.graph import END, START, StateGraph
 
 from services.agents.candidate_intelligence.document_state import DocumentBuilderState
 from services.agents.candidate_intelligence.nodes import document_generator, fact_check
+from services.api.core.config import get_settings
 
-MAX_ATTEMPTS = 2
+MAX_ATTEMPTS = get_settings().document_generation_max_attempts
 
 
 def _route_after_generation(state: DocumentBuilderState) -> str:

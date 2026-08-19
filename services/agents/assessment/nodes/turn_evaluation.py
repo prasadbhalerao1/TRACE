@@ -8,8 +8,10 @@ a genuinely evasive candidate can't stall the interview indefinitely on one topi
 
 from services.agents.assessment.state import InterviewState
 from services.agents.assessment.tools.interview_llm import evaluate_turn
+from services.api.core.llm import validated_score
+from services.api.core.config import get_settings
 
-_MAX_FOLLOWUPS_PER_TOPIC = 1
+_MAX_FOLLOWUPS_PER_TOPIC = get_settings().max_followups_per_topic
 
 
 async def run(state: InterviewState) -> dict:
@@ -47,7 +49,7 @@ async def run(state: InterviewState) -> dict:
         }
 
     # Topic is done (sufficient, or follow-up budget exhausted) — record its score and advance.
-    per_topic_scores[topic] = evaluation["score"]
+    per_topic_scores[topic] = validated_score(evaluation.get("score"))
     next_idx = current_idx + 1
     completed = next_idx >= len(state["topic_plan"])
     return {

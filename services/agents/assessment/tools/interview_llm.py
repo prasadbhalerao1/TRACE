@@ -8,6 +8,7 @@ import json
 
 from services.agents.assessment.tools.llm_review import AssessmentUnavailable
 from services.api.core.llm import generate_structured
+from services.api.core.config import get_settings
 
 __all__ = ["AssessmentUnavailable", "generate_question", "evaluate_turn", "generate_followup", "generate_interview_report", "generate_definition_questions"]
 
@@ -91,10 +92,10 @@ _REPORT_PARAMETERS = {
 # Sending the whole transcript made cost quadratic in interview length: turn N re-sent
 # every prior turn, so a 20-turn interview paid for ~210 turn-renderings instead of 20.
 # Long answers made it worse, since each one was resent on every subsequent question.
-_MAX_VERBATIM_TURNS = 6
+_MAX_VERBATIM_TURNS = get_settings().interview_max_verbatim_turns
 # Truncation ceiling for a single answer. A candidate pasting a large block (a stack
 # trace, a whole file) would otherwise blow up every later prompt that includes it.
-_MAX_TURN_CHARS = 1200
+_MAX_TURN_CHARS = get_settings().interview_max_turn_chars
 
 
 def _render_history(transcript: list[dict]) -> str:
@@ -259,10 +260,35 @@ async def generate_definition_questions(
     return topics[:question_count]
 
 
+def _render_report_history(transcript: list[dict]) -> str:
+    """Render the full transcript for the report, with each turn length-capped.
+
+    Unlike `_render_history`, which drops older turns because the next *question* only
+    needs recent context, the report summarizes the whole interview — so every turn is
+    kept. What is bounded is per-turn length: one pasted file must not crowd out the
+    other nineteen answers."""
+    if not transcript:
+        return "(no transcript recorded)"
+
+    lines = []
+    for turn in transcript:
+        text = (turn.get("text") or "").strip()
+        if len(text) > _MAX_TURN_CHARS:
+            text = text[:_MAX_TURN_CHARS] + f"... [truncated, {len(text)} chars total]"
+        lines.append(f"{turn.get('role', 'unknown')}: {text}")
+    return chr(10).join(lines)
+
+
 async def generate_interview_report(transcript: list[dict], per_topic_scores: dict[str, float]) -> dict:
     from services.agents.prompts_loader import load_prompt
 
-    history = "\n".join(f"{t['role']}: {t['text']}" for t in transcript)
+    # Bounded via `_render_report_history` rather than joining the raw transcript. The
+    # per-turn path has always truncated (see `_render_history` above), but this call
+    # concatenated every turn verbatim — so a long interview, or one where a candidate
+    # pasted a stack trace, sent an unbounded prompt into a fixed `max_tokens` call and
+    # could exceed the context window outright. The report needs the whole interview, so
+    # this bounds per-turn length rather than dropping turns.
+    history = _render_report_history(transcript)
     prompt = load_prompt(
         "assessment",
         "interview_report",
@@ -274,6 +300,6 @@ async def generate_interview_report(transcript: list[dict], per_topic_scores: di
         schema_description="Final interview report synthesized from the full transcript.",
         parameters=_REPORT_PARAMETERS,
         prompt=prompt,
-        max_tokens=1024,
+        max_tokens=get_settings().llm_max_tokens_default,
         agent_name="assessment.interview.report",
     )

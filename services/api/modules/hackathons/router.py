@@ -53,6 +53,7 @@ from services.agents.hackathon.graph import get_hackathon_ranking_graph
 from services.agents.hackathon.state import HackathonRankingState
 from services.agents.hackathon.tools.normalization import NormalizationUnavailable, normalize_webhook_payload
 from services.api.core.config import get_settings
+from services.api.common.constants import truncate_error
 from services.api.core.db import async_session, get_db
 from services.api.core.queue import TASK_FINALIZE_RANKINGS, enqueue
 from services.api.core.event_consumer import get_matching_top_performers_for_recruiter
@@ -655,7 +656,7 @@ async def _run_finalization_background(hackathon_id: uuid.UUID, user_id: uuid.UU
             if hackathon is None:
                 return
             hackathon.ranking_status = "failed"
-            hackathon.ranking_error = str(exc)[:2000]
+            hackathon.ranking_error = truncate_error(exc)
         await db.commit()
 
 

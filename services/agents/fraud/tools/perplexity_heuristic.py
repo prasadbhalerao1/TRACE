@@ -10,6 +10,7 @@ aggregation across sections (a resume's summary/experience bullets, vs. a deck's
 differs, since the input shape differs (free text sections vs. slide dicts)."""
 
 from services.agents.ppt_analyzer.tools.ai_content_heuristic import _slide_ai_likelihood
+from services.api.common.constants import AI_CONTENT_FLAG_THRESHOLD
 
 
 def compute_ai_content_signal(sections: list[str]) -> dict:
@@ -31,7 +32,7 @@ def compute_ai_content_signal(sections: list[str]) -> dict:
         }
 
     avg_score = round(sum(s for _, s in per_section) / len(per_section), 1)
-    flagged = [f"section_{i}" for i, s in per_section if s >= 70.0]
+    flagged = [f"section_{i}" for i, s in per_section if s >= AI_CONTENT_FLAG_THRESHOLD]
     confidence_label = "medium" if len(per_section) >= 3 else "low"
 
     return {

@@ -20,18 +20,22 @@ completes, exactly like every other cross-module write in this codebase.
 """
 
 import asyncio
+import logging
 
 from services.agents.assessment.state import VerificationState
 from services.agents.assessment.tools.llm_review import AssessmentUnavailable
 from services.agents.assessment.verification_graph import get_verification_graph
 from services.agents.hackathon.state import HackathonRankingState
 from services.api.modules.assessments.router import _fetch_repo_sample_source
+from services.api.core.config import get_settings
 
 
 # Cap on simultaneous repo verifications. Each one is a GitHub API fetch plus an LLM
 # review, so this bounds pressure on both the GitHub rate limit and the LLM provider's
 # concurrency limit while still overlapping the network waits that dominate the work.
-_MAX_CONCURRENT_REPO_SCORES = 5
+logger = logging.getLogger(__name__)
+
+_MAX_CONCURRENT_REPO_SCORES = get_settings().agent_max_concurrency
 _semaphore = asyncio.Semaphore(_MAX_CONCURRENT_REPO_SCORES)
 
 
@@ -93,6 +97,21 @@ async def run(state: HackathonRankingState) -> dict:
                 # LLM code review couldn't (e.g. missing ANTHROPIC_API_KEY) — degrade to
                 # None, never fabricate a repo quality number, same pattern every other
                 # module uses.
+                return team_id, None
+            except Exception:  # noqa: BLE001 - one bad repo must not fail the whole event
+                # Only AssessmentUnavailable was caught before, so anything else — a
+                # deleted or private repository, a GitHub rate limit, a malformed URL —
+                # propagated out of `asyncio.gather` and failed finalization for EVERY
+                # team, not just this one. A 30-team hackathon could not be finalized
+                # because one team pasted a bad link.
+                #
+                # The team degrades to a null repo score, which `compute_composite_score`
+                # renormalizes away, so they are ranked on their remaining components
+                # rather than penalized for our failure to read their repository.
+                logger.warning(
+                    "Repo verification failed for team %s (%s) — scoring without it",
+                    team_id, repo_url, exc_info=True,
+                )
                 return team_id, None
 
     # Each team's verification is an independent GitHub fetch + static analysis + LLM

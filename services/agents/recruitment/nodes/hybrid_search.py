@@ -12,6 +12,7 @@ candidates, which is what keeps the downstream Sonnet re-rank cost-bounded (doc 
 import asyncio
 
 from services.agents.recruitment.state import CopilotState
+from services.api.core.config import get_settings
 from services.agents.recruitment.tools.embeddings import (
     SKILL_SIMILARITY_THRESHOLD,
     candidate_skill_centroid,
@@ -20,7 +21,7 @@ from services.agents.recruitment.tools.embeddings import (
     embed_texts,
 )
 
-_SHORTLIST_LIMIT = 50
+_SHORTLIST_LIMIT = get_settings().recruitment_shortlist_limit
 
 
 def _skill_matches(

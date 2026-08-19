@@ -12,6 +12,7 @@ text, which is the specific "same person, reworded slightly" pattern this check 
 import re
 
 from datasketch import MinHash
+from services.api.core.config import get_settings
 
 _WORD_RE = re.compile(r"[A-Za-z0-9']+")
 _NUM_PERM = 128
@@ -37,7 +38,7 @@ def compute_minhash(text: str) -> MinHash | None:
 
 # Tunable default — near-duplicate text (same person, lightly reworded profile) tends to
 # land well above generic "both candidates are backend engineers" boilerplate overlap.
-SIMILARITY_FLAG_THRESHOLD = 0.80
+SIMILARITY_FLAG_THRESHOLD = get_settings().text_fingerprint_similarity_threshold
 
 
 def find_similar_profiles(text: str, corpus: list[tuple[str, str]]) -> list[dict]:

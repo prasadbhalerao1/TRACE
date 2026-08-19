@@ -16,7 +16,7 @@ skill with no entry here just falls back to its bare name (still better than not
 per `embeddings.py::skill_description_or_name`).
 """
 
-SKILL_DESCRIPTIONS: dict[str, str] = {
+SKILL_DESCRIPTIONS_SEED: dict[str, str] = {
     "react": "React: a JavaScript library for building user interfaces with reusable components",
     "vue.js": "Vue.js: a progressive JavaScript frontend framework for building user interfaces, similar in purpose to React and Angular",
     "vue": "Vue.js: a progressive JavaScript frontend framework for building user interfaces, similar in purpose to React and Angular",
@@ -63,4 +63,14 @@ def describe_skill(skill_name: str) -> str:
     """Returns the curated description for a skill, or the bare name if uncatalogued —
     an unrecognized skill still gets compared, just with less semantic signal, rather
     than being dropped or erroring."""
-    return SKILL_DESCRIPTIONS.get(skill_name.strip().lower(), skill_name)
+    # Resolved from the `skill_descriptions` table (via catalogs.py's cache), falling
+    # back to the seed below when the database is unreachable. Unknown skills return
+    # their own name, which is a usable — if less semantically rich — embedding input.
+    from services.agents.catalogs import skill_descriptions
+
+    return skill_descriptions().get(skill_name.strip().lower(), skill_name)
+
+
+# Backwards-compatible alias: the seed is the fallback, not the source of truth. Prefer
+# `skill_text()` above, which reads the database.
+SKILL_DESCRIPTIONS = SKILL_DESCRIPTIONS_SEED

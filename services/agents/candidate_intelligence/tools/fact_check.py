@@ -66,5 +66,10 @@ async def fact_check_claims(
         agent_name="candidate_intelligence.fact_check",
     )
     findings = result.get("findings", [])
-    status = "passed" if all(f.get("supported") for f in findings) else "failed"
+    # `all([])` is True, so a model returning `{"findings": []}` — schema-valid, and a
+    # plausible response to a short document — marked the document VERIFIED with zero
+    # claims actually checked. Since a passing fact-check is what releases the document
+    # to the candidate, an empty result must fail: nothing was checked, so nothing is
+    # confirmed. The prompt states this explicitly too, but the guarantee belongs here.
+    status = "passed" if findings and all(f.get("supported") for f in findings) else "failed"
     return status, findings

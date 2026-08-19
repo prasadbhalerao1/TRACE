@@ -15,6 +15,7 @@ not treated as sufficient on its own.
 
 import json
 
+from services.agents.prompts_loader import load_prompt
 from services.api.core.llm import LLMUnavailable, generate_structured
 
 _GROUNDING_RULE = (
@@ -104,12 +105,11 @@ async def generate_resume_content(merged_profile: dict, target_job_description: 
         if target_job_description
         else ""
     )
-    prompt = (
-        f"{_GROUNDING_RULE}\n\n"
-        f"CANDIDATE PROFILE JSON:\n{json.dumps(merged_profile, default=str)}"
-        f"{jd_instruction}\n\n"
-        "Generate ATS-friendly resume content: plain structure, no tables/graphics, "
-        "standard section headings only."
+    prompt = load_prompt(
+        "candidate_intelligence",
+        "resume_content",
+        merged_profile=json.dumps(merged_profile, default=str),
+        jd_instruction=jd_instruction,
     )
     return await _call_structured(
         "generated_resume",
@@ -121,13 +121,11 @@ async def generate_resume_content(merged_profile: dict, target_job_description: 
 
 
 async def generate_cover_letter_content(merged_profile: dict, target_job_description: str) -> dict:
-    prompt = (
-        f"{_GROUNDING_RULE}\n\n"
-        f"CANDIDATE PROFILE JSON:\n{json.dumps(merged_profile, default=str)}\n\n"
-        f"TARGET JOB DESCRIPTION:\n{target_job_description}\n\n"
-        "Write a cover letter addressed to the hiring team for this role, drawing "
-        "connections between the candidate's actual experience/skills and the role's "
-        "requirements. Do not fabricate enthusiasm-driven claims not backed by the profile."
+    prompt = load_prompt(
+        "candidate_intelligence",
+        "cover_letter",
+        merged_profile=json.dumps(merged_profile, default=str),
+        target_job_description=target_job_description,
     )
     return await _call_structured(
         "generated_cover_letter",

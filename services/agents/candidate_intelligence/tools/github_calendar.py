@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
+from services.api.core.config import get_settings
 
 _GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
@@ -115,7 +116,7 @@ async def fetch_github_calendar(github_username: str, access_token: str) -> Gith
         "to": now.isoformat(),
     }
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=get_settings().github_http_timeout_seconds) as client:
         response = await client.post(
             _GITHUB_GRAPHQL_URL,
             json={"query": _CONTRIBUTIONS_QUERY, "variables": variables},

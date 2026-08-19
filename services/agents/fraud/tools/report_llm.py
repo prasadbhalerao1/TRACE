@@ -11,7 +11,11 @@ must have non-null evidence" — that requirement doesn't depend on this agent w
 """
 
 import json
+import logging
 
+logger = logging.getLogger(__name__)
+
+from services.api.core.config import get_settings
 from services.api.core.llm import LLMUnavailable, generate_structured
 
 _REPORT_PARAMETERS = {
@@ -41,10 +45,46 @@ _GROUNDING_RULE = (
 
 
 def _deterministic_fallback(flag_type: str, evidence_items: list[str]) -> dict:
+    """Placeholder used when no provider is reachable, explicitly marked as such.
+
+    `summary_generated=False` is the important part. This template previously landed in
+    the same `summary` field as real LLM analysis with nothing distinguishing them, so a
+    reviewer reading "Fake Certificate signal raised for review" could not tell whether it
+    was a considered judgment or a stub — in the one module where that distinction most
+    affects a person. The flag itself must still be raised (a missing narrative is not a
+    reason to drop a fraud signal), so this degrades rather than blocking, but it degrades
+    visibly.
+    """
     return {
         "summary": f"{flag_type.replace('_', ' ').title()} signal raised for review. See cited evidence.",
         "cited_evidence": evidence_items,
+        "summary_generated": False,
     }
+
+
+def _enforce_evidence_subset(result: dict, evidence_items: list[str], flag_type: str) -> dict:
+    """Drop any `cited_evidence` string that was not in the supplied evidence.
+
+    The schema description tells the model this must be a subset "never invented", but a
+    description is not a constraint and nothing checked it. An invented citation in a
+    fraud flag is a fabricated basis for an accusation against a real person, which is
+    exactly what this module's prompt spends its length forbidding — so it is enforced
+    here rather than trusted.
+
+    Invented citations are removed rather than raising: the real evidence is still worth
+    showing a reviewer, and failing the whole report would drop the flag entirely.
+    """
+    supplied = set(evidence_items)
+    cited = result.get("cited_evidence") or []
+    kept = [item for item in cited if item in supplied]
+    invented = [item for item in cited if item not in supplied]
+    if invented:
+        logger.warning(
+            "fraud.risk_report cited %d evidence string(s) not in the input for flag_type=%s; dropped: %r",
+            len(invented), flag_type, invented,
+        )
+    result["cited_evidence"] = kept
+    return result
 
 
 async def generate_fraud_risk_report(flag_type: str, evidence_items: list[str]) -> dict:
@@ -60,13 +100,17 @@ async def generate_fraud_risk_report(flag_type: str, evidence_items: list[str]) 
         evidence_json=json.dumps(evidence_items, indent=2),
     )
     try:
-        return await generate_structured(
+        result = await generate_structured(
             schema_name="fraud_risk_report",
             schema_description="A structured, evidence-linked fraud risk report for one flagged signal.",
             parameters=_REPORT_PARAMETERS,
             prompt=prompt,
-            max_tokens=500,
+            max_tokens=get_settings().llm_max_tokens_default,
             agent_name="fraud.risk_report",
         )
     except LLMUnavailable:
         return _deterministic_fallback(flag_type, evidence_items)
+
+    result = _enforce_evidence_subset(result, evidence_items, flag_type)
+    result["summary_generated"] = True
+    return result

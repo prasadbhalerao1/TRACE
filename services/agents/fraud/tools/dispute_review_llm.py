@@ -10,6 +10,7 @@ decision.
 
 import json
 
+from services.agents.prompts_loader import load_prompt
 from services.api.core.llm import LLMUnavailable, generate_structured
 
 _SUMMARY_PARAMETERS = {
@@ -47,15 +48,17 @@ DisputeReviewUnavailable = LLMUnavailable
 async def summarize_dispute_for_reviewer(original_evidence: dict, candidate_statement: str) -> dict:
     """Returns {candidate_context_summary, points_of_agreement_or_conflict}. Raises
     `DisputeReviewUnavailable` if the configured provider can't run."""
-    prompt = (
-        f"{_GROUNDING_RULE}\n\nORIGINAL EVIDENCE:\n{json.dumps(original_evidence, indent=2, default=str)}"
-        f"\n\nCANDIDATE'S DISPUTE STATEMENT:\n{candidate_statement}"
+    prompt = load_prompt(
+        "fraud",
+        "dispute_review",
+        original_evidence=json.dumps(original_evidence, indent=2, default=str),
+        candidate_statement=candidate_statement,
     )
     return await generate_structured(
         schema_name="dispute_review_summary",
         schema_description="An assistive summary for a human reviewer — NOT a decision. Never includes a recommended verdict.",
         parameters=_SUMMARY_PARAMETERS,
         prompt=prompt,
-        max_tokens=500,
+        max_tokens=get_settings().llm_max_tokens_default,
         agent_name="fraud.dispute_review",
     )

@@ -20,6 +20,7 @@ full `trusted_issuers` table into `context["trusted_issuers"]` before invoking t
 """
 
 import httpx
+from services.api.core.config import get_settings
 
 
 def resolve_issuer(
@@ -80,7 +81,7 @@ async def lookup_issuer(
         }
 
     try:
-        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=get_settings().issuer_lookup_timeout_seconds, follow_redirects=True) as client:
             response = await client.get(url)
         return {
             "resolvable": True,

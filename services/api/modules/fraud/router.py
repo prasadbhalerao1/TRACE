@@ -389,7 +389,7 @@ async def check_profile_duplicate(
     )
     subject_photo = photo_by_user.get(profile.user_id)
 
-    async with httpx.AsyncClient(timeout=8.0) as client:
+    async with httpx.AsyncClient(timeout=get_settings().photo_fetch_timeout_seconds) as client:
         if subject_photo and subject_photo.public_url:
             target_photo_hash = await _fetch_and_hash_photo(client, subject_photo.public_url)
 

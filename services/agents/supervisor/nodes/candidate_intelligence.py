@@ -25,9 +25,17 @@ async def run(state: SupervisorState, config: RunnableConfig) -> dict:
     if not candidate_id:
         return {"error": "candidate_id is required for the candidate_score intent", "result": None}
 
+    try:
+        candidate_uuid = uuid.UUID(candidate_id)
+    except (ValueError, TypeError):
+        # The guard above returns a clean {"error": ...} for a *missing* id; a malformed
+        # one raised ValueError out of the node instead. Same class of bad input, so it
+        # gets the same handling rather than a 500.
+        return {"error": f"candidate_id {candidate_id!r} is not a valid UUID", "result": None}
+
     result = await db.execute(
         select(TalentScore)
-        .where(TalentScore.candidate_id == uuid.UUID(candidate_id))
+        .where(TalentScore.candidate_id == candidate_uuid)
         .order_by(TalentScore.computed_at.desc())
         .limit(1)
     )

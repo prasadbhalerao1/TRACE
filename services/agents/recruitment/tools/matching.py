@@ -12,16 +12,21 @@ resolution style as Module 01's additive-but-undocumented schema choices.
 from dataclasses import dataclass
 
 from services.agents.common.scoring import weighted_renormalized_mean
+from services.api.core.config import get_settings
 from services.agents.recruitment.tools.embeddings import SKILL_SIMILARITY_THRESHOLD, best_skill_similarity
 
-# doc 08 §2 canonical weights — tunable defaults, sum to 1.0.
-W_SKILL_OVERLAP = 0.35
-W_SEMANTIC_SIMILARITY = 0.30
-W_EXPERIENCE_MATCH = 0.15
-W_TALENT_SCORE_ALIGNMENT = 0.20
+# doc 08 §2 canonical weights — tunable defaults, sum to 1.0. Now resolved from Settings
+# rather than frozen as literals: this module already described them as "tunable", which
+# is exactly the argument for not requiring a deploy to tune them. Module-level names are
+# kept so existing importers and tests are unaffected.
+_settings = get_settings()
+W_SKILL_OVERLAP = _settings.match_weight_skill_overlap
+W_SEMANTIC_SIMILARITY = _settings.match_weight_semantic_similarity
+W_EXPERIENCE_MATCH = _settings.match_weight_experience_match
+W_TALENT_SCORE_ALIGNMENT = _settings.match_weight_talent_score_alignment
 
 # Internal blend ratio for SemanticSimilarity = alpha*cos(v_C, v_J) + (1-alpha)*FilterMatchRatio.
-SEMANTIC_ALPHA = 0.70
+SEMANTIC_ALPHA = _settings.match_semantic_alpha
 
 
 @dataclass

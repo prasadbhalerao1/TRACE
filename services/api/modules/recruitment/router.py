@@ -53,6 +53,7 @@ from services.agents.recruitment.matching_graph import get_matching_graph
 from services.agents.recruitment.state import CopilotState, MatchingState
 from services.agents.recruitment.tools.embeddings import RecruitmentUnavailable
 from services.api.core.config import get_settings
+from services.api.common.constants import clamp_page_size, truncate_error
 from services.api.core.db import async_session, get_db, without_db_connection
 from services.api.core.queue import TASK_RUN_MATCHING, enqueue
 from services.api.core.rbac import require_role
@@ -71,7 +72,7 @@ def _estimate_experience_years(experience: list[dict] | None) -> float:
 # short in-process TTL cache (same pattern as _oauth_state_cache in candidates/router.py)
 # avoids repeating that work for back-to-back calls without adding an infra dependency;
 # each entry is small (list of dicts) and self-expires, so no eviction logic is needed.
-_CANDIDATE_POOL_CACHE_TTL_SECONDS = 30
+_CANDIDATE_POOL_CACHE_TTL_SECONDS = get_settings().candidate_pool_cache_ttl_seconds
 _candidate_pool_cache: tuple[float, list[dict]] | None = None
 
 # Ceiling on how many candidates one matching/Copilot run considers. The scans below are
@@ -85,7 +86,7 @@ _candidate_pool_cache: tuple[float, list[dict]] | None = None
 # an arbitrary slice. Well above any realistic pool for this deployment; raise it only
 # alongside a real retrieval step (Qdrant already backs the semantic half of matching),
 # not as a way to postpone one.
-_MAX_CANDIDATE_POOL = 5_000
+_MAX_CANDIDATE_POOL = get_settings().max_candidate_pool
 
 
 async def _build_candidate_pool(db: AsyncSession, *, use_cache: bool = True) -> list[dict]:
@@ -318,10 +319,10 @@ async def _run_matching_background(job_id: uuid.UUID, use_pool_cache: bool = Tru
             job.matching_error = None
         except RecruitmentUnavailable as exc:
             job.matching_status = "failed"
-            job.matching_error = str(exc)[:2000]
+            job.matching_error = truncate_error(exc)
         except Exception as exc:  # noqa: BLE001 - surfaced via matching_error, never crashes the worker
             job.matching_status = "failed"
-            job.matching_error = str(exc)[:2000]
+            job.matching_error = truncate_error(exc)
         await bg_db.commit()
 
 
@@ -438,10 +439,10 @@ async def list_open_jobs(
 
     Paginated: this returned every Job row across every organization on a page any
     candidate can open, so the payload grew with total platform history. Same
-    `max(1, min(limit, 500))` capping idiom as `get_audit_log`, so a client cannot ask
+    shared `clamp_page_size` helper as `get_audit_log`, so a client cannot ask
     for an unbounded page by passing a huge limit.
     """
-    capped_limit = max(1, min(limit, 500))
+    capped_limit = clamp_page_size(limit)
     result = await db.execute(
         select(Job).order_by(Job.created_at.desc()).limit(capped_limit).offset(max(0, offset))
     )

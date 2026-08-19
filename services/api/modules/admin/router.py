@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from packages.db.models import AuditLog, User
 from packages.shared_schemas.users import AdminUserOut, AuditLogOut, RoleUpdateRequest
 from services.api.core.audit import log_action
+from services.api.common.constants import clamp_page_size
 from services.api.core.db import get_db
 from services.api.core.rbac import require_role
 
@@ -94,7 +95,7 @@ async def get_audit_log(
     admin: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AuditLog]:
-    capped_limit = max(1, min(limit, 500))
+    capped_limit = clamp_page_size(limit)
     result = await db.execute(
         select(AuditLog).order_by(AuditLog.created_at.desc()).limit(capped_limit)
     )

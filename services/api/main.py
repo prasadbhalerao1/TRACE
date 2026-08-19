@@ -101,17 +101,78 @@ app.include_router(supervisor.router)
 app.include_router(admin.router)
 
 
-from services.api.core.llm import LLMUnavailable
+from services.api.core.llm import (
+    LLMNotConfigured,
+    LLMQuotaExhausted,
+    LLMRateLimited,
+    LLMTimeout,
+    LLMUnavailable,
+)
+
+# Maps each LLM failure to the status and code the client should act on. Everything used
+# to collapse into one 503 "AI Engine Temporarily Unavailable", which told the UI to
+# retry — wrong for three of these five: an exhausted quota and a missing API key do not
+# resolve by waiting, and retrying them burns the user's time on a guaranteed failure.
+#
+# `retryable` drives the frontend's decision to back off and retry versus surface the
+# error immediately, so it is part of the response rather than something the client
+# infers from a status code.
+_LLM_ERROR_RESPONSES: dict[type, tuple[int, str, str, bool]] = {
+    LLMQuotaExhausted: (
+        402,
+        "LLM_QUOTA_EXHAUSTED",
+        "The AI provider account is out of credit. This will not resolve on its own — "
+        "an administrator needs to top up the account.",
+        False,
+    ),
+    LLMNotConfigured: (
+        503,
+        "LLM_NOT_CONFIGURED",
+        "The AI provider is not configured on this deployment. An administrator needs to "
+        "set a valid API key.",
+        False,
+    ),
+    LLMRateLimited: (
+        429,
+        "LLM_RATE_LIMITED",
+        "The AI provider is rate limiting requests. Please try again shortly.",
+        True,
+    ),
+    LLMTimeout: (
+        504,
+        "LLM_TIMEOUT",
+        "The AI request took too long to complete. Please try again.",
+        True,
+    ),
+}
+
+_LLM_DEFAULT_RESPONSE = (
+    503,
+    "LLM_UNAVAILABLE",
+    "The AI engine is temporarily unavailable. Please try again.",
+    True,
+)
 
 
 @app.exception_handler(LLMUnavailable)
 async def llm_unavailable_handler(request: Request, exc: LLMUnavailable) -> JSONResponse:
-    logger.warning("LLM Unavailable on %s %s: %s", request.method, request.url.path, str(exc))
+    # Exact type first, then walk the MRO, so a future subclass inherits its parent's
+    # treatment rather than silently falling through to the retryable default.
+    status_code, code, message, retryable = _LLM_DEFAULT_RESPONSE
+    for cls in type(exc).__mro__:
+        if cls in _LLM_ERROR_RESPONSES:
+            status_code, code, message, retryable = _LLM_ERROR_RESPONSES[cls]
+            break
+
+    log = logger.error if not retryable else logger.warning
+    log("LLM %s on %s %s: %s", code, request.method, request.url.path, str(exc))
+
     return JSONResponse(
-        status_code=503,
+        status_code=status_code,
         content={
-            "detail": f"AI Engine Temporarily Unavailable: {str(exc)}",
-            "code": "LLM_UNAVAILABLE",
+            "detail": message,
+            "code": code,
+            "retryable": retryable,
         },
     )
 

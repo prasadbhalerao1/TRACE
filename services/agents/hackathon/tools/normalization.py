@@ -16,6 +16,7 @@ import json
 from typing import Any
 
 from packages.shared_schemas.hackathon import TeamMemberInput, TeamSubmissionInput
+from services.agents.prompts_loader import load_prompt
 from services.api.core.llm import LLMUnavailable, generate_structured
 
 _TEAM_NAME_KEYS = {"team_name", "team", "teamname", "project_team", "squad"}
@@ -85,12 +86,8 @@ def _rule_based_normalize(raw: dict[str, Any]) -> TeamSubmissionInput | None:
 
 
 async def _haiku_fallback_normalize(raw: dict[str, Any]) -> TeamSubmissionInput:
-    prompt = (
-        "You are the Normalization Agent for a hackathon-hosting platform ingesting a "
-        "webhook push from an external hackathon platform (e.g. Devpost, Devfolio). Map "
-        "the raw JSON payload below onto the fixed schema. Only extract what's actually "
-        "present — never invent a team name or member that isn't in the payload.\n\n"
-        f"RAW PAYLOAD:\n{json.dumps(raw, default=str)}"
+    prompt = load_prompt(
+        "hackathon", "normalize_submission", raw_payload=json.dumps(raw, default=str)
     )
     data = await generate_structured(
         schema_name="normalized_submission",

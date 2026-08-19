@@ -30,8 +30,22 @@ from services.agents.supervisor.nodes import candidate_intelligence, classify_in
 from services.agents.supervisor.state import SupervisorState
 
 
+# The only two branches the conditional edge map below knows about. An intent outside
+# this set reaches LangGraph as an unmapped key and raises at dispatch time rather than
+# degrading. The classifier's JSON schema constrains the value, but schema enforcement
+# varies by provider (this gateway also serves Groq/Gemini/Ollama through the
+# OpenAI-compatible path), so the guard is real rather than theoretical.
+_ROUTABLE_INTENTS = ("candidate_score", "job_match")
+
+
 def _route(state: SupervisorState) -> str:
-    return state.get("intent") or "candidate_score"
+    intent = state.get("intent")
+    if intent not in _ROUTABLE_INTENTS:
+        # `or "candidate_score"` only covered None and empty string, not an unexpected
+        # non-empty value. Fall back to the narrower read-only branch for anything
+        # unrecognized, matching the classifier prompt's own tie-break rule.
+        return "candidate_score"
+    return intent
 
 
 def build_graph():

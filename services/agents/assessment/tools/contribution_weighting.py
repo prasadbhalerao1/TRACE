@@ -31,6 +31,15 @@ _ZERO_CONTRIBUTION_NOTE = (
     "flagged for human review, not an automatic penalty."
 )
 
+# A zero caused by a failed GitHub lookup must never be reported with the note above.
+# That note is a finding about a person; a rate-limit blip is a fact about our data
+# collection, and conflating the two turned a transient API error into a human-facing
+# claim that a real team member contributed nothing.
+_INCOMPLETE_DATA_NOTE = (
+    "GitHub data for this member could not be fully retrieved (API error or rate limit), "
+    "so their contribution could not be measured. This is not a finding about their work."
+)
+
 
 def _scale(value: int, team_max: int) -> float:
     if team_max <= 0:
@@ -62,6 +71,14 @@ def compute_shares(stats_by_username: dict[str, MemberCommitStats]) -> dict[str,
     for username, s in stats_by_username.items():
         share = (weighted[username] / total) if total > 0 else 0.0
         is_zero = s.commits == 0 and s.prs_opened == 0 and s.prs_reviewed == 0
+        incomplete = getattr(s, "data_incomplete", False)
+        if incomplete:
+            anomaly_note = _INCOMPLETE_DATA_NOTE
+        elif is_zero:
+            anomaly_note = _ZERO_CONTRIBUTION_NOTE
+        else:
+            anomaly_note = None
+
         results[username] = {
             "share": round(share, 4),
             "raw": {
@@ -70,6 +87,7 @@ def compute_shares(stats_by_username: dict[str, MemberCommitStats]) -> dict[str,
                 "prs_opened": s.prs_opened,
                 "prs_reviewed": s.prs_reviewed,
             },
-            "anomaly_note": _ZERO_CONTRIBUTION_NOTE if is_zero else None,
+            "data_incomplete": incomplete,
+            "anomaly_note": anomaly_note,
         }
     return results

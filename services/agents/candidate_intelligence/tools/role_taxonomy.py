@@ -5,13 +5,18 @@ philosophy as the course catalog in doc 01 §8) rather than pulled from any live
 board API. Each role maps to `(skill_name, weight)` pairs; weight (0-1) is how
 important that skill is to the role, used to break ties when ranking gaps.
 
-Extend this dict to add roles — `skill_gap.py` seeds Qdrant from it idempotently, so
-adding a role/skill here and restarting is enough; no migration needed since this isn't
-persisted relationally (it lives in the `skill_taxonomy_embeddings` Qdrant collection,
-per doc 01 §7's "Qdrant collections" note).
+The authoritative copy now lives in the `role_skill_requirements` table — adding a role
+is a DB insert, not a code change and redeploy, which is what the "curated catalog"
+philosophy above always implied but this module could not deliver while it was a dict
+literal. `skill_gap.py` still seeds Qdrant from whatever this resolves to, idempotently.
+
+The literal below is the SEED: it is what `scripts/seed_db.py` inserts on a fresh
+database, and what `services/agents/catalogs.py` falls back to if the database is
+unreachable or the catalog migration has not been applied yet. Read the catalog through
+`ROLE_SKILL_TAXONOMY` (below), never through the seed directly.
 """
 
-ROLE_SKILL_TAXONOMY: dict[str, list[tuple[str, float]]] = {
+ROLE_SKILL_TAXONOMY_SEED: dict[str, list[tuple[str, float]]] = {
     "Backend Engineer": [
         ("python", 0.9),
         ("sql", 0.9),
@@ -133,3 +138,27 @@ ROLE_SKILL_TAXONOMY: dict[str, list[tuple[str, float]]] = {
         ("compliance", 0.5),
     ],
 }
+
+
+class _RoleSkillTaxonomy(dict):
+    """Mapping view that resolves from the database on each construction.
+
+    Subclasses `dict` so every existing consumer keeps working untouched — this catalog
+    is indexed, iterated, `in`-tested, passed to `sorted()` and used as a `max()` key
+    across `skill_gap.py` and `candidates/router.py`. Rebuilding on access (behind
+    `catalogs.py`'s TTL cache, so a rebuild is a dict copy rather than a query) means an
+    admin edit takes effect without a restart.
+    """
+
+    def __init__(self) -> None:
+        from services.agents.catalogs import role_skill_taxonomy
+
+        super().__init__(role_skill_taxonomy())
+
+
+def get_role_skill_taxonomy() -> dict[str, list[tuple[str, float]]]:
+    """Current role requirement sets, from the database (falling back to the seed)."""
+    return _RoleSkillTaxonomy()
+
+
+ROLE_SKILL_TAXONOMY = _RoleSkillTaxonomy()

@@ -14,16 +14,32 @@ import io
 
 import imagehash
 from PIL import Image
+from services.api.core.config import get_settings
 
 # Doc 08 §9 step 5: tunable default, Hamming distance <= 4 (out of 64 bits) flags a
 # duplicate photo.
-HAMMING_DISTANCE_FLAG_THRESHOLD = 4
+HAMMING_DISTANCE_FLAG_THRESHOLD = get_settings().photo_hash_distance_threshold
 
 # Hand-maintained blacklist of hashes for common default/stock avatars (e.g. a platform's
 # own placeholder image) — doc 08 §9 step 3: "compare against a blacklist first, to avoid
-# flagging everyone who never uploaded a real photo." Empty by default; populate with
-# real default-avatar hashes as they're identified in production.
+# flagging everyone who never uploaded a real photo."
+#
+# Now stored in the `default_avatar_hashes` table rather than here: the instruction this
+# comment used to carry — "populate with real default-avatar hashes as they're
+# identified in production" — is impossible to follow for a code literal, since every
+# addition would need a developer and a deploy at exactly the moment an admin has
+# spotted a new placeholder avatar in live data.
+#
+# Kept as an empty set for backwards compatibility with any direct importer; read
+# through `_blacklist()` instead, which resolves from the database.
 DEFAULT_AVATAR_HASH_BLACKLIST: set[str] = set()
+
+
+def _blacklist() -> set[str]:
+    """Known placeholder-avatar hashes, from the database (empty if none recorded)."""
+    from services.agents.catalogs import default_avatar_hashes
+
+    return default_avatar_hashes() | DEFAULT_AVATAR_HASH_BLACKLIST
 
 
 def compute_photo_hash(image_bytes: bytes) -> str | None:
@@ -55,12 +71,13 @@ def find_duplicate_photos(target_hash: str, corpus: list[tuple[str, str]]) -> li
     blacklist first (doc 08 §9 step 3) so default avatars never generate false positives.
     Returns [{other_candidate_id, hamming_distance, evidence}] for every non-blacklisted
     comparison, sorted by distance ascending (closest match first)."""
-    if target_hash in DEFAULT_AVATAR_HASH_BLACKLIST:
+    blacklist = _blacklist()
+    if target_hash in blacklist:
         return []
 
     results: list[dict] = []
     for other_id, other_hash in corpus:
-        if not other_hash or other_hash in DEFAULT_AVATAR_HASH_BLACKLIST:
+        if not other_hash or other_hash in blacklist:
             continue
         distance = hamming_distance(target_hash, other_hash)
         results.append(

@@ -25,7 +25,12 @@ async def run(state: SupervisorState, config: RunnableConfig) -> dict:
     if not job_id:
         return {"error": "job_id is required for the job_match intent", "result": None}
 
-    result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
+    try:
+        job_uuid = uuid.UUID(job_id)
+    except (ValueError, TypeError):
+        return {"error": f"job_id {job_id!r} is not a valid UUID", "result": None}
+
+    result = await db.execute(select(Job).where(Job.id == job_uuid))
     job = result.scalar_one_or_none()
     if job is None:
         return {"error": f"job {job_id} not found", "result": None}

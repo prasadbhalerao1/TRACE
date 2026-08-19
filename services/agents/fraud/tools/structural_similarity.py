@@ -13,13 +13,14 @@ services/api/.venv copydetect`, matching the pattern the assignment file names.
 import io
 
 from copydetect import CodeFingerprint, compare_files
+from services.api.core.config import get_settings
 
 # Doc 08 §3's own tunable default for AST-winnowing similarity (J(A,B) > 0.75 raises a
 # flag). copydetect's `compare_files` returns two similarity ratios (one per file, since
 # each file's total token count differs) — this module uses the max of the two as the
 # single Jaccard-like overlap score, consistent with "did either submission end up mostly
 # copied from the other."
-SIMILARITY_FLAG_THRESHOLD = 0.75
+SIMILARITY_FLAG_THRESHOLD = get_settings().structural_similarity_threshold
 _WINNOW_K = 15
 _WINNOW_WINDOW = 10
 

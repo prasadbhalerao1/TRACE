@@ -7,6 +7,7 @@ raises a clear `RoadmapGenerationUnavailable` when the API key is missing or the
 fails — never a fabricated roadmap.
 """
 
+from services.agents.prompts_loader import load_prompt
 from services.api.core.llm import LLMUnavailable, generate_structured
 
 ROADMAP_PARAMETERS = {
@@ -38,20 +39,18 @@ async def generate_roadmap(target_role: str, skill_gaps: list[str], covered_skil
     if not skill_gaps:
         return {"stages": []}
 
-    prompt = (
-        f"A candidate is targeting the role '{target_role}'. They already have: "
-        f"{', '.join(covered_skills) or 'no verified skills yet'}. "
-        f"Their skill gaps, ranked most important/biggest first: {', '.join(skill_gaps)}. "
-        "Produce a staged roadmap (2-5 stages, ordered by dependency and priority) to close "
-        "these specific gaps. Each stage needs a short name, the subset of gap skills it "
-        "covers, and a realistic estimated duration in weeks for someone learning part-time. "
-        "Ground every stage only in the listed gap skills — don't invent unrelated skills."
+    prompt = load_prompt(
+        "candidate_intelligence",
+        "career_roadmap",
+        target_role=target_role,
+        covered_skills=", ".join(covered_skills) or "no verified skills yet",
+        skill_gaps=", ".join(skill_gaps),
     )
     return await generate_structured(
         schema_name="career_roadmap",
         schema_description="A staged learning roadmap to close a candidate's skill gaps for a target role.",
         parameters=ROADMAP_PARAMETERS,
         prompt=prompt,
-        max_tokens=1500,
+        max_tokens=get_settings().llm_max_tokens_large,
         agent_name="candidate_intelligence.roadmap",
     )

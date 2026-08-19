@@ -2,18 +2,43 @@
 
 from packages.shared_schemas.candidates import EvidenceConfidence, SubScore
 from services.agents.common.scoring import weighted_renormalized_mean
+from services.api.core.config import get_settings
 
-SUB_SCORE_WEIGHTS = {
-    "coding_ability": 0.16,
-    "problem_solving": 0.16,
-    "project_quality": 0.12,
-    "innovation": 0.12,
-    "technical_consistency": 0.08,
-    "community_participation": 0.08,
-    "leadership": 0.08,
-    "open_source_contributions": 0.10,
-    "hackathon_performance": 0.10,
-}
+def _sub_score_weights() -> dict[str, float]:
+    """The Talent Score formula, resolved from Settings on each call.
+
+    Was a module-level dict literal, which made the product's central formula a
+    deploy-only change. Read through `get_settings()` (itself `lru_cache`d, so this is a
+    dict rebuild rather than any I/O) so a deployment can retune weights via .env
+    without a code change. Defaults are byte-identical to the previous literals.
+    """
+    s = get_settings()
+    return {
+        "coding_ability": s.weight_coding_ability,
+        "problem_solving": s.weight_problem_solving,
+        "project_quality": s.weight_project_quality,
+        "innovation": s.weight_innovation,
+        "technical_consistency": s.weight_technical_consistency,
+        "community_participation": s.weight_community_participation,
+        "leadership": s.weight_leadership,
+        "open_source_contributions": s.weight_open_source_contributions,
+        "hackathon_performance": s.weight_hackathon_performance,
+    }
+
+
+class _SubScoreWeights(dict):
+    """Backwards-compatible view over the configured weights.
+
+    `SUB_SCORE_WEIGHTS` is imported and iterated by other modules and by tests as a
+    plain mapping. Subclassing dict and refreshing from Settings on construction keeps
+    every existing `SUB_SCORE_WEIGHTS[name]` / `.keys()` / `in` usage working unchanged.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(_sub_score_weights())
+
+
+SUB_SCORE_WEIGHTS = _SubScoreWeights()
 
 
 def compute_overall(sub_scores: dict[str, SubScore]) -> tuple[float | None, list[str]]:

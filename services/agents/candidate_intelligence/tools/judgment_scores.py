@@ -22,7 +22,7 @@ from services.agents.candidate_intelligence.tools.github import GithubAnalysis
 from services.agents.candidate_intelligence.tools.normalization import recency_weight
 from services.agents.recruitment.tools.embeddings import get_embedder
 from services.api.core.config import get_settings
-from services.api.core.llm import LLMUnavailable, generate_structured
+from services.api.core.llm import LLMUnavailable, generate_structured, validated_score
 from services.agents.recruitment.tools.embeddings import CANDIDATE_PROJECT_EMBEDDINGS_COLLECTION
 from services.api.core.qdrant import ensure_payload_indexes
 from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
@@ -97,7 +97,10 @@ async def _llm_quality_judgment(project_summaries: list[str], settings) -> tuple
         )
     except LLMUnavailable:
         return None, None
-    return float(result["score"]), result.get("rationale")
+    # Clamped rather than `float(...)`: this value becomes a TalentScore sub-score, which
+    # recruiter matching, salary prediction and hackathon composites all read. A model
+    # answering on a 0-10 scale used to persist verbatim as e.g. 8.5/100.
+    return validated_score(result.get("score")), result.get("rationale")
 
 
 def code_quality_score(

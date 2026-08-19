@@ -31,7 +31,7 @@ from services.api.core.qdrant import get_qdrant_client as _get_qdrant_client
 _COLLECTION = "skill_taxonomy_embeddings"
 # Below this cosine similarity to the candidate's closest matching skill, a required
 # skill counts as a real gap rather than "already covered under a different name."
-_GAP_SIMILARITY_THRESHOLD = 0.72
+_GAP_SIMILARITY_THRESHOLD = get_settings().skill_gap_similarity_threshold
 
 
 class CareerGuidanceUnavailable(RuntimeError):

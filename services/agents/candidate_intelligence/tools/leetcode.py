@@ -14,6 +14,7 @@ import json
 from dataclasses import dataclass, field
 
 import httpx
+from services.api.core.config import get_settings
 
 _LEETCODE_GRAPHQL_URL = "https://leetcode.com/graphql"
 
@@ -85,7 +86,7 @@ class LeetcodeStats:
 
 
 async def _graphql(query: str, username: str) -> dict:
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=get_settings().leetcode_http_timeout_seconds) as client:
         response = await client.post(
             _LEETCODE_GRAPHQL_URL,
             json={"query": query, "variables": {"username": username}},

@@ -236,7 +236,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 # 0.64; the same pair with one descriptive sentence each jumps to 0.89 vs 0.66, a wide and
 # reliable gap): 0.80 sits cleanly between "React" vs "Vue.js" (0.89, a real sibling-skill
 # match worth partial credit) and "React" vs "Photoshop" (0.66, genuinely unrelated).
-SKILL_SIMILARITY_THRESHOLD = 0.80
+SKILL_SIMILARITY_THRESHOLD = get_settings().skill_similarity_threshold
 
 
 def best_skill_similarity(candidate_skill_names: list[str], required_skill: str) -> tuple[str | None, float]:

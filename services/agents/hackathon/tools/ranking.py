@@ -7,7 +7,10 @@ Cold-start re-normalization mirrors doc 08 §1.1's exact pattern (already used b
 has its weight zeroed and the rest re-normalized, never silently zero-filled.
 """
 
+import logging
 from services.agents.common.scoring import weighted_renormalized_mean
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_WEIGHTS = {
     "judge_score_component": 0.40,
@@ -15,6 +18,36 @@ _DEFAULT_WEIGHTS = {
     "repo_quality_component": 0.20,
     "novelty_component": 0.10,
 }
+
+
+def _validated_weights(weights: dict | None) -> dict:
+    """Merge an organizer-supplied scoring config over the defaults, dropping bad entries.
+
+    Deliberately forgiving rather than strict: rejecting a whole hackathon's finalization
+    because one weight was mistyped is a worse outcome than scoring it with the default
+    for that component, and the breakdown returned alongside every score makes the
+    weighting visible either way.
+    """
+    if not weights:
+        return dict(_DEFAULT_WEIGHTS)
+
+    merged = dict(_DEFAULT_WEIGHTS)
+    for key, value in weights.items():
+        if key not in _DEFAULT_WEIGHTS:
+            logger.warning("Ignoring unknown scoring_config key %r", key)
+            continue
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+            logger.warning(
+                "Ignoring invalid scoring_config weight %r=%r; using default %r",
+                key, value, _DEFAULT_WEIGHTS[key],
+            )
+            continue
+        merged[key] = float(value)
+
+    if sum(merged.values()) <= 0:
+        logger.warning("scoring_config weights sum to zero; falling back to defaults")
+        return dict(_DEFAULT_WEIGHTS)
+    return merged
 
 
 def compute_composite_score(
@@ -31,8 +64,13 @@ def compute_composite_score(
     where `breakdown` always lists every component's raw value plus which ones were
     re-normalized away, so the score is never presented as a bare number (doc 08/09's
     "always shown with evidence" NFR, extended to hackathon rankings)."""
-    if weights is None:
-        weights = _DEFAULT_WEIGHTS
+    # `weights` comes from `Hackathon.scoring_config`, a JSONB column an organizer edits.
+    # A partial config (three of the four component keys) used to raise KeyError below at
+    # `weights[k]` and crash the entire finalization run — for every team, not just the
+    # affected component. Missing keys fall back to their defaults, unknown keys are
+    # ignored, and non-positive/non-numeric values are discarded rather than silently
+    # producing a nonsensical composite.
+    weights = _validated_weights(weights)
 
     components = {
         "judge_score_component": judge_score,
