@@ -1,181 +1,252 @@
 "use client";
 
+import { useRef, useState } from "react";
+import { ArrowUp, Sparkles, UserRoundSearch } from "lucide-react";
+
 import { Page, PageHeader } from "@/components/common/PageHeader";
-
-import { useState } from "react";
+import { EmptyState } from "@/components/common/EmptyState";
+import { SectionError } from "@/components/common/SectionError";
+import { MatchScore } from "@/components/common/MatchBreakdown";
 import { useAuth } from "@/components/AuthProvider";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { postCopilotQuery, type CopilotResult } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
-interface ChatMessage {
-  role: "ai" | "user";
-  text: string;
-  results?: CopilotResult[];
-}
+/** Recruiter copilot: plain-language candidate search.
+ *
+ * Reworked from a generic chat bubble list. Three things were wrong with that version:
+ * the panel described its own internals to the user ("Structured filters + Qdrant
+ * semantic re-rank + Claude explanation, per doc 02 §3"), results were unclickable
+ * `<li>` text so a promising candidate was a dead end, and the suggested queries were
+ * static prose the user had to retype by hand.
+ *
+ * Multi-turn refinement already worked through `conversation_id`; it just was not
+ * visible. Follow-ups are now offered explicitly, because progressive narrowing is the
+ * actual workflow ("find React developers" then "only ones with hackathon experience").
+ */
 
-function formatResults(results: CopilotResult[]): string {
-  if (results.length === 0)
-    return "I couldn't find any candidates matching that search.";
-  return `I found ${results.length} candidate(s) matching your description.`;
+const STARTERS = [
+  "Find full-stack engineers with verified Python and React",
+  "Backend engineers with open-source contributions",
+  "Candidates with hackathon experience in the last year",
+] as const;
+
+const REFINEMENTS = [
+  "Only candidates with verified skills",
+  "Narrow to the strongest problem solvers",
+  "Show people who have shipped production apps",
+] as const;
+
+interface Turn {
+  query: string;
+  results: CopilotResult[];
 }
 
 export default function RecruiterCopilotPage() {
   const { getToken } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "ai",
-      text: "Hello! I am your Recruitment Copilot. Ask me to find candidates (e.g. 'Find backend developers with React and Python experience')",
-    },
-  ]);
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [searching, setSearching] = useState(false);
-  const [conversationId, setConversationId] = useState<string | undefined>(
-    undefined,
-  );
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>();
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handleSend() {
-    if (!input.trim() || searching) return;
-    const userMsg = input;
+  const started = turns.length > 0;
+
+  async function run(query: string) {
+    const trimmed = query.trim();
+    if (!trimmed || searching) return;
+
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setSearching(true);
     setError(null);
-
     try {
       const token = await getToken();
       if (!token) throw new Error("No session token");
-      const response = await postCopilotQuery(token, userMsg, conversationId);
+      const response = await postCopilotQuery(token, trimmed, conversationId);
       setConversationId(response.conversation_id);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          text: formatResults(response.results),
-          results: response.results,
-        },
-      ]);
+      setTurns((prev) => [...prev, { query: trimmed, results: response.results }]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Copilot search failed");
+      setError(
+        err instanceof Error ? err.message : "The search could not be completed.",
+      );
     } finally {
       setSearching(false);
     }
   }
 
+  const latest = turns[turns.length - 1];
+
   return (
     <Page>
       <PageHeader
-        title="Copilot"
-        description="Describe who you are looking for in plain language and search across verified evidence."
+        title="Copilot search"
+        description="Describe who you are looking for. Results are ranked across verified evidence, and every match shows what produced it."
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 flex flex-col h-[500px]">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">
-              Copilot Chat
-            </CardTitle>
-            <CardDescription>
-              Structured filters + Qdrant semantic re-rank + Claude explanation,
-              per doc 02 §3.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col flex-1 space-y-4 overflow-hidden">
-            <div className="flex-1 overflow-y-auto space-y-3 p-4 bg-card rounded-md border">
-              {messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={`flex ${m.role === "ai" ? "justify-start" : "justify-end"}`}
-                >
-                  <div
-                    className={`max-w-[80%] p-3 rounded-lg text-sm whitespace-pre-wrap ${m.role === "ai" ? "bg-card text-foreground shadow-flat border border-border" : "bg-primary text-primary-foreground"}`}
-                  >
-                    <p className="font-semibold text-xs mb-1 opacity-70">
-                      {m.role === "ai" ? "Recruiter Copilot" : "You"}
-                    </p>
-                    <p>{m.text}</p>
-                    {m.results && m.results.length > 0 && (
-                      <ul className="mt-2 space-y-1 text-xs">
-                        {m.results.map((r) => (
-                          <li
-                            key={r.candidate_id}
-                            className="border-t border-border/50 pt-1"
-                          >
-                            {r.match_percentage !== null && (
-                              <span className="font-semibold">
-                                {r.match_percentage.toFixed(0)}% —{" "}
-                              </span>
-                            )}
-                            {r.explanation}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {searching && (
-                <div className="flex justify-start">
-                  <div className="bg-card text-muted-foreground p-3 rounded-lg text-sm border">
-                    Understanding your query and searching the candidate pool…
-                  </div>
-                </div>
-              )}
-              {error && <p className="text-sm text-destructive">{error}</p>}
-            </div>
+      <div className="space-y-6">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(input);
+          }}
+          className="flex gap-2"
+        >
+          <Input
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={searching}
+            aria-label="Describe the candidate you are looking for"
+            placeholder={
+              started
+                ? "Refine these results, or start a new search"
+                : "Find senior backend engineers with verified Go experience"
+            }
+            className="flex-1"
+          />
+          <Button type="submit" disabled={searching || !input.trim()}>
+            <ArrowUp aria-hidden className="size-4" />
+            Search
+          </Button>
+        </form>
 
-            <div className="flex gap-2">
-              <input
-                className="flex-1 px-3 py-2 text-sm rounded-md border bg-background text-foreground focus:outline-none"
-                placeholder="Ask Copilot..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              />
-              <Button onClick={handleSend} disabled={searching}>
-                Search
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Suggested queries are buttons, not prose to retype. */}
+        <QueryChips
+          label={started ? "Refine" : "Try a search"}
+          queries={started ? REFINEMENTS : STARTERS}
+          disabled={searching}
+          onPick={(q) => void run(q)}
+        />
 
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">
-                Search Tips
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground space-y-3 leading-relaxed">
-              <div>
-                <p className="font-semibold mb-1">Try these searches:</p>
-                <ul className="space-y-1 text-muted-foreground">
-                  <li>• &quot;Find Python developers&quot;</li>
-                  <li>• &quot;Find React developers&quot;</li>
-                  <li>• &quot;Fullstack with Python and React&quot;</li>
-                  <li>• &quot;Show candidates in San Francisco&quot;</li>
-                  <li>• &quot;Find 75+ coding ability&quot;</li>
-                </ul>
-              </div>
-              <div className="border-t pt-2">
-                <p className="font-semibold mb-1">Refine results:</p>
-                <ul className="space-y-1 text-muted-foreground">
-                  <li>• &quot;Now show only San Francisco&quot;</li>
-                  <li>• &quot;Filter to 75+ scores&quot;</li>
-                  <li>• &quot;Who has best problem solving?&quot;</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {error ? (
+          <SectionError
+            message={error}
+            onRetry={() => void run(latest?.query ?? input)}
+            retrying={searching}
+          />
+        ) : null}
+
+        {searching ? <SearchingState /> : null}
+
+        {!started && !searching && !error ? (
+          <EmptyState
+            icon={UserRoundSearch}
+            title="No search yet"
+            description="Describe a role in plain language. Copilot reads verified skills, project history and assessment results, then explains why each candidate ranks where it does."
+          />
+        ) : null}
+
+        {turns
+          .slice()
+          .reverse()
+          .map((turn, i) => (
+            <TurnResults
+              key={`${turn.query}-${turns.length - i}`}
+              turn={turn}
+              current={i === 0}
+            />
+          ))}
       </div>
     </Page>
+  );
+}
+
+function QueryChips({
+  label,
+  queries,
+  disabled,
+  onPick,
+}: {
+  label: string;
+  queries: readonly string[];
+  disabled: boolean;
+  onPick: (q: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-meta text-muted-foreground">{label}</span>
+      {queries.map((q) => (
+        <button
+          key={q}
+          type="button"
+          disabled={disabled}
+          onClick={() => onPick(q)}
+          className={cn(
+            "rounded-full bg-surface-sunken px-3 py-1.5 text-meta text-muted-foreground outline-none",
+            "transition-colors duration-(--animate-duration-fast)",
+            "hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+            "disabled:opacity-50",
+          )}
+        >
+          {q}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SearchingState() {
+  return (
+    <div className="space-y-3" aria-live="polite">
+      <p className="flex items-center gap-2 text-meta text-muted-foreground">
+        <Sparkles aria-hidden className="size-3.5" />
+        Reading verified evidence across the candidate pool
+      </p>
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="rounded-md bg-card p-4 shadow-flat">
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="mt-2 h-3 w-full max-w-md" />
+          <Skeleton className="mt-3 h-3 w-32" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TurnResults({ turn, current }: { turn: Turn; current: boolean }) {
+  return (
+    <section
+      aria-label={`Results for ${turn.query}`}
+      className={cn(!current && "opacity-70")}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-section font-semibold text-foreground">
+          {turn.query}
+        </h2>
+        <span className="text-meta text-muted-foreground">
+          {turn.results.length === 0
+            ? "No matches"
+            : `${turn.results.length} ${turn.results.length === 1 ? "candidate" : "candidates"}`}
+        </span>
+      </div>
+
+      {turn.results.length === 0 ? (
+        <EmptyState
+          className="mt-3"
+          icon={UserRoundSearch}
+          title="No candidates matched"
+          description="Try describing the role more broadly, or drop a requirement. Candidates appear here once they have evidence on file."
+        />
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {turn.results.map((r) => (
+            <li
+              key={r.candidate_id}
+              className="rounded-md bg-card p-4 shadow-flat"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <p className="min-w-0 text-body leading-relaxed text-muted-foreground">
+                  {r.explanation}
+                </p>
+                <MatchScore value={r.match_percentage} className="shrink-0" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { createJob, pollMatchingStatus, type JobResponse } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function RecruiterNewJobPage() {
   const { getToken } = useAuth();
@@ -89,10 +91,9 @@ export default function RecruiterNewJobPage() {
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="space-y-1">
                   <Label htmlFor="title">Job Title</Label>
-                  <input
+                  <Input
                     id="title"
                     required
-                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     placeholder="e.g. Senior Backend Engineer"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -100,10 +101,9 @@ export default function RecruiterNewJobPage() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="desc">Description</Label>
-                  <textarea
+                  <Textarea
                     id="desc"
                     required
-                    className="w-full min-h-24 p-3 border rounded-md text-sm bg-background text-foreground"
                     placeholder="Describe duties, tools used, and target outcomes..."
                     value={desc}
                     onChange={(e) => setDesc(e.target.value)}
@@ -113,9 +113,8 @@ export default function RecruiterNewJobPage() {
                   <Label htmlFor="skills">
                     Required Skills (Comma separated)
                   </Label>
-                  <input
+                  <Input
                     id="skills"
-                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     placeholder="e.g. Python, FastAPI, PostgreSQL"
                     value={skills}
                     onChange={(e) => setSkills(e.target.value)}
@@ -124,9 +123,8 @@ export default function RecruiterNewJobPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label htmlFor="location">Location</Label>
-                    <input
+                    <Input
                       id="location"
-                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       placeholder="e.g. Delhi"
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
@@ -136,18 +134,17 @@ export default function RecruiterNewJobPage() {
                     <Label htmlFor="minExperience">
                       Min Experience (years)
                     </Label>
-                    <input
+                    <Input
                       id="minExperience"
                       type="number"
                       min={0}
-                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       value={minExperience}
                       onChange={(e) => setMinExperience(e.target.value)}
                     />
                   </div>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={isRemote}
                     onChange={(e) => setIsRemote(e.target.checked)}
@@ -170,7 +167,7 @@ export default function RecruiterNewJobPage() {
                   {matchingStatus === "done" &&
                     "The AI Matching Engine has scored every candidate in the pool against this posting."}
                   {matchingStatus === "failed" &&
-                    "Matching couldn't complete — you can retry from the matches page."}
+                    "Matching couldn't complete - you can retry from the matches page."}
                 </p>
                 <Button
                   render={<Link href={`/jobs/${created.id}/matches`} />}

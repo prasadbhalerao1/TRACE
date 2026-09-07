@@ -76,7 +76,7 @@ export default function RecruiterSubmissionReportPage() {
                 label="Score"
                 value={
                   submission.score === null || submission.score === undefined
-                    ? "—"
+                    ? "Not recorded"
                     : `${submission.score.toFixed(0)}/100`
                 }
               />
@@ -129,13 +129,13 @@ export default function RecruiterSubmissionReportPage() {
                     <Metric
                       label="Readability"
                       value={
-                        submission.llm_review.readability?.toFixed(0) ?? "—"
+                        submission.llm_review.readability?.toFixed(0) ?? "Not recorded"
                       }
                     />
                     <Metric
                       label="Architecture"
                       value={
-                        submission.llm_review.architecture?.toFixed(0) ?? "—"
+                        submission.llm_review.architecture?.toFixed(0) ?? "Not recorded"
                       }
                     />
                   </div>
@@ -174,7 +174,7 @@ export default function RecruiterSubmissionReportPage() {
                         <span className="text-foreground">
                           {String(
                             submission.static_analysis.radon.avg_complexity ??
-                              "—",
+                              "Not recorded",
                           )}
                         </span>
                       </p>

@@ -18,21 +18,14 @@ import { Button } from "@/components/ui/button";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
+  MatchBreakdown,
+  MatchScore,
+} from "@/components/common/MatchBreakdown";
+import {
   fetchJobMatches,
   pollMatchingStatus,
   type MatchingStatusResponse,
 } from "@/lib/api";
-
-function ScoreRow({ label, value }: { label: string; value: number | null }) {
-  return (
-    <div className="flex justify-between text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">
-        {value === null ? "—" : `${value.toFixed(0)}/100`}
-      </span>
-    </div>
-  );
-}
 
 export default function RecruiterMatchesPage() {
   const params = useParams<{ id: string }>();
@@ -154,7 +147,7 @@ export default function RecruiterMatchesPage() {
               !isProcessing &&
               matchingStatus?.status !== "failed" && (
                 <p className="text-sm text-muted-foreground">
-                  No candidates in the pool yet — matches will populate as
+                  No candidates in the pool yet - matches will populate as
                   candidates onboard.
                 </p>
               )}
@@ -176,49 +169,28 @@ export default function RecruiterMatchesPage() {
                       </Badge>
                     )}
                   </div>
-                  {/* Was always `text-success`, so a 21% match was rendered in the
-                      same affirmative green as a 94% one. Match strength is
-                      carried by the number itself. */}
-                  <div className="text-right">
-                    <span className="block text-meta text-muted-foreground">
-                      Match
-                    </span>
-                    <span
-                      data-numeric
-                      className="text-section font-medium tabular-nums text-foreground"
-                    >
-                      {match.match_percentage?.toFixed(0) ?? "—"}%
-                    </span>
-                  </div>
+                  <MatchScore value={match.match_percentage} />
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>{match.explanation}</p>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-t pt-2">
-                    <ScoreRow
-                      label="Skill Overlap"
-                      value={match.skill_similarity}
-                    />
-                    <ScoreRow
-                      label="Semantic Similarity"
-                      value={match.semantic_similarity}
-                    />
-                    <ScoreRow
-                      label="Experience Match"
-                      value={match.experience_match}
-                    />
-                    <ScoreRow
-                      label="Talent Score Alignment"
-                      value={match.talent_score_alignment}
-                    />
-                    <ScoreRow
-                      label="Project Relevance"
-                      value={match.project_relevance}
-                    />
-                    <ScoreRow
-                      label="Overall Talent Score"
-                      value={match.candidate_overall_talent_score}
-                    />
-                  </div>
+                  <MatchBreakdown
+                    className="border-t border-border pt-3"
+                    components={[
+                      { label: "Skill overlap", value: match.skill_similarity },
+                      {
+                        label: "Semantic similarity",
+                        value: match.semantic_similarity,
+                      },
+                      {
+                        label: "Experience fit",
+                        value: match.experience_match,
+                      },
+                      {
+                        label: "Project relevance",
+                        value: match.project_relevance,
+                      },
+                    ]}
+                  />
                 </CardContent>
               </Card>
             ))}
@@ -240,7 +212,7 @@ export default function RecruiterMatchesPage() {
                 Score.
               </p>
               <p>
-                Never shown as a bare percentage alone — the full breakdown is
+                Never shown as a bare percentage alone - the full breakdown is
                 always visible.
               </p>
             </CardContent>

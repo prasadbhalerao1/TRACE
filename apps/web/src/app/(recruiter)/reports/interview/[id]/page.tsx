@@ -65,7 +65,7 @@ export default function RecruiterInterviewReportPage() {
               {/* Was "no audio was recorded (doc 03 §3)" — the fact matters to a
                   recruiter, the internal document reference does not. */}
               <CardDescription>
-                Text only — no audio is ever recorded.
+                Text only - no audio is ever recorded.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -94,13 +94,13 @@ export default function RecruiterInterviewReportPage() {
 
           <div className="space-y-4">
             {/* Ratings are legitimately null until the report is generated, so each
-                renders "—" rather than a zero that would read as a bad score. */}
+                renders "Not recorded" rather than a zero that would read as a bad score. */}
             <Metric
               label="Technical"
               value={
                 report.technical_rating === null ||
                 report.technical_rating === undefined
-                  ? "—"
+                  ? "Not recorded"
                   : `${report.technical_rating.toFixed(0)}/100`
               }
             />
@@ -109,7 +109,7 @@ export default function RecruiterInterviewReportPage() {
               value={
                 report.communication_rating === null ||
                 report.communication_rating === undefined
-                  ? "—"
+                  ? "Not recorded"
                   : `${report.communication_rating.toFixed(0)}/100`
               }
             />
@@ -118,14 +118,14 @@ export default function RecruiterInterviewReportPage() {
               value={
                 report.response_confidence_signal === null ||
                 report.response_confidence_signal === undefined
-                  ? "—"
+                  ? "Not recorded"
                   : `${report.response_confidence_signal.toFixed(0)}/100`
               }
               hint="From transcript text only"
             />
             <p className="text-meta leading-relaxed text-muted-foreground">
               Confidence and communication are derived entirely from the text of
-              the transcript — hedging language and specificity. Never voice
+              the transcript - hedging language and specificity. Never voice
               biometrics or emotion inference.
             </p>
           </div>

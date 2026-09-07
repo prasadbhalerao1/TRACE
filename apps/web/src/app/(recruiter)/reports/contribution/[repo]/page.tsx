@@ -73,7 +73,7 @@ export default function RecruiterContributionReportPage() {
               </CardTitle>
               <CardDescription>
                 Weighted from surviving lines, commits, pull requests opened and
-                reviews — not raw commit count.
+                reviews - not raw commit count.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { fetchJobs } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ListChecks } from "lucide-react";
 
 export default function RecruiterJobsListPage() {
   const { getToken } = useAuth();
@@ -52,9 +54,14 @@ export default function RecruiterJobsListPage() {
           {error && <p className="text-sm text-destructive">{error}</p>}
           {!error && jobs === null && <CardListSkeleton />}
           {jobs !== null && jobs.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No jobs posted yet — publish one to start matching candidates.
-            </p>
+            <EmptyState
+              icon={ListChecks}
+              title="No jobs posted yet"
+              description="Publish a role and TRACE ranks the candidate pool against it, with the evidence behind every match."
+              action={
+                <Button render={<Link href="/jobs/new" />}>Post a job</Button>
+              }
+            />
           )}
           {jobs?.map((job) => (
             <div

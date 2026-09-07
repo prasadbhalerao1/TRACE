@@ -65,7 +65,7 @@ export default function RecruiterAnalyticsPage() {
     <Page>
       <PageHeader
         title="Analytics"
-        description="Funnel conversion, time to hire, and where your candidates come from — across all your job postings."
+        description="Funnel conversion, time to hire, and where your candidates come from - across all your job postings."
       />
 
       {error ? (
@@ -86,7 +86,7 @@ export default function RecruiterAnalyticsPage() {
           // hired — reported as "not yet computable", never as a zero.
           value={
             medianDays === null || medianDays === undefined
-              ? "—"
+              ? "Not recorded"
               : `${medianDays.toFixed(0)}d`
           }
           hint={
@@ -100,7 +100,7 @@ export default function RecruiterAnalyticsPage() {
           value={
             totalSourced > 0
               ? `${Math.round((100 * (sourceBreakdown?.copilot_search ?? 0)) / totalSourced)}%`
-              : "—"
+              : "Not recorded"
           }
         />
       </MetricGrid>
@@ -155,12 +155,12 @@ export default function RecruiterAnalyticsPage() {
         {/* Was a bare grid-cols-3 with no breakpoint: at 375px "Copilot Search"
             wrapped and the three columns collapsed into unreadable slivers. */}
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Metric label="Direct" value={sourceBreakdown?.direct ?? "—"} />
+          <Metric label="Direct" value={sourceBreakdown?.direct ?? "Not recorded"} />
           <Metric
             label="Copilot search"
-            value={sourceBreakdown?.copilot_search ?? "—"}
+            value={sourceBreakdown?.copilot_search ?? "Not recorded"}
           />
-          <Metric label="Hackathon" value={sourceBreakdown?.hackathon ?? "—"} />
+          <Metric label="Hackathon" value={sourceBreakdown?.hackathon ?? "Not recorded"} />
         </CardContent>
       </Card>
     </Page>
