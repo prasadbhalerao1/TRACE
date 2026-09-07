@@ -15,7 +15,7 @@ export default function NotFoundPage() {
     <div className="flex flex-col flex-1 items-center justify-center min-h-[70vh] p-6 bg-card">
       <Card className="max-w-md w-full text-center shadow-flat">
         <CardHeader className="space-y-2">
-          <div className="text-4xl font-extrabold text-primary">404</div>
+          <div className="text-4xl font-semibold text-primary">404</div>
           <CardTitle className="text-xl font-bold text-foreground">
             Page Not Found
           </CardTitle>

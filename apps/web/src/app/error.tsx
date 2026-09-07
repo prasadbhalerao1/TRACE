@@ -33,7 +33,7 @@ export default function GlobalErrorBoundary({
           Something went wrong
         </h1>
         <p className="mt-2 text-body leading-relaxed text-muted-foreground">
-          This page failed to render. Your data has not been affected — retrying
+          This page failed to render. Your data has not been affected - retrying
           is safe.
         </p>
         {error.digest && (

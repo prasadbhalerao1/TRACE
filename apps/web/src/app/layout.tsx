@@ -22,7 +22,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TRACE — Verified Talent Intelligence",
+  title: "TRACE - Verified Talent Intelligence",
   description:
     "Verified talent identity, AI-driven matching, and fraud-resistant hiring.",
 };
