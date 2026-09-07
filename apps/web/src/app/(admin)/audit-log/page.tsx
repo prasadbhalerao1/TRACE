@@ -43,7 +43,7 @@ export default function AdminAuditLogsPage() {
     <Page>
       <PageHeader
         title="Audit log"
-        description="Every sensitive operation — role changes, flag decisions, dispute resolutions — appended here. Entries cannot be edited or deleted by anyone, including admins."
+        description="Every sensitive operation - role changes, flag decisions, dispute resolutions - appended here. Entries cannot be edited or deleted by anyone, including admins."
       />
 
       {error ? (

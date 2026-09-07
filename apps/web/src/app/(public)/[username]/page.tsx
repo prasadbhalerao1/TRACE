@@ -49,7 +49,7 @@ export async function generateMetadata({
     return { title: "Profile not found" };
   }
   const title = portfolio.headline
-    ? `${portfolio.username} — ${portfolio.headline}`
+    ? `${portfolio.username} - ${portfolio.headline}`
     : portfolio.username;
   return {
     title,
@@ -183,7 +183,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
               <Badge
                 key={badge.id}
                 variant="secondary"
-                className="border-teal-verified/40 text-success"
+                className="border-success/40 text-success"
                 title={badge.corroboration_sources.join(", ")}
               >
                 {badge.skill_name}
@@ -203,7 +203,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
               <div key={i} className="text-sm">
                 <p className="font-medium">
                   {String(entry.title ?? "")}
-                  {entry.company ? ` — ${String(entry.company)}` : ""}
+                  {entry.company ? ` - ${String(entry.company)}` : ""}
                 </p>
                 {entry.description ? (
                   <p className="text-muted-foreground">
@@ -225,7 +225,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
             {education.map((entry, i) => (
               <p key={i} className="text-sm">
                 {String(entry.institution ?? "")}{" "}
-                {entry.degree ? `— ${String(entry.degree)}` : ""}
+                {entry.degree ? `- ${String(entry.degree)}` : ""}
               </p>
             ))}
           </CardContent>

@@ -41,6 +41,7 @@ import {
   reviewFraudFlag,
 } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function AdminFlagAuditPage() {
   const params = useParams<{ flagId: string }>();
@@ -199,7 +200,7 @@ export default function AdminFlagAuditPage() {
               {detail.dispute_review_assist.available && (
                 <div className="border-b pb-3 bg-card -mx-2 px-2 py-2 rounded-md">
                   <span className="font-semibold text-foreground">
-                    Dispute Review Agent (assistive summary — not a
+                    Dispute Review Agent (assistive summary - not a
                     recommendation):
                   </span>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -221,8 +222,7 @@ export default function AdminFlagAuditPage() {
                   <label className="text-xs font-medium text-muted-foreground">
                     Review notes (required to uphold; optional to dismiss):
                   </label>
-                  <textarea
-                    className="w-full min-h-20 p-3 border rounded-md text-sm bg-background text-foreground focus:outline-none"
+                  <Textarea
                     placeholder="Explain the basis for your decision..."
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
@@ -269,7 +269,7 @@ export default function AdminFlagAuditPage() {
               <CardContent className="text-xs text-muted-foreground space-y-2 leading-relaxed">
                 <p>
                   Weigh the evidence and any candidate dispute context. The AI
-                  summary above is assistive only — it never recommends a
+                  summary above is assistive only - it never recommends a
                   verdict.
                 </p>
                 <p>

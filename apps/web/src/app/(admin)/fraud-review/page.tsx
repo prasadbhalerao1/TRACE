@@ -71,7 +71,7 @@ export default function AdminFraudQueuePage() {
             <section>
               <SectionHeader
                 title="Disputed"
-                description="A candidate has contested these — they're waiting on your decision."
+                description="A candidate has contested these - they're waiting on your decision."
               />
               <DataRowList>
                 {disputed.map((entry) => (

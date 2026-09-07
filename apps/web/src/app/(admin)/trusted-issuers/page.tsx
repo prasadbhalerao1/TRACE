@@ -14,7 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
@@ -27,6 +26,7 @@ import {
 } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { Input } from "@/components/ui/input";
 
 const TRUST_TIERS: TrustTier[] = [
   "platform",
@@ -194,7 +194,7 @@ export default function TrustedIssuersPage() {
                 <Label htmlFor="issuer-tier">Trust tier</Label>
                 <select
                   id="issuer-tier"
-                  className="w-full text-sm border rounded-md px-3 py-2 bg-card capitalize"
+                  className="select-control capitalize"
                   value={trustTier}
                   onChange={(e) => setTrustTier(e.target.value as TrustTier)}
                 >
@@ -228,7 +228,7 @@ export default function TrustedIssuersPage() {
               <p className="text-xs text-muted-foreground">
                 Use <code>{"{credential_id}"}</code> as a placeholder. Leave
                 blank if this issuer is known/trusted but has no automated
-                verification page — certificates from it will still fall through
+                verification page - certificates from it will still fall through
                 to Visual Forensics without the unrecognized-issuer penalty.
               </p>
             </div>
@@ -266,7 +266,7 @@ export default function TrustedIssuersPage() {
           {loading && !issuers && <CardListSkeleton />}
           {issuers !== null && issuers?.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No trusted issuers registered yet — every certificate will be
+              No trusted issuers registered yet - every certificate will be
               treated as unrecognized until you add some.
             </p>
           )}
@@ -280,11 +280,11 @@ export default function TrustedIssuersPage() {
                   <h4 className="text-sm font-semibold text-foreground">
                     {issuer.name}
                   </h4>
-                  <span className="text-[10px] uppercase tracking-wide font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">
+                  <span className="text-meta font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">
                     {issuer.trust_tier}
                   </span>
                   {!issuer.verification_url_template && (
-                    <span className="text-[10px] uppercase tracking-wide font-bold text-warning bg-warning/10 px-1.5 py-0.5 rounded-md">
+                    <span className="text-meta font-medium text-warning bg-warning/10 px-1.5 py-0.5 rounded-md">
                       no auto-verify
                     </span>
                   )}

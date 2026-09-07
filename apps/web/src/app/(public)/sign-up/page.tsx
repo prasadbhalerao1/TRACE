@@ -12,7 +12,6 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -27,6 +26,7 @@ import {
   USERNAME_PATTERN,
   type Role,
 } from "@/lib/constants";
+import { Input } from "@/components/ui/input";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -90,7 +90,7 @@ export default function SignUpPage() {
           <CardTitle className="font-heading">Create Account</CardTitle>
           {role === "candidate" && (
             <CardDescription>
-              Claim your unique portfolio link now — you can always change it
+              Claim your unique portfolio link now - you can always change it
               later in Profile settings.
             </CardDescription>
           )}

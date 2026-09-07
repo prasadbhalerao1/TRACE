@@ -32,6 +32,7 @@ import {
   fetchHackathonTeams,
   importHackathonTeamsCsv,
 } from "@/lib/api";
+import { Input } from "@/components/ui/input";
 
 export default function OrganizerManageHackathonPage() {
   const params = useParams<{ id: string }>();
@@ -153,7 +154,7 @@ export default function OrganizerManageHackathonPage() {
           <CardContent className="space-y-3">
             {teams.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No teams yet — add one below.
+                No teams yet - add one below.
               </p>
             )}
             {teams.map((t) => (
@@ -183,19 +184,17 @@ export default function OrganizerManageHackathonPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="teamName">Team Name</Label>
-                  <input
+                  <Input
                     id="teamName"
                     required
-                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     value={teamName}
                     onChange={(e) => setTeamName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="teamTrack">Track</Label>
-                  <input
+                  <Input
                     id="teamTrack"
-                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     value={track}
                     onChange={(e) => setTrack(e.target.value)}
                   />
@@ -203,9 +202,8 @@ export default function OrganizerManageHackathonPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="repoUrl">Repo URL (optional)</Label>
-                <input
+                <Input
                   id="repoUrl"
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                   placeholder="https://github.com/org/repo"
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
@@ -214,12 +212,11 @@ export default function OrganizerManageHackathonPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="judgeScore">Judge Score (optional)</Label>
-                  <input
+                  <Input
                     id="judgeScore"
                     type="number"
                     min={0}
                     max={100}
-                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     value={judgeScore}
                     onChange={(e) => setJudgeScore(e.target.value)}
                   />
@@ -228,9 +225,8 @@ export default function OrganizerManageHackathonPage() {
                   <Label htmlFor="members">
                     Member GitHub usernames (comma separated)
                   </Label>
-                  <input
+                  <Input
                     id="members"
-                    className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                     placeholder="octocat, defunkt"
                     value={members}
                     onChange={(e) => setMembers(e.target.value)}
@@ -255,7 +251,7 @@ export default function OrganizerManageHackathonPage() {
             <CardContent className="text-xs text-muted-foreground space-y-2 leading-relaxed">
               <p>
                 Manual roster entry reuses the same CSV-import path organizers
-                would use for a bulk file (FR-7a) — one row at a time here, same
+                would use for a bulk file (FR-7a) - one row at a time here, same
                 backend endpoint.
               </p>
               <p>

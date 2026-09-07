@@ -100,7 +100,7 @@ export default function PublicTeamPage() {
                     Composite Score
                   </span>
                   <span>
-                    #{detail.ranking.rank} —{" "}
+                    #{detail.ranking.rank} -{" "}
                     {detail.ranking.composite_score.toFixed(1)} pts
                   </span>
                 </div>

@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { createHackathon } from "@/lib/api";
+import { Input } from "@/components/ui/input";
 
 export default function OrganizerNewHackathonPage() {
   const { getToken } = useAuth();
@@ -69,10 +70,9 @@ export default function OrganizerNewHackathonPage() {
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-1">
                 <Label htmlFor="name">Hackathon Name</Label>
-                <input
+                <Input
                   id="name"
                   required
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                   placeholder="e.g. Winter Developer Challenge 2026"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -80,9 +80,8 @@ export default function OrganizerNewHackathonPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="track">Evaluation Track</Label>
-                <input
+                <Input
                   id="track"
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                   placeholder="e.g. Full-Stack Dev, ML Algorithms"
                   value={track}
                   onChange={(e) => setTrack(e.target.value)}

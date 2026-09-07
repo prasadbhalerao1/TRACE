@@ -15,8 +15,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Page, PageHeader } from "@/components/common/PageHeader";
 import {
   Breadcrumb,
@@ -27,6 +25,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { submitJudgeScore } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function JudgeRubricPage() {
   const params = useParams<{ id: string }>();
@@ -44,7 +44,7 @@ export default function JudgeRubricPage() {
     e.preventDefault();
     if (!hackathonId) {
       setError(
-        "Missing hackathonId — open this page from the Evaluations Queue.",
+        "Missing hackathonId - open this page from the Evaluations Queue.",
       );
       return;
     }
@@ -106,13 +106,13 @@ export default function JudgeRubricPage() {
           <CardContent className="space-y-4">
             {!submitted ? (
               <form onSubmit={handleSave} className="space-y-4">
-                {/* This form asked for 0–100 while the evaluation queue renders
+                {/* This form asked for 0-100 while the evaluation queue renders
                     the same value as "n/10", so a judge entering 90 saw it come
                     back as "90/10". The backend takes a bare float with no bound,
-                    so the UI is the only place the scale is defined — aligned to
+                    so the UI is the only place the scale is defined, aligned to
                     the /10 the queue already displays. */}
                 <div className="space-y-1">
-                  <Label htmlFor="score">Score (0–10)</Label>
+                  <Label htmlFor="score">Score (0-10)</Label>
                   <Input
                     id="score"
                     type="number"

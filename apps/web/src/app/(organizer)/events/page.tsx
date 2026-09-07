@@ -93,6 +93,6 @@ export default function OrganizerHackathonsPage() {
 function formatWindow(start: string | null, end: string | null): string {
   if (!start && !end) return "No dates set";
   const format = (value: string) => new Date(value).toLocaleDateString();
-  if (start && end) return `${format(start)} — ${format(end)}`;
+  if (start && end) return `${format(start)} - ${format(end)}`;
   return start ? `Starts ${format(start)}` : `Ends ${format(end as string)}`;
 }

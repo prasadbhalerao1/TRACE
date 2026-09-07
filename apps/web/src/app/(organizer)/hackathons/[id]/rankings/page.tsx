@@ -77,7 +77,7 @@ export default function OrganizerRankingsPage() {
         toast.error(message);
       } else if (status.status === "processing") {
         toast.info("Still finalizing", {
-          description: "This is taking longer than usual — results will appear shortly.",
+          description: "This is taking longer than usual - results will appear shortly.",
         });
       } else {
         toast.success("Rankings finalized", {
@@ -201,7 +201,8 @@ function RankingRow({ ranking }: { ranking: RankingResponse }) {
   );
 }
 
-/** A missing sub-score means "not scored", which is not the same as zero. */
+/** A missing sub-score means "not scored", which is not the same as zero. The label
+ * says so rather than using an abbreviation that reads as an absent value. */
 function fmt(value: number | null | undefined): string {
-  return value === null || value === undefined ? "n/a" : value.toFixed(0);
+  return value === null || value === undefined ? "Not scored" : value.toFixed(0);
 }
