@@ -12,7 +12,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  WORKSPACE_NAV,
+  navSectionsFor,
   type WorkspaceRole,
 } from "@/components/common/workspaceNav";
 
@@ -38,7 +38,7 @@ export function CommandPalette({ role }: { role: WorkspaceRole }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const sections = WORKSPACE_NAV[role] ?? [];
+  const sections = navSectionsFor(role);
 
   function go(href: string) {
     setOpen(false);

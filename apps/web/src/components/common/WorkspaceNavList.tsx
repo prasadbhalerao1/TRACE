@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import {
-  WORKSPACE_NAV,
   isNavItemActive,
+  navSectionsFor,
   type WorkspaceRole,
 } from "@/components/common/workspaceNav";
 
@@ -20,7 +20,7 @@ interface WorkspaceNavListProps {
  * can never drift apart. */
 export function WorkspaceNavList({ role, onNavigate }: WorkspaceNavListProps) {
   const pathname = usePathname();
-  const sections = WORKSPACE_NAV[role] ?? [];
+  const sections = navSectionsFor(role);
 
   return (
     <nav className="flex flex-col gap-5" aria-label="Workspace">
@@ -46,10 +46,10 @@ export function WorkspaceNavList({ role, onNavigate }: WorkspaceNavListProps) {
                 // background alone would be colour-only signalling.
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2 py-2 text-body outline-none transition-colors duration-(--animate-duration-fast)",
+                  "relative flex items-center gap-2.5 rounded-md px-2 py-2 text-body outline-none transition-colors duration-(--animate-duration-fast)",
                   "focus-visible:ring-3 focus-visible:ring-ring/50",
                   active
-                    ? "bg-sidebar-accent font-medium text-foreground"
+                    ? "bg-sidebar-accent font-medium text-foreground before:absolute before:top-1.5 before:bottom-1.5 before:-left-1 before:w-0.5 before:rounded-full before:bg-primary before:content-['']"
                     : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
                 )}
               >

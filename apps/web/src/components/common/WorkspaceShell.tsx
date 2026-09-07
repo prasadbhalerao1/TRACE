@@ -18,7 +18,7 @@ import {
 } from "@/components/common/workspaceNav";
 
 export type {
-  WorkspaceNavItem,
+  RoleCapability,
   WorkspaceRole,
 } from "@/components/common/workspaceNav";
 
@@ -90,7 +90,7 @@ export function WorkspaceShell({ role, children }: WorkspaceShellProps) {
                 {ROLE_LABELS[navRole]}
               </h2>
               {/* Surfaces the shortcut rather than leaving it undiscoverable. */}
-              <kbd className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              <kbd className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-meta text-muted-foreground">
                 ⌘K
               </kbd>
             </div>
