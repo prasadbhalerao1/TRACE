@@ -16,6 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { APPLICATION_STAGE_LABELS, fetchMyApplications } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ListChecks } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function CandidateApplicationsPage() {
   const { getToken } = useAuth();
@@ -51,16 +54,14 @@ export default function CandidateApplicationsPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
             {!error && applications === null && <CardListSkeleton />}
             {applications !== null && applications.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No applications yet —{" "}
-                <Link
-                  href="/jobs"
-                  className="text-primary underline underline-offset-2"
-                >
-                  apply to a job posting
-                </Link>{" "}
-                to see it tracked here.
-              </p>
+              <EmptyState
+                icon={ListChecks}
+                title="No applications yet"
+                description="Every role you apply to is tracked here, with the stage it has reached."
+                action={
+                  <Button render={<Link href="/jobs" />}>Browse jobs</Button>
+                }
+              />
             )}
             {applications?.map((app) => (
               <div

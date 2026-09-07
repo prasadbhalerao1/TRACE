@@ -6,9 +6,10 @@ import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { uploadPresentation } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Page } from "@/components/common/PageHeader";
 
 // Doc/SRS/04 §2's actor table: "Candidate/Team uploads deck" — upload lives inside the
 // (candidate) route group (guarded to role=candidate by this group's layout.tsx), same
@@ -47,7 +48,7 @@ export default function PitchDeckUploadPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6 p-8">
+    <Page width="reading" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="font-heading">Upload your pitch deck</CardTitle>
@@ -55,7 +56,7 @@ export default function PitchDeckUploadPage() {
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Accepts .pptx, .ppt, and .pdf. Analysis covers problem/solution
-            clarity, innovation, business potential, and technical feasibility —
+            clarity, innovation, business potential, and technical feasibility -
             plus a plagiarism/AI-content signal, never a verdict.
           </p>
 
@@ -88,6 +89,6 @@ export default function PitchDeckUploadPage() {
           />
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }

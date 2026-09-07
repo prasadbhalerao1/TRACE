@@ -126,7 +126,7 @@ export default function CandidateAssessmentPage() {
         }
         description={
           assessment?.type === "coding"
-            ? "Tests run locally in your browser via WebAssembly — your code is never executed on our servers."
+            ? "Tests run locally in your browser via WebAssembly - your code is never executed on our servers."
             : "Answer the questions below."
         }
       />
@@ -240,7 +240,7 @@ export default function CandidateAssessmentPage() {
                   <div aria-live="polite" className="space-y-1">
                     {submission.grading_status === "processing" ? (
                       <p className="text-body text-muted-foreground">
-                        Submitted — grading your answer…
+                        Submitted - grading your answer…
                       </p>
                     ) : submission.grading_status === "failed" ? (
                       <p className="text-body text-destructive">
@@ -252,7 +252,7 @@ export default function CandidateAssessmentPage() {
                         value={
                           submission.score === null ||
                           submission.score === undefined
-                            ? "—"
+                            ? "Not recorded"
                             : `${submission.score.toFixed(0)}/100`
                         }
                       />

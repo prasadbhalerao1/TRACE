@@ -14,7 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Page, PageHeader } from "@/components/common/PageHeader";
 import { SectionError } from "@/components/common/SectionError";
@@ -23,6 +22,7 @@ import {
   submitHackathonProject,
   type TeamMemberInput,
 } from "@/lib/api";
+import { Input } from "@/components/ui/input";
 
 // QA finding (Track 2): no page called `submitHackathonProject()` (POST
 // /hackathons/{id}/submissions), so candidates couldn't join a hackathon through the
@@ -122,7 +122,7 @@ export default function CandidateHackathonJoinPage() {
             Team Submission
           </CardTitle>
           <CardDescription>
-            Only the team name is required — add what you have, update it later
+            Only the team name is required - add what you have, update it later
             if needed.
           </CardDescription>
         </CardHeader>

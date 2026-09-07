@@ -169,8 +169,8 @@ export default function PitchDeckReportPage() {
                     {sub?.value !== null && sub?.value !== undefined
                       ? sub.value.toFixed(1)
                       : wasRenormalized
-                        ? "N/A — reweighted"
-                        : "N/A"}
+                        ? "Not scored, weight redistributed"
+                        : "Not yet computable"}
                   </span>
                 </div>
                 {sub?.rationale && (

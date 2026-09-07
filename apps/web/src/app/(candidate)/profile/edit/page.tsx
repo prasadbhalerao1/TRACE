@@ -7,7 +7,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { ConflictResolver } from "@/components/ConflictResolver";
 import { useCurrentUser } from "@/components/CurrentUserProvider";
 import {
@@ -28,6 +27,8 @@ import {
   type CandidateProfileResponse,
   type HackathonExperienceResult,
 } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Page } from "@/components/common/PageHeader";
 
 export default function ProfileEditPage() {
   const router = useRouter();
@@ -120,7 +121,7 @@ export default function ProfileEditPage() {
     (async () => {
       if (githubStatus === "connected") {
         if (!cancelled) {
-          setNotice("GitHub connected — analyzing your repositories…");
+          setNotice("GitHub connected - analyzing your repositories…");
         }
         try {
           const token = await getToken();
@@ -132,7 +133,7 @@ export default function ProfileEditPage() {
             const result = await pollIngestionStatus(token, {
               onUpdate: (status) => {
                 if (!cancelled && status.status === "processing") {
-                  setNotice("GitHub connected — analyzing your repositories…");
+                  setNotice("GitHub connected - analyzing your repositories…");
                   setIngestionStage(status.stage ?? null);
                 }
               },
@@ -146,10 +147,10 @@ export default function ProfileEditPage() {
                 // Genuine timeout on a very large account — say so explicitly rather
                 // than showing a stale profile that looks like nothing happened.
                 setNotice(
-                  "GitHub connected — still analyzing your repositories. Your Talent Score will update automatically; you can keep using the app.",
+                  "GitHub connected - still analyzing your repositories. Your Talent Score will update automatically; you can keep using the app.",
                 );
               } else {
-                setNotice("GitHub connected — Talent Score updated.");
+                setNotice("GitHub connected - Talent Score updated.");
               }
             }
           }
@@ -197,7 +198,7 @@ export default function ProfileEditPage() {
       if (!token) throw new Error("No session token");
       const updated = await connectLeetcode(token, leetcodeInput.trim());
       setProfile(updated);
-      setNotice("LeetCode connected — problem-solving stats synced.");
+      setNotice("LeetCode connected - problem-solving stats synced.");
       setLeetcodeInput("");
     } catch (err) {
       setError(
@@ -219,7 +220,7 @@ export default function ProfileEditPage() {
       await uploadResume(token, file);
       // Ingestion (parsing + Talent Score recompute) now runs in the background —
       // the upload response returns immediately with ingestion_status: "processing".
-      setNotice("Resume uploaded — processing in the background.");
+      setNotice("Resume uploaded - processing in the background.");
       // Show the stored resume immediately; don't gate the whole page on the recompute.
       await reload().catch(() => undefined);
       const result = await pollIngestionStatus(token, {
@@ -229,10 +230,10 @@ export default function ProfileEditPage() {
         setError(result.error ?? "Resume processing failed");
       } else if (result.status === "processing") {
         setNotice(
-          "Resume uploaded — still processing. Your Talent Score will update shortly.",
+          "Resume uploaded - still processing. Your Talent Score will update shortly.",
         );
       } else {
-        setNotice("Resume processed — Talent Score updated.");
+        setNotice("Resume processed - Talent Score updated.");
       }
       await reload();
     } catch (err) {
@@ -255,7 +256,7 @@ export default function ProfileEditPage() {
       const token = await getToken();
       if (!token) throw new Error("No session token");
       await uploadCertificate(token, file);
-      setNotice("Certificate uploaded — processing in the background.");
+      setNotice("Certificate uploaded - processing in the background.");
       await reload().catch(() => undefined);
       const result = await pollIngestionStatus(token, {
         onUpdate: (status) => setIngestionStage(status.stage ?? null),
@@ -264,7 +265,7 @@ export default function ProfileEditPage() {
         setError(result.error ?? "Certificate processing failed");
       } else if (result.status === "processing") {
         setNotice(
-          "Certificate uploaded — still scanning. Results will appear shortly.",
+          "Certificate uploaded - still scanning. Results will appear shortly.",
         );
       } else {
         setNotice("Certificate processed and OCR-scanned.");
@@ -342,7 +343,7 @@ export default function ProfileEditPage() {
       });
       setProfile(updated);
       setNotice(
-        "Hackathon experience added — Talent Score updating in background.",
+        "Hackathon experience added - Talent Score updating in background.",
       );
       // Reset form
       setHackathonName("");
@@ -373,7 +374,7 @@ export default function ProfileEditPage() {
       const updated = await removeHackathonExperience(token, entryId);
       setProfile(updated);
       setNotice(
-        "Hackathon experience removed — Talent Score updating in background.",
+        "Hackathon experience removed - Talent Score updating in background.",
       );
       // Poll for rescore completion
       await pollIngestionStatus(token);
@@ -395,8 +396,9 @@ export default function ProfileEditPage() {
        the top-left of an otherwise empty page and was replaced by a full-width card.
        `aria-busy` + label preserve the announcement that plain text gave. */
     return (
-      <div
-        className="mx-auto w-full max-w-2xl space-y-6 p-8"
+      <Page
+        width="reading"
+        className="space-y-6"
         aria-busy="true"
         aria-label="Loading your profile"
       >
@@ -416,12 +418,12 @@ export default function ProfileEditPage() {
             ))}
           </CardContent>
         </Card>
-      </div>
+      </Page>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6 p-8">
+    <Page width="reading" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="font-heading">Connect your evidence</CardTitle>
@@ -535,7 +537,7 @@ export default function ProfileEditPage() {
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+            <label className="text-meta font-medium text-muted-foreground font-mono">
               Full Name
             </label>
             <Input
@@ -547,7 +549,7 @@ export default function ProfileEditPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+            <label className="text-meta font-medium text-muted-foreground font-mono">
               Headline
             </label>
             <Input
@@ -559,7 +561,7 @@ export default function ProfileEditPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+            <label className="text-meta font-medium text-muted-foreground font-mono">
               Location
             </label>
             <Input
@@ -572,7 +574,7 @@ export default function ProfileEditPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+              <label className="text-meta font-medium text-muted-foreground font-mono">
                 College / University
               </label>
               <Input
@@ -583,7 +585,7 @@ export default function ProfileEditPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+              <label className="text-meta font-medium text-muted-foreground font-mono">
                 Degree
               </label>
               <Input
@@ -598,7 +600,7 @@ export default function ProfileEditPage() {
           <Button
             onClick={handleSaveProfileInfo}
             disabled={busy === "save_profile"}
-            className="w-full bg-foreground hover:bg-foreground text-white font-medium mt-2"
+            className="mt-2 w-full"
           >
             {busy === "save_profile" ? "Saving..." : "Save Profile Details"}
           </Button>
@@ -634,14 +636,14 @@ export default function ProfileEditPage() {
                         {entry.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {entry.result === "winner" && "🏆 Winner"}
-                        {entry.result === "top5" && "🥈 Top 5"}
-                        {entry.result === "finalist" && "🥉 Finalist"}
-                        {entry.result === "participant" && "👤 Participant"}
+                        {entry.result === "winner" && "Winner"}
+                        {entry.result === "top5" && "Top 5"}
+                        {entry.result === "finalist" && "Finalist"}
+                        {entry.result === "participant" && "Participant"}
                         {" • "}
                         Importance: {entry.weight}/5 • {entry.date}
                       </p>
-                      <p className="text-[11px] text-muted-foreground mt-1">
+                      <p className="text-meta text-muted-foreground mt-1">
                         self-reported
                       </p>
                     </div>
@@ -671,7 +673,7 @@ export default function ProfileEditPage() {
           ) : (
             <div className="space-y-3 rounded-md border border-border bg-card/30 p-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                <label className="text-meta font-medium text-muted-foreground font-mono">
                   Hackathon Name
                 </label>
                 <Input
@@ -684,27 +686,27 @@ export default function ProfileEditPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                  <label className="text-meta font-medium text-muted-foreground font-mono">
                     Result
                   </label>
                   <select
+                    className="select-control"
                     value={hackathonResult}
                     onChange={(e) =>
                       setHackathonResult(
                         e.target.value as HackathonExperienceResult,
                       )
                     }
-                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:ring-2 focus:ring-ring"
                   >
-                    <option value="winner">🏆 Winner</option>
-                    <option value="top5">🥈 Top 5</option>
-                    <option value="finalist">🥉 Finalist</option>
-                    <option value="participant">👤 Participant</option>
+                    <option value="winner">Winner</option>
+                    <option value="top5">Top 5</option>
+                    <option value="finalist">Finalist</option>
+                    <option value="participant">Participant</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                  <label className="text-meta font-medium text-muted-foreground font-mono">
                     Importance (1-5)
                   </label>
                   <div className="flex items-center gap-2">
@@ -726,7 +728,7 @@ export default function ProfileEditPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+                <label className="text-meta font-medium text-muted-foreground font-mono">
                   Date
                 </label>
                 <Input
@@ -745,7 +747,7 @@ export default function ProfileEditPage() {
                     !hackathonName.trim() ||
                     !hackathonDate
                   }
-                  className="flex-1 bg-foreground hover:bg-foreground text-white font-medium"
+                  className="flex-1"
                 >
                   {busy === "add_hackathon" ? "Adding…" : "Add Experience"}
                 </Button>
@@ -812,7 +814,7 @@ export default function ProfileEditPage() {
             <Button
               onClick={handleSetUsername}
               disabled={busy === "username" || !usernameInput.trim()}
-              className="bg-foreground hover:bg-foreground text-white font-medium"
+              
             >
               {busy === "username"
                 ? "Saving…"
@@ -821,7 +823,7 @@ export default function ProfileEditPage() {
                   : "Set Username"}
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             Only lowercase letters, numbers, and hyphens. Min 2 chars.
           </p>
         </CardContent>
@@ -830,6 +832,6 @@ export default function ProfileEditPage() {
       <Button variant="link" onClick={() => router.push("/home")}>
         View your Talent Score →
       </Button>
-    </div>
+    </Page>
   );
 }

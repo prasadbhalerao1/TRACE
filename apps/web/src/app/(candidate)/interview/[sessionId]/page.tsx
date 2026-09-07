@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Mic, MicOff, Video, VideoOff } from "lucide-react";
 import {
   endInterview,
   getInterviewSession,
@@ -20,6 +21,7 @@ import {
   startInterview,
   type InterviewReportResponse,
 } from "@/lib/api";
+import { Input } from "@/components/ui/input";
 
 interface ChatMessage {
   role: "ai" | "user";
@@ -155,7 +157,7 @@ export default function CandidateInterviewPage() {
           ...prev,
           {
             role: "ai",
-            text: "That covers everything — generating your report now…",
+            text: "That covers everything - generating your report now…",
           },
         ]);
         const finalReport = await endInterview(token, sessionId);
@@ -184,7 +186,7 @@ export default function CandidateInterviewPage() {
     ).webkitSpeechRecognition;
     if (!SpeechRecognitionCtor) {
       setError(
-        "Speech recognition isn't supported in this browser — use the text box instead.",
+        "Speech recognition isn't supported in this browser - use the text box instead.",
       );
       return;
     }
@@ -369,11 +371,11 @@ export default function CandidateInterviewPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>
-              Technical Rating: {report.technical_rating?.toFixed(0) ?? "—"}/100
+              Technical Rating: {report.technical_rating?.toFixed(0) ?? "Not recorded"}/100
             </p>
             <p>
               Communication Rating:{" "}
-              {report.communication_rating?.toFixed(0) ?? "—"}/100
+              {report.communication_rating?.toFixed(0) ?? "Not recorded"}/100
             </p>
             <p>{report.hiring_recommendation}</p>
           </CardContent>
@@ -388,7 +390,7 @@ export default function CandidateInterviewPage() {
         title="Interview"
         description={
           status === "completed"
-            ? "Wrapping up — your report will be ready shortly."
+            ? "Wrapping up - your report will be ready shortly."
             : "Speak or type your answers."
         }
       />
@@ -441,18 +443,37 @@ export default function CandidateInterviewPage() {
                   variant={listening ? "destructive" : "secondary"}
                   size="sm"
                   disabled={awaitingResponse}
+                  aria-pressed={listening}
+                  aria-label={
+                    listening ? "Stop dictation" : "Answer by voice"
+                  }
                 >
-                  {listening ? "Listening..." : "🎤"}
+                  {listening ? (
+                    <MicOff aria-hidden className="size-4" />
+                  ) : (
+                    <Mic aria-hidden className="size-4" />
+                  )}
+                  {listening ? "Listening" : "Speak"}
                 </Button>
                 <Button
                   onClick={toggleCamera}
                   variant={cameraActive ? "destructive" : "secondary"}
                   size="sm"
+                  aria-pressed={cameraActive}
+                  aria-label={
+                    cameraActive ? "Turn camera off" : "Turn camera on"
+                  }
                 >
-                  {cameraActive ? "📹 On" : "📹 Off"}
+                  {cameraActive ? (
+                    <VideoOff aria-hidden className="size-4" />
+                  ) : (
+                    <Video aria-hidden className="size-4" />
+                  )}
+                  {cameraActive ? "Camera on" : "Camera off"}
                 </Button>
-                <input
-                  className="flex-1 px-3 py-2 text-sm rounded-md border bg-background text-foreground focus:outline-none focus:ring-1 disabled:opacity-60"
+                <Input
+                  className="flex-1"
+                  aria-label="Your response"
                   placeholder={
                     awaitingResponse
                       ? "Waiting for the interviewer…"
@@ -525,8 +546,8 @@ export default function CandidateInterviewPage() {
                 adapts follow-up questions based on your answers.
               </p>
               <p className="text-xs pt-2 border-t">
-                Optional: Turn on your camera (📹) to practice on video. No
-                recording — it&apos;s live only.
+                Optional: turn on your camera to practice on video. No
+                recording - it&apos;s live only.
               </p>
             </CardContent>
           </Card>

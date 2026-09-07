@@ -70,7 +70,7 @@ export default function CandidateHackathonsPage() {
                   </h2>
                   <p className="mt-0.5 text-meta text-muted-foreground">
                     {hackathon.start_date && hackathon.end_date
-                      ? `${new Date(hackathon.start_date).toLocaleDateString()} – ${new Date(hackathon.end_date).toLocaleDateString()}`
+                      ? `${new Date(hackathon.start_date).toLocaleDateString()} - ${new Date(hackathon.end_date).toLocaleDateString()}`
                       : "Dates to be announced"}
                   </p>
                 </div>

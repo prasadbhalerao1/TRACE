@@ -24,6 +24,8 @@ import {
   type InterviewDefinitionQuestion,
   type InterviewDefinitionResponse,
 } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function CandidateInterviewsPage() {
   const router = useRouter();
@@ -300,10 +302,9 @@ export default function CandidateInterviewsPage() {
                 >
                   <div className="space-y-1">
                     <Label htmlFor="practiceRole">Role Title</Label>
-                    <input
+                    <Input
                       id="practiceRole"
                       required
-                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       placeholder="e.g. Frontend Engineer"
                       value={practiceRole}
                       onChange={(e) => setPracticeRole(e.target.value)}
@@ -312,10 +313,9 @@ export default function CandidateInterviewsPage() {
 
                   <div className="space-y-1">
                     <Label htmlFor="practiceDesc">Role Description</Label>
-                    <textarea
+                    <Textarea
                       id="practiceDesc"
                       required
-                      className="w-full min-h-20 p-3 border rounded-md text-sm bg-background text-foreground"
                       placeholder="What does this role do? What skills matter?"
                       value={practiceDesc}
                       onChange={(e) => setPracticeDesc(e.target.value)}
@@ -324,11 +324,10 @@ export default function CandidateInterviewsPage() {
 
                   <div className="space-y-1">
                     <Label htmlFor="practiceYears">Years of Experience</Label>
-                    <input
+                    <Input
                       id="practiceYears"
                       type="number"
                       min={0}
-                      className="w-full px-3 py-2 border rounded-md text-sm bg-background text-foreground"
                       placeholder="e.g. 3"
                       value={practiceYears}
                       onChange={(e) => setPracticeYears(e.target.value)}

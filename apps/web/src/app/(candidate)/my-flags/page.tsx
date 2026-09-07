@@ -32,6 +32,9 @@ import {
   submitFlagDispute,
 } from "@/lib/api";
 import { CardListSkeleton } from "@/components/CardListSkeleton";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ShieldCheck } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 const STATUS_LABEL: Record<string, string> = {
   raised: "Pending Review",
@@ -100,7 +103,7 @@ export default function CandidateFlagsPage() {
     <Page>
       <PageHeader
         title="Trust flags"
-        description="Integrity flags raised on your profile. Nothing counts against you until a human reviewer upholds it — you can dispute any of them."
+        description="Integrity flags raised on your profile. Nothing counts against you until a human reviewer upholds it - you can dispute any of them."
       />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -119,9 +122,11 @@ export default function CandidateFlagsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {!loading && flags.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No flags have been raised against your profile.
-              </p>
+              <EmptyState
+                icon={ShieldCheck}
+                title="Nothing flagged"
+                description="No authenticity checks have raised anything on your profile. If one ever does, it appears here with the evidence and a way to dispute it."
+              />
             )}
 
             {flags.map((flag) => {
@@ -144,7 +149,7 @@ export default function CandidateFlagsPage() {
                       <p className="text-xs text-muted-foreground mt-1">
                         {reportSummary ?? "See evidence details."}
                       </p>
-                      <span className="inline-block mt-2 px-2 py-0.5 text-[10px] font-semibold bg-rose-flagged text-white rounded-md">
+                      <span className="inline-block mt-2 px-2 py-0.5 text-meta font-medium bg-destructive text-destructive-foreground rounded-sm">
                         Flagged: {new Date(flag.raised_at).toLocaleDateString()}
                       </span>
                     </div>
@@ -164,9 +169,8 @@ export default function CandidateFlagsPage() {
                       <label className="text-xs font-medium text-muted-foreground">
                         Explain the circumstances of this flag:
                       </label>
-                      <textarea
+                      <Textarea
                         required
-                        className="w-full min-h-20 p-3 border rounded-md text-sm bg-background text-foreground focus:outline-none"
                         placeholder="Provide details for review (e.g., shared starter template, coincidental overlap, etc.)"
                         value={disputeText[flag.id] ?? ""}
                         onChange={(e) =>
@@ -188,7 +192,7 @@ export default function CandidateFlagsPage() {
                     <div className="p-3 bg-success/10 border border-success/20 rounded-md text-sm">
                       <p className="text-xs text-muted-foreground">
                         Your dispute has been submitted. Admin review has been
-                        scheduled — you will be notified of the decision within
+                        scheduled - you will be notified of the decision within
                         48 hours.
                       </p>
                     </div>
@@ -206,7 +210,7 @@ export default function CandidateFlagsPage() {
                   {flag.status === "dismissed" && (
                     <div className="p-3 bg-success/10 border border-success/20 rounded-md text-sm">
                       <p className="text-xs text-muted-foreground">
-                        This flag was reviewed and dismissed — no action was
+                        This flag was reviewed and dismissed - no action was
                         taken.
                       </p>
                     </div>
@@ -224,7 +228,7 @@ export default function CandidateFlagsPage() {
                 Authenticity Score
               </CardTitle>
               <CardDescription>
-                Corroboration strength — not a guilt score.
+                Corroboration strength - not a guilt score.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -265,7 +269,7 @@ export default function CandidateFlagsPage() {
               </p>
               <p>
                 Flags do **not** auto-reject candidates; only a flag a human
-                reviewer upholds — with written notes — can ever affect anything
+                reviewer upholds - with written notes - can ever affect anything
                 downstream.
               </p>
             </CardContent>
