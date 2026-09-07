@@ -21,7 +21,7 @@ export function FunnelChart({ funnel }: { funnel: HiringFunnelResponse }) {
   if (funnel.stages.every((s) => s.count === 0)) {
     return (
       <p className="text-sm text-muted-foreground">
-        No applications yet — the funnel will populate once candidates apply or
+        No applications yet - the funnel will populate once candidates apply or
         are sourced.
       </p>
     );

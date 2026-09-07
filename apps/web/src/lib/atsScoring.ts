@@ -159,17 +159,17 @@ function calculateParsingScore(data: ResumeData): {
   let score = 100;
 
   if (!data.fullName?.trim()) {
-    issues.push("Missing full name—ATS cannot identify applicant");
+    issues.push("Missing full name. ATS cannot identify the applicant");
     score -= 20;
   }
 
   if (!data.email?.trim()) {
-    issues.push("No email address—ATS cannot contact you");
+    issues.push("No email address. ATS cannot contact you");
     score -= 20;
   }
 
   if (!data.phone?.trim()) {
-    issues.push("No phone number—backup contact missing");
+    issues.push("No phone number. Backup contact is missing");
     score -= 10;
   }
 
@@ -285,7 +285,7 @@ function calculateKeywordScore(data: ResumeData): {
 
   if (keywordMatches.size < 10) {
     issues.push(
-      `Low keyword density—found only ${keywordMatches.size} ATS keywords (ideal: 15+)`,
+      `Low keyword density: found only ${keywordMatches.size} ATS keywords (ideal: 15+)`,
     );
     score = Math.max(score - 15, 0);
   }
@@ -412,11 +412,11 @@ function calculateContentScore(data: ResumeData): {
     score += 10;
   } else if (totalLength > 4500) {
     issues.push(
-      "Resume too long—ATS systems prefer 1-2 pages (truncation may occur)",
+      "Resume too long. ATS systems prefer 1-2 pages, and content may be truncated",
     );
     score -= 15;
   } else if (totalLength < 1500) {
-    issues.push("Resume too short—add more detail and impact statements");
+    issues.push("Resume too short. Add more detail and impact statements");
     score -= 10;
   }
 

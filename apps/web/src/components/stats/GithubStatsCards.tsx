@@ -43,7 +43,7 @@ export function GithubStatsCards({ summary }: { summary: GithubSummary }) {
         label="Forks"
         value={summary.total_forks}
         icon={GitFork}
-        iconClassName="text-sky-400"
+        iconClassName="text-chart-1"
       />
       <StatCard
         label="Repositories"

@@ -103,7 +103,7 @@ export const MAX_AUTO_RETRIES = 4;
  */
 const MESSAGES_BY_CODE: Record<string, string> = {
   LLM_QUOTA_EXHAUSTED:
-    "The AI provider account is out of credit, so AI features are paused. Retrying will not help — this needs an administrator to top up the account.",
+    "The AI provider account is out of credit, so AI features are paused. Retrying will not help - this needs an administrator to top up the account.",
   LLM_NOT_CONFIGURED:
     "AI features are not configured on this deployment. An administrator needs to add a provider API key.",
   LLM_RATE_LIMITED:

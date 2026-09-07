@@ -48,8 +48,8 @@ export function StageProgress({
             <span
               className={cn(
                 "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors duration-300",
-                done && "border-teal-verified bg-teal-verified text-white",
-                active && "border-teal-verified",
+                done && "border-success bg-success text-success-foreground",
+                active && "border-success",
                 !done && !active && "border-muted-foreground/30",
               )}
             >
@@ -57,7 +57,7 @@ export function StageProgress({
                 <CheckIcon className="size-2.5" strokeWidth={3} aria-hidden />
               ) : active ? (
                 // Pulsing dot marks the step actually in flight.
-                <span className="size-1.5 animate-pulse rounded-full bg-teal-verified" />
+                <span className="size-1.5 animate-pulse rounded-full bg-success" />
               ) : null}
             </span>
             <span
@@ -76,8 +76,8 @@ export function StageProgress({
       })}
       {unknownStage ? (
         <div className="flex items-center gap-2.5 text-sm">
-          <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-teal-verified">
-            <span className="size-1.5 animate-pulse rounded-full bg-teal-verified" />
+          <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-success">
+            <span className="size-1.5 animate-pulse rounded-full bg-success" />
           </span>
           <span className="font-medium text-foreground">{currentStage}</span>
         </div>

@@ -220,7 +220,7 @@ export function AtsResumeBuilder() {
   const handleAiOptimize = async () => {
     if (!targetJd.trim()) {
       setAiError(
-        "Paste a target job description first — tailoring needs something to tailor to.",
+        "Paste a target job description first - tailoring needs something to tailor to.",
       );
       return;
     }
@@ -268,7 +268,7 @@ export function AtsResumeBuilder() {
         // 422: the guardrail withheld the document because it contained claims the
         // profile does not support. Show exactly which ones.
         setAiError(
-          "Generation was withheld — the draft contained unsupported claims:",
+          "Generation was withheld - the draft contained unsupported claims:",
         );
         setFactCheckFindings(err.findings.map((f) => f.claim));
       } else {
@@ -286,7 +286,7 @@ export function AtsResumeBuilder() {
       company: "Tech Company Inc.",
       role: "Software Engineer",
       location: "San Francisco, CA",
-      dates: "2024 – Present",
+      dates: "2024 - Present",
       bullets: [
         "Led implementation of core software features resulting in 25% performance improvement.",
       ],
@@ -482,7 +482,7 @@ export function AtsResumeBuilder() {
         >
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-foreground">
-              🏆 Apex Resume
+              Apex
             </span>
             {template === "apex" && (
               <Badge variant="secondary" className="text-[10px]">
@@ -507,7 +507,7 @@ export function AtsResumeBuilder() {
         >
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-foreground">
-              ⚡ Modern 30/70
+              Modern 30/70
             </span>
             {template === "modern" && (
               <Badge variant="secondary" className="text-[10px]">
@@ -532,7 +532,7 @@ export function AtsResumeBuilder() {
         >
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-foreground">
-              💻 Creative Hacker
+              Creative
             </span>
             {template === "creative" && (
               <Badge variant="secondary" className="text-[10px]">
@@ -557,7 +557,7 @@ export function AtsResumeBuilder() {
         >
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-foreground">
-              📜 Minimalist Academic
+              Minimalist
             </span>
             {template === "minimalist" && (
               <Badge variant="secondary" className="text-[10px]">
@@ -849,7 +849,7 @@ export function AtsResumeBuilder() {
                       }}
                     />
                     <Input
-                      placeholder="Dates (e.g. 2024 – Present)"
+                      placeholder="Dates (e.g. 2024 - Present)"
                       value={exp.dates}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -1024,7 +1024,7 @@ export function AtsResumeBuilder() {
             {/* Printable Document Frame */}
             <div
               id="resume-document"
-              className="bg-card text-foreground shadow-xl rounded-sm p-8 min-h-[850px] border border-border print:shadow-none print:border-none print:p-0 print:m-0 font-sans select-text"
+              className="bg-card text-foreground shadow-overlay rounded-sm p-8 min-h-[850px] border border-border print:shadow-none print:border-none print:p-0 print:m-0 font-sans select-text"
             >
               {template === "apex" && <ApexTemplate data={data} />}
               {template === "modern" && <ModernTemplate data={data} />}
@@ -1122,7 +1122,7 @@ function ApexTemplate({ data }: { data: ResumeData }) {
               <div key={exp.id}>
                 <div className="flex justify-between items-baseline font-bold text-foreground">
                   <span>
-                    {exp.company} —{" "}
+                    {exp.company} -{" "}
                     <span className="italic font-normal text-foreground">
                       {exp.role}
                     </span>
@@ -1189,7 +1189,7 @@ function ApexTemplate({ data }: { data: ResumeData }) {
                   <span className="font-bold text-foreground">
                     {edu.institution}
                   </span>{" "}
-                  — <span className="text-foreground">{edu.degree}</span>
+                  - <span className="text-foreground">{edu.degree}</span>
                 </div>
                 <div className="text-[10.5px] text-foreground">
                   {edu.gpa} ({edu.dates})
@@ -1211,7 +1211,7 @@ function ModernTemplate({ data }: { data: ResumeData }) {
     <div className="grid grid-cols-12 gap-5 text-[11.5px] text-foreground font-sans">
       <div className="col-span-4 border-r border-border pr-3.5 space-y-3.5">
         <div>
-          <h1 className="text-xl font-extrabold text-primary leading-tight">
+          <h1 className="text-xl font-semibold text-primary leading-tight">
             {data.fullName}
           </h1>
           <p className="text-[11px] text-primary font-bold mt-0.5">
@@ -1374,7 +1374,7 @@ function MinimalistTemplate({ data }: { data: ResumeData }) {
           {data.fullName}
         </h1>
         <div className="text-[10.5px] text-foreground italic mt-0.5">
-          {data.roleTitle} — {data.email} • {data.phone}
+          {data.roleTitle} - {data.email} • {data.phone}
         </div>
       </div>
 
@@ -1397,7 +1397,7 @@ function MinimalistTemplate({ data }: { data: ResumeData }) {
           <div key={exp.id} className="mb-2">
             <div className="flex justify-between italic text-foreground">
               <span className="font-bold">
-                {exp.company} — {exp.role}
+                {exp.company} - {exp.role}
               </span>
               <span className="text-muted-foreground text-[10.5px]">
                 {exp.dates}

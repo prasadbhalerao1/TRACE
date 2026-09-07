@@ -34,7 +34,7 @@ export function StatCard({
             <p className="text-meta font-medium text-muted-foreground">
               {label}
             </p>
-            <p className="font-heading text-2xl font-extrabold text-foreground tracking-tight">
+            <p className="font-heading text-2xl font-semibold text-foreground tracking-tight">
               {value}
             </p>
           </div>

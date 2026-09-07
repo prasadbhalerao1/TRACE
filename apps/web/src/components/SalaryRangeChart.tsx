@@ -42,7 +42,7 @@ export function SalaryRangeChart({ low, high }: { low: number; high: number }) {
           <Tooltip
             formatter={(_value, key) =>
               key === "range"
-                ? [`${formatUsd(low)} – ${formatUsd(high)}`, "Estimated range"]
+                ? [`${formatUsd(low)} - ${formatUsd(high)}`, "Estimated range"]
                 : ["", ""]
             }
           />

@@ -49,7 +49,7 @@ export function AchievementCard({
         <p className="text-xs font-bold text-foreground font-heading leading-tight">
           {title}
         </p>
-        <p className="text-[10px] leading-relaxed text-muted-foreground font-sans">
+        <p className="text-meta leading-relaxed text-muted-foreground font-sans">
           {description}
         </p>
       </div>

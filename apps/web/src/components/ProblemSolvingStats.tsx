@@ -17,6 +17,7 @@ import { ContributionHeatmap } from "@/components/charts/ContributionHeatmap";
 import { Metric, MetricGrid } from "@/components/common/Metric";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LeetcodeStats } from "@/lib/api";
+import { ChartTooltipContent } from "@/components/ui/chart";
 
 interface ProblemSolvingStatsProps {
   leetcodeUsername: string | null;
@@ -44,17 +45,46 @@ interface CustomLineTooltipProps {
   payload?: RatingPayload[];
 }
 
+interface DifficultyPayload {
+  name: string;
+  value: number;
+}
+
+const DifficultyTooltip = ({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: DifficultyPayload[];
+}) => {
+  if (!active || !payload?.length) return null;
+  const slice = payload[0];
+  return (
+    <ChartTooltipContent
+      rows={[
+        {
+          label: slice.name,
+          value: String(slice.value),
+          color: DIFFICULTY_COLORS[slice.name],
+        },
+      ]}
+    />
+  );
+};
+
 const CustomLineTooltip = ({ active, payload }: CustomLineTooltipProps) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border border-border bg-card p-2.5 shadow-lg">
-        <p className="text-meta font-medium text-muted-foreground truncate max-w-[150px]">
-          {payload[0].payload.contest}
-        </p>
-        <p className="mt-0.5 text-xs font-extrabold text-primary font-mono">
-          Rating: {payload[0].value}
-        </p>
-      </div>
+      <ChartTooltipContent
+        title={payload[0].payload.contest}
+        rows={[
+          {
+            label: "Rating",
+            value: String(payload[0].value),
+            color: "var(--chart-1)",
+          },
+        ]}
+      />
     );
   }
   return null;
@@ -118,7 +148,7 @@ export function ProblemSolvingStats({
         </CardHeader>
         <CardContent className="pt-4">
           <p className="text-xs text-muted-foreground">
-            Stats haven&apos;t synced yet — try refreshing.
+            Stats haven&apos;t synced yet - try refreshing.
           </p>
         </CardContent>
       </Card>
@@ -175,15 +205,7 @@ export function ProblemSolvingStats({
                       />
                     ))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--popover)",
-                      border: "none",
-                      borderRadius: "var(--radius)",
-                      boxShadow: "var(--shadow-overlay)",
-                      fontSize: "12px",
-                    }}
-                  />
+                  <Tooltip content={<DifficultyTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

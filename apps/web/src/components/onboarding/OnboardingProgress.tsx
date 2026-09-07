@@ -62,11 +62,11 @@ export function OnboardingProgress({
               <span
                 aria-hidden="true"
                 className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                  "flex size-5 shrink-0 items-center justify-center rounded-full text-meta font-bold",
                   done
-                    ? "bg-success text-white"
+                    ? "bg-success text-success-foreground"
                     : active
-                      ? "bg-primary text-white"
+                      ? "bg-primary text-primary-foreground"
                       : "border border-dashed border-border",
                 )}
               >

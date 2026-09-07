@@ -78,7 +78,7 @@ export function ProfileCompleteness({
             Complete your profile
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Recruiters rank verified profiles higher —{" "}
+            Recruiters rank verified profiles higher -{" "}
             {items.length - completed} step
             {items.length - completed === 1 ? "" : "s"} left.
           </p>
@@ -91,7 +91,7 @@ export function ProfileCompleteness({
         )}
       </div>
 
-      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-amber-200/70">
+      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-warning/20">
         <div
           className="h-full rounded-full bg-warning transition-[width] duration-500"
           style={{ width: `${pct}%` }}
@@ -111,7 +111,7 @@ export function ProfileCompleteness({
             <span
               className={
                 item.done
-                  ? "flex size-4 items-center justify-center rounded-full bg-success text-white"
+                  ? "flex size-4 items-center justify-center rounded-full bg-success text-success-foreground"
                   : "size-4 rounded-full border border-dashed border-border"
               }
             >

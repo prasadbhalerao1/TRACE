@@ -176,13 +176,13 @@ export function CareerGuidance() {
             <CardHeader>
               <CardTitle className="font-heading">
                 Skill Gaps{" "}
-                {guidance.target_role ? `— ${guidance.target_role}` : ""}
+                {guidance.target_role ? `- ${guidance.target_role}` : ""}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {guidance.skill_gaps.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No significant gaps found for this role — your skill set
+                  No significant gaps found for this role - your skill set
                   already covers it well.
                 </p>
               ) : (

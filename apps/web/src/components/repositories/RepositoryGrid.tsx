@@ -44,13 +44,13 @@ export function RepositoryGrid({
       <TabsList className="bg-muted border border-border/80 p-1 rounded-lg h-9">
         <TabsTrigger
           value="starred"
-          className="text-[10px] font-bold uppercase tracking-wider font-mono text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-flat rounded-md px-3"
+          className="text-meta font-medium font-mono text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-flat rounded-md px-3"
         >
           Most Starred
         </TabsTrigger>
         <TabsTrigger
           value="recent"
-          className="text-[10px] font-bold uppercase tracking-wider font-mono text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-flat rounded-md px-3"
+          className="text-meta font-medium font-mono text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-flat rounded-md px-3"
         >
           Recently Updated
         </TabsTrigger>

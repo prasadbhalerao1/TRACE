@@ -10,7 +10,7 @@ export function RoadmapTimeline({ stages }: { stages: RoadmapStage[] }) {
   if (stages.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Nothing to roadmap — no significant skill gaps for this role.
+        Nothing to roadmap - no significant skill gaps for this role.
       </p>
     );
   }

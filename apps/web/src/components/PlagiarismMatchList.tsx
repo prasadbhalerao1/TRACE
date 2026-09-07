@@ -26,7 +26,7 @@ export function PlagiarismMatchList({
     return (
       <p className="text-sm text-warning">
         The similarity check could not be completed for this deck, so it has not been
-        compared against prior submissions. This is not a pass — try re-running the
+        compared against prior submissions. This is not a pass - try re-running the
         analysis.
       </p>
     );

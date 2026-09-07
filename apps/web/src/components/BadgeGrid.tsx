@@ -5,7 +5,7 @@ export function BadgeGrid({ badges }: { badges: BadgeResponse[] }) {
   if (badges.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No badges yet — awarded when a skill is corroborated by 2+ independent
+        No badges yet - awarded when a skill is corroborated by 2+ independent
         sources (e.g. resume + GitHub language usage).
       </p>
     );

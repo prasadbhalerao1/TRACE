@@ -115,14 +115,14 @@ function AssignAssessmentDialog({
         <CardContent className="space-y-3">
           {done ? (
             <p className="text-sm text-success">
-              Assessment assigned — the candidate will see it in their inbox.
+              Assessment assigned - the candidate will see it in their inbox.
             </p>
           ) : (
             <>
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                 Type
                 <select
-                  className="border rounded-md px-2 py-1.5 text-sm bg-background text-foreground"
+                  className="select-control"
                   value={type}
                   onChange={(e) => setType(e.target.value as typeof type)}
                 >
@@ -187,7 +187,7 @@ function CandidateCard({
             "Candidate"}
         </p>
         {application.fraud_flag_status && (
-          <Badge variant="destructive" className="text-[9px] shrink-0">
+          <Badge variant="destructive" className="text-meta shrink-0">
             {FRAUD_BADGE_LABEL[application.fraud_flag_status]}
           </Badge>
         )}
@@ -202,7 +202,7 @@ function CandidateCard({
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => onAdvance(nextStage)}
-            className="text-[10px] text-primary font-semibold hover:underline"
+            className="text-meta text-primary font-semibold hover:underline"
           >
             Advance to {APPLICATION_STAGE_LABELS[nextStage]} →
           </button>
@@ -211,7 +211,7 @@ function CandidateCard({
           <Link
             href={report.href}
             onPointerDown={(e) => e.stopPropagation()}
-            className="text-[10px] text-primary font-semibold hover:underline"
+            className="text-meta text-primary font-semibold hover:underline"
           >
             {report.label}
           </Link>
@@ -219,7 +219,7 @@ function CandidateCard({
         <button
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => setAssigning(true)}
-          className="text-[10px] text-primary font-semibold hover:underline"
+          className="text-meta text-primary font-semibold hover:underline"
         >
           Assign Assessment
         </button>

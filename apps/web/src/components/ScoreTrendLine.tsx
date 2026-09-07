@@ -8,6 +8,7 @@ import {
 } from "recharts";
 
 import type { TalentScoreResponse } from "@/lib/api";
+import { ChartTooltipContent } from "@/components/ui/chart";
 
 interface TooltipPayload {
   value: number;
@@ -25,14 +26,16 @@ interface CustomTooltipProps {
 const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
-      <div className="rounded-lg border border-border bg-card p-2.5 shadow-lg">
-        <p className="text-meta font-medium text-muted-foreground">
-          {payload[0].payload.date}
-        </p>
-        <p className="mt-0.5 text-xs font-extrabold text-primary font-mono">
-          Score: {payload[0].value.toFixed(1)}
-        </p>
-      </div>
+      <ChartTooltipContent
+        title={payload[0].payload.date}
+        rows={[
+          {
+            label: "Score",
+            value: payload[0].value.toFixed(1),
+            color: "var(--chart-1)",
+          },
+        ]}
+      />
     );
   }
   return null;

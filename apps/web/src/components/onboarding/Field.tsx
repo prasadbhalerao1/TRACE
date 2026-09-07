@@ -38,7 +38,7 @@ export function Field({
       <Label htmlFor={id} className="text-xs font-medium text-foreground">
         {label}
         {!required && (
-          <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+          <span className="ml-1.5 text-meta font-normal text-muted-foreground">
             optional
           </span>
         )}

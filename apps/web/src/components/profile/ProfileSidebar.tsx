@@ -253,7 +253,7 @@ export function ProfileSidebar({
                   </p>
                   {education.degree && (
                     <p
-                      className="text-[10px] text-muted-foreground truncate mt-0.5"
+                      className="text-meta text-muted-foreground truncate mt-0.5"
                       title={education.degree}
                     >
                       {education.degree}

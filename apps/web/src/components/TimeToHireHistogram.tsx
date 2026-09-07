@@ -24,7 +24,7 @@ export function TimeToHireHistogram({
   if (data.every((d) => d.count === 0)) {
     return (
       <p className="text-sm text-muted-foreground">
-        No hires yet — time-to-hire populates once candidates reach the
+        No hires yet - time-to-hire populates once candidates reach the
         &quot;Hired&quot; stage.
       </p>
     );

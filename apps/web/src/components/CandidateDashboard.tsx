@@ -14,6 +14,7 @@ import { CardSkeleton } from "@/components/common/Skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EvidenceReceipt } from "@/components/EvidenceReceipt";
 import { ProblemSolvingStats } from "@/components/ProblemSolvingStats";
+import { TalentScorePanel } from "@/components/TalentScorePanel";
 import { ProfileSidebar } from "@/components/profile/ProfileSidebar";
 import { RepositoryGrid } from "@/components/repositories/RepositoryGrid";
 import { SkillsSection } from "@/components/skills/SkillsSection";
@@ -229,7 +230,7 @@ export function CandidateDashboard() {
   const devStatsError = profileResource.error ?? githubResource.error;
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start max-w-7xl mx-auto w-full px-4 py-8">
+    <div className="mx-auto grid w-full max-w-workspace grid-cols-1 gap-6 px-4 py-6 md:px-8 md:py-8 lg:grid-cols-[280px_1fr] lg:items-start">
       {profileResource.loading && !profile ? (
         // Sized to the real ProfileSidebar so the two-column grid is laid out from the
         // first paint and nothing jumps sideways when the profile lands.
@@ -287,7 +288,7 @@ export function CandidateDashboard() {
               <Button
                 onClick={handleConnectGithub}
                 disabled={busyConnect}
-                className="bg-foreground hover:bg-foreground text-white font-medium px-6 py-2"
+                
               >
                 {busyConnect ? "Connecting..." : "Connect GitHub"}
               </Button>
@@ -303,19 +304,19 @@ export function CandidateDashboard() {
               <div className="mb-4 flex flex-wrap items-center gap-6 text-meta font-medium text-muted-foreground select-none">
                 <span>
                   Contributions:{" "}
-                  <span className="font-extrabold text-foreground">
+                  <span className="font-semibold text-foreground">
                     {githubStats.total_contributions}
                   </span>
                 </span>
                 <span>
                   Max Streak:{" "}
-                  <span className="font-extrabold text-foreground">
+                  <span className="font-semibold text-foreground">
                     {githubStats.longest_streak}d
                   </span>
                 </span>
                 <span>
                   Current Streak:{" "}
-                  <span className="font-extrabold text-foreground">
+                  <span className="font-semibold text-foreground">
                     {githubStats.current_streak}d
                   </span>
                 </span>
@@ -365,7 +366,7 @@ export function CandidateDashboard() {
                       Talent Score.
                     </p>
                     <Button
-                      className="w-full bg-foreground hover:bg-foreground text-white font-medium"
+                      className="w-full"
                       render={<Link href="/profile/edit" />}
                     >
                       Get started
@@ -374,23 +375,16 @@ export function CandidateDashboard() {
                 </Card>
               ) : (
                 <>
-                  <Card className="border-border bg-card text-foreground shadow-flat ">
-                    <CardHeader className="pb-3 border-b border-border mb-4 flex flex-row items-center justify-between">
-                      <CardTitle className="text-section font-semibold text-foreground">
-                        Talent Score
-                      </CardTitle>
-                      <span className="font-heading text-xl font-extrabold text-primary font-mono">
-                        {talentResource.data.latestScore.overall !== null
-                          ? talentResource.data.latestScore.overall.toFixed(1)
-                          : "—"}
-                      </span>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <ScoreRadarChart
-                        subScores={talentResource.data.latestScore.sub_scores}
-                      />
-                    </CardContent>
-                  </Card>
+                  {/* The score ships with its confidence, its age and the evidence
+                      behind each sub-score. A bare number invites a decision it cannot
+                      support. */}
+                  <TalentScorePanel score={talentResource.data.latestScore} />
+
+                  <Section title="Score shape">
+                    <ScoreRadarChart
+                      subScores={talentResource.data.latestScore.sub_scores}
+                    />
+                  </Section>
 
                   <Section title="Score history">
                     <ScoreTrendLine

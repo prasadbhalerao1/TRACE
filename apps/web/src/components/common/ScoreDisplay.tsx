@@ -157,7 +157,7 @@ export function EvidencePopover({
               {subScore.evidence.map((id) => (
                 <li
                   key={id}
-                  className="truncate font-mono text-[11px] text-muted-foreground"
+                  className="truncate font-mono text-meta text-muted-foreground"
                 >
                   {id}
                 </li>

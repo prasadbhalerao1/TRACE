@@ -95,7 +95,7 @@ export function OnboardingWizard() {
   const [resumeUploaded, setResumeUploaded] = useState(false);
   const [notice, setNotice] = useState<string | null>(
     githubParam === "connected"
-      ? "GitHub connected — analyzing your repositories in the background."
+      ? "GitHub connected - analyzing your repositories in the background."
       : null,
   );
   const [seeded, setSeeded] = useState(false);
@@ -374,7 +374,7 @@ export function OnboardingWizard() {
                 label={LABELS.headline}
                 value={values.headline}
                 onChange={(v) => set("headline", v)}
-                placeholder="e.g. Final-year CS student — backend & distributed systems"
+                placeholder="e.g. Final-year CS student - backend & distributed systems"
                 required
                 hint="One line on who you are and what you build."
                 error={
@@ -439,7 +439,7 @@ export function OnboardingWizard() {
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {githubConnected
                       ? `Connected as ${profile?.github_username}`
-                      : "The strongest signal in your Talent Score — we analyze your real commits."}
+                      : "The strongest signal in your Talent Score - we analyze your real commits."}
                   </p>
                 </div>
                 {githubConnected ? (
@@ -469,7 +469,7 @@ export function OnboardingWizard() {
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {resumeUploaded
-                      ? "Resume uploaded — extracting skills and history."
+                      ? "Resume uploaded - extracting skills and history."
                       : "Upload a PDF resume to populate experience and skills automatically."}
                   </p>
                 </div>
@@ -514,7 +514,7 @@ export function OnboardingWizard() {
 
               {!githubConnected && (
                 <p className="text-xs text-muted-foreground">
-                  You can skip GitHub for now — we&apos;ll keep reminding you on
+                  You can skip GitHub for now - we&apos;ll keep reminding you on
                   your dashboard, and your Talent Score stays incomplete until
                   it&apos;s connected.
                 </p>

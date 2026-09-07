@@ -209,7 +209,7 @@ export function InterviewLobby({
                 )}
                 {permission === "no-device" && (
                   <p className="max-w-xs text-xs text-muted-foreground">
-                    You can still join — this interview works entirely by text.
+                    You can still join - this interview works entirely by text.
                   </p>
                 )}
                 {errorDetail && (
@@ -285,7 +285,7 @@ export function InterviewLobby({
  (services/agents/assessment/interview_graph.py), so the number of
  questions is not fixed and the wording is never pre-written. */}
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                This outline sets the agenda — it isn&apos;t a script. Every
+                This outline sets the agenda - it isn&apos;t a script. Every
                 question is written live from your answers, and a thin answer
                 earns a follow-up on the same topic before moving on.
               </p>
@@ -297,7 +297,7 @@ export function InterviewLobby({
                   key={`${index}-${topic}`}
                   className="flex gap-3 rounded-md border border-border bg-card p-3"
                 >
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-meta font-bold text-primary">
                     {index + 1}
                   </span>
                   <span className="text-sm font-medium text-foreground">

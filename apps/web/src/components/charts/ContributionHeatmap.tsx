@@ -87,7 +87,7 @@ export function ContributionHeatmap({ days }: ContributionHeatmapProps) {
         {monthLabels.map(({ weekIndex, label }) => (
           <span
             key={weekIndex}
-            className="absolute text-[9px] font-bold text-muted-foreground uppercase tracking-wider font-mono"
+            className="absolute text-meta font-bold text-muted-foreground uppercase tracking-wider font-mono"
             style={{ left: weekIndex * 14 }}
           >
             {label}
@@ -110,7 +110,7 @@ export function ContributionHeatmap({ days }: ContributionHeatmapProps) {
           </div>
         ))}
       </div>
-      <div className="mt-3 flex items-center justify-end gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wider font-mono select-none">
+      <div className="mt-3 flex items-center justify-end gap-1.5 text-meta font-bold text-muted-foreground uppercase tracking-wider font-mono select-none">
         <span>Less</span>
         {LEVEL_CLASSNAMES.map((cls, idx) => (
           <div key={idx} className={`h-[10px] w-[10px] rounded-[2px] ${cls}`} />

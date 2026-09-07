@@ -78,7 +78,7 @@ export function AchievementsGrid({
       title: "Starred Developer",
       description:
         starsTier >= 0
-          ? `${TIER_LABELS[starsTier]} tier — ${githubSummary.total_stars} stars`
+          ? `${TIER_LABELS[starsTier]} tier - ${githubSummary.total_stars} stars`
           : "Earn 10+ stars to unlock",
       earned: starsTier >= 0,
       tier: starsTier,
@@ -88,7 +88,7 @@ export function AchievementsGrid({
       title: "Commit Machine",
       description:
         commitsTier >= 0
-          ? `${TIER_LABELS[commitsTier]} tier — ${githubSummary.total_commits} commits`
+          ? `${TIER_LABELS[commitsTier]} tier - ${githubSummary.total_commits} commits`
           : "Reach 100+ commits to unlock",
       earned: commitsTier >= 0,
       tier: commitsTier,
@@ -98,7 +98,7 @@ export function AchievementsGrid({
       title: "Pull Request Pro",
       description:
         prsTier >= 0
-          ? `${TIER_LABELS[prsTier]} tier — ${githubSummary.total_prs} PRs`
+          ? `${TIER_LABELS[prsTier]} tier - ${githubSummary.total_prs} PRs`
           : "Open 10+ PRs to unlock",
       earned: prsTier >= 0,
       tier: prsTier,
@@ -153,7 +153,7 @@ export function AchievementsGrid({
       title: "Community Favorite",
       description:
         followersTier >= 0
-          ? `${TIER_LABELS[followersTier]} tier — ${githubStats.followers} followers`
+          ? `${TIER_LABELS[followersTier]} tier - ${githubStats.followers} followers`
           : "Reach 10+ followers to unlock",
       earned: followersTier >= 0,
       tier: followersTier,

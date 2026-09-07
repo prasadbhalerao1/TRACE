@@ -48,7 +48,7 @@ export function RepositoryCard({
             {project.topics.slice(0, 4).map((topic) => (
               <span
                 key={topic}
-                className="rounded-md bg-card border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                className="rounded-md bg-card border border-border px-2 py-0.5 text-meta font-medium text-muted-foreground"
               >
                 {topic}
               </span>
@@ -67,7 +67,7 @@ export function RepositoryCard({
           <Star className="h-3.5 w-3.5 text-warning" /> {project.stars ?? 0}
         </span>
         <span className="flex items-center gap-1 hover:text-foreground transition-colors">
-          <GitFork className="h-3.5 w-3.5 text-sky-500" /> {project.forks ?? 0}
+          <GitFork className="h-3.5 w-3.5 text-muted-foreground" /> {project.forks ?? 0}
         </span>
         {timeAgo(project.pushed_at) && (
           <span className="ml-auto text-muted-foreground font-medium">

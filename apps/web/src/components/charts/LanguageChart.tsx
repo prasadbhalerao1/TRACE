@@ -8,13 +8,14 @@ import { EmptyState } from "@/components/common/EmptyState";
 import type { GithubProjectSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+// The categorical ramp, in order. Every entry is a distinct hue: the previous list
+// repeated `bg-warning`, so the 3rd and 6th language rendered identically.
 const LANGUAGE_COLORS = [
-  "bg-success",
-  "bg-sky-500",
-  "bg-warning",
-  "bg-destructive",
-  "bg-primary",
-  "bg-warning",
+  "bg-chart-1",
+  "bg-chart-2",
+  "bg-chart-3",
+  "bg-chart-4",
+  "bg-chart-5",
 ];
 
 function useLanguageBreakdown(projects: GithubProjectSummary[]) {
@@ -32,11 +33,13 @@ function useLanguageBreakdown(projects: GithubProjectSummary[]) {
     const sum = [...totals.values()].reduce((a, b) => a + b, 0);
     return [...totals.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
+      // Capped at the ramp length: a 6th slice would wrap the modulo and repeat the
+      // first colour, which is the duplicate-colour bug this ramp exists to avoid.
+      .slice(0, LANGUAGE_COLORS.length)
       .map(([name, bytes], i) => ({
         name,
         percent: sum > 0 ? Math.round((bytes / sum) * 1000) / 10 : 0,
-        color: LANGUAGE_COLORS[i % LANGUAGE_COLORS.length],
+        color: LANGUAGE_COLORS[i],
       }));
   }, [projects]);
 }

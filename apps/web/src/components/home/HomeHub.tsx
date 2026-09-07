@@ -19,7 +19,8 @@ import {
 } from "@/components/common/PageHeader";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { fetchMyProfile } from "@/lib/api";
-import { ROLE_FEATURES, ROLE_METADATA, type Role } from "@/lib/constants";
+import { ROLE_METADATA, type Role } from "@/lib/constants";
+import { hubCapabilitiesFor } from "@/components/common/workspaceNav";
 
 /** Titles that are never what someone is called, so the greeting skips past them.
  *
@@ -71,7 +72,7 @@ export function HomeHub() {
     "home:profile",
   );
 
-  const features = ROLE_FEATURES[role] ?? ROLE_FEATURES.candidate;
+  const features = hubCapabilitiesFor(role);
   const roleMeta = ROLE_METADATA[role] ?? ROLE_METADATA.candidate;
   const firstName = greetingName(me?.profile?.full_name);
   const Attention = ATTENTION[role] ?? CandidateAttention;
@@ -101,7 +102,7 @@ export function HomeHub() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
               <FeatureCard
-                key={`${feature.href}-${feature.title}`}
+                key={`${feature.href}-${feature.label}`}
                 feature={feature}
               />
             ))}
