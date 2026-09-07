@@ -63,3 +63,6 @@ infra/qdrantdata/
 # Submission drafts and their generated DOCX/PDF builds
 FinalV0/
 FinalV1/
+
+# Agent skills
+.agents/skills/
