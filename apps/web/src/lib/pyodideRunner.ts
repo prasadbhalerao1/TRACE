@@ -19,11 +19,67 @@ interface PyodideInterface {
   globals: { set: (name: string, value: unknown) => void };
 }
 
+// `loadPyodide` is attached to `window` by the CDN script loaded in `getPyodide`.
+declare global {
+  interface Window {
+    loadPyodide?: (options: {
+      indexURL: string;
+    }) => Promise<PyodideInterface>;
+  }
+}
+
+/** Injects the CDN loader script once, resolving when `window.loadPyodide` exists.
+ *
+ * This is deliberately a runtime `<script>` tag rather than `import("pyodide")`. The npm
+ * package's entry pulls in `node:fs`, `node:path` and `node:child_process` for its
+ * Node.js code path; webpack cannot resolve the `node:` scheme and fails the module
+ * build, which made this whole route return a 500 under `next dev --webpack` (the
+ * script `npm run dev` actually runs) and broke `next build --webpack` outright.
+ * Turbopack tolerated it, which is why the failure only showed on one of the two
+ * bundlers. Since the runtime and stdlib were already being fetched from the CDN, the
+ * package was never needed at runtime -- only its type signature was. */
+function loadPyodideScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.loadPyodide) {
+      resolve();
+      return;
+    }
+    const src = `${PYODIDE_INDEX_URL}pyodide.js`;
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${src}"]`,
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("Could not load the Python runtime.")),
+        { once: true },
+      );
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () =>
+      reject(new Error("Could not load the Python runtime."));
+    document.head.appendChild(script);
+  });
+}
+
 async function getPyodide(): Promise<PyodideInterface> {
   if (!pyodidePromise) {
-    pyodidePromise = import("pyodide").then(({ loadPyodide }) =>
-      loadPyodide({ indexURL: PYODIDE_INDEX_URL }),
-    ) as Promise<PyodideInterface>;
+    pyodidePromise = loadPyodideScript().then(() => {
+      if (!window.loadPyodide) {
+        throw new Error("Could not load the Python runtime.");
+      }
+      return window.loadPyodide({ indexURL: PYODIDE_INDEX_URL });
+    });
+    // A failed load must not be cached, or every later attempt reuses the rejection
+    // and the user can never retry without a full reload.
+    pyodidePromise.catch(() => {
+      pyodidePromise = null;
+    });
   }
   return pyodidePromise;
 }
