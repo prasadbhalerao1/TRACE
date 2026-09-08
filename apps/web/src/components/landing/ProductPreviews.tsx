@@ -322,12 +322,14 @@ export function RecruiterSearch() {
                 <motion.li
                   key={r.name}
                   layout
-                  initial={{ opacity: 0, y: reduced ? 0 : 10 }}
+                  initial={
+                    animating ? { opacity: 0, y: 10 } : { opacity: 1, y: 0 }
+                  }
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{
                     duration: 0.4,
-                    delay: reduced ? 0 : i * 0.12,
+                    delay: animating ? i * 0.12 : 0,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                   className="rounded-md bg-surface-sunken/60 p-4"
@@ -384,11 +386,11 @@ export function RecruiterSearch() {
                         >
                           <motion.div
                             className="h-full rounded-full bg-primary"
-                            initial={{ width: reduced ? `${bd.value}%` : 0 }}
+                            initial={{ width: animating ? 0 : `${bd.value}%` }}
                             animate={{ width: `${bd.value}%` }}
                             transition={{
                               duration: 0.6,
-                              delay: reduced ? 0 : 0.25 + i * 0.12 + j * 0.05,
+                              delay: animating ? 0.25 + i * 0.12 + j * 0.05 : 0,
                               ease: [0.22, 1, 0.36, 1],
                             }}
                           />
@@ -415,13 +417,15 @@ const CHAIN = [
 ] as const;
 
 export function VerificationChain() {
+  const reduced = useReducedMotion();
+
   return (
     <Reveal className="rounded-lg bg-card p-5 shadow-flat">
       <p className="text-meta font-medium text-muted-foreground">
         Authenticity checks
       </p>
       <ul className="mt-3 divide-hairline">
-        {CHAIN.map(({ label, state }) => {
+        {CHAIN.map(({ label, state }, i) => {
           const review = state === "Needs review";
           return (
             <li
@@ -429,15 +433,26 @@ export function VerificationChain() {
               className="flex items-center justify-between gap-3 py-2.5 first:pt-0"
             >
               <span className="text-body text-foreground">{label}</span>
-              <span
+              {/* Each check resolves in turn rather than arriving pre-answered: the
+                  product runs these one at a time, and the row that needs a human
+                  deliberately lands last so it is the state you are left looking at. */}
+              <motion.span
                 className={cn(
                   "flex items-center gap-1.5 text-meta font-medium",
                   review ? "text-warning" : "text-success",
                 )}
+                initial={{ opacity: reduced ? 1 : 0, x: reduced ? 0 : 6 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{
+                  duration: 0.35,
+                  delay: reduced ? 0 : 0.2 + i * 0.28,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
               >
                 <ShieldCheck aria-hidden className="size-3.5" />
                 {state}
-              </span>
+              </motion.span>
             </li>
           );
         })}

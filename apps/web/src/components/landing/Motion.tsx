@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  * renders plain markup first and only arms its animation once this flips. */
 const subscribeNever = () => () => {};
 
-function useArmed(): boolean {
+export function useArmed(): boolean {
   // useSyncExternalStore is the right primitive for "are we on the client yet": it
   // returns the server snapshot during SSR and hydration, then the client snapshot,
   // without a setState-in-effect that would schedule a cascading render.
@@ -245,5 +245,160 @@ export function CountUp({
     >
       {value.toFixed(decimals)}
     </motion.span>
+  );
+}
+
+/** Spring preset used wherever motion should feel driven rather than timed.
+ *
+ * Tuned to settle without visible overshoot: a bouncy spring on a data product reads as
+ * playful in the wrong way. */
+const SPRING = { type: "spring", stiffness: 260, damping: 30, mass: 0.9 } as const;
+
+/** Page-load sequence for a hero. Children arrive in order on a spring.
+ *
+ * Distinct from `Stagger`, which is scroll-triggered: this fires once on mount, because
+ * the hero is already in view and waiting for a scroll that never comes would leave the
+ * most important content static. */
+export function LoadSequence({
+  children,
+  className,
+  gap = 0.07,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  gap?: number;
+}) {
+  const reduced = useReducedMotion();
+  const armed = useArmed();
+
+  if (!armed) return <div className={className}>{children}</div>;
+
+  return (
+    <motion.div
+      className={className}
+      initial="hidden"
+      animate="show"
+      variants={{
+        hidden: {},
+        show: { transition: { staggerChildren: reduced ? 0 : gap } },
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+export function LoadItem({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const reduced = useReducedMotion();
+  const armed = useArmed();
+
+  if (!armed) return <div className={className}>{children}</div>;
+
+  return (
+    <motion.div
+      className={className}
+      variants={{
+        hidden: { opacity: 0, y: reduced ? 0 : 14 },
+        show: { opacity: 1, y: 0, transition: SPRING },
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Draws a vertical rule from top to bottom as the section scrolls through the viewport.
+ *
+ * Used for the hackathon-to-hire spine. The page's claim is that the stages are one
+ * continuous run, and a line that draws itself says that more directly than a static
+ * border does. `scaleY` on a transform, so this never triggers layout. */
+export function DrawLine({ className }: { className?: string }) {
+  const reduced = useReducedMotion();
+  const armed = useArmed();
+
+  if (!armed || reduced) {
+    return <span aria-hidden className={cn("block origin-top", className)} />;
+  }
+
+  return (
+    <motion.span
+      aria-hidden
+      className={cn("block origin-top", className)}
+      initial={{ scaleY: 0 }}
+      whileInView={{ scaleY: 1 }}
+      viewport={{ once: true, margin: "-15% 0px -25% 0px" }}
+      transition={{ duration: 1.1, ease: EASE }}
+    />
+  );
+}
+
+/** A rule that strikes through its label as it enters view.
+ *
+ * The Problem section argues by contrast: unverifiable claims on the left, evidence on
+ * the right. Striking the claims out on entry performs that argument rather than
+ * asserting it. */
+export function StrikeThrough({
+  children,
+  index = 0,
+  className,
+}: {
+  children: React.ReactNode;
+  index?: number;
+  className?: string;
+}) {
+  const reduced = useReducedMotion();
+  const armed = useArmed();
+
+  return (
+    <span className={cn("relative inline-block", className)}>
+      {children}
+      {armed && !reduced ? (
+        <motion.span
+          aria-hidden
+          className="absolute inset-x-0 top-1/2 h-px origin-left bg-muted-foreground"
+          initial={{ scaleX: 0 }}
+          whileInView={{ scaleX: 1 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.45, delay: 0.15 + index * 0.12, ease: EASE }}
+        />
+      ) : (
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-1/2 h-px bg-muted-foreground"
+        />
+      )}
+    </span>
+  );
+}
+
+/** Lifts on hover, on a spring. For the bento tiles.
+ *
+ * `whileHover` on transform only: a shadow transition would repaint the whole tile. */
+export function HoverLift({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const reduced = useReducedMotion();
+  const armed = useArmed();
+
+  if (!armed || reduced) return <div className={className}>{children}</div>;
+
+  return (
+    <motion.div
+      className={className}
+      whileHover={{ y: -4 }}
+      transition={SPRING}
+    >
+      {children}
+    </motion.div>
   );
 }

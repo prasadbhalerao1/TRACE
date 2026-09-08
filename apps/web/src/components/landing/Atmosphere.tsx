@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "framer-motion";
+import {
+  motion,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 
 import { cn } from "@/lib/utils";
+import { useArmed } from "@/components/landing/Motion";
 
 /** Background and depth layers for the landing page.
  *
@@ -147,38 +154,105 @@ export function Counter({
   className?: string;
 }) {
   const reduced = useReducedMotion();
-  const [value, setValue] = useState(reduced ? to : 0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const done = useRef(false);
+  const armed = useArmed();
+  const [value, setValue] = useState(to);
+  const running = useRef(false);
 
-  useEffect(() => {
-    if (reduced || !ref.current || done.current) return;
-    const el = ref.current;
+  /** Runs the count. Driven by framer-motion's own viewport handling rather than a
+   * hand-rolled IntersectionObserver: the bespoke version left these figures stuck at
+   * `0` on the rendered page, because it attached before layout and its `done` latch
+   * then blocked every retry. On a page arguing that every number carries evidence, a
+   * stuck zero reads as real data reporting "nothing found", so this must not be
+   * clever. */
+  const start = () => {
+    if (running.current || reduced) return;
+    running.current = true;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / duration);
+      // easeOutCubic: fast arrival, gentle settle, so the number lands rather
+      // than creeping.
+      setValue(to * (1 - Math.pow(1 - t, 3)));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting || done.current) return;
-        done.current = true;
-        const start = performance.now();
-        const step = (now: number) => {
-          const t = Math.min(1, (now - start) / duration);
-          // easeOutCubic: fast arrival, gentle settle, so the number lands rather
-          // than creeping.
-          setValue(to * (1 - Math.pow(1 - t, 3)));
-          if (t < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      },
-      { threshold: 0.4 },
+  // Server, pre-hydration and reduced-motion all render the final value, so the figure
+  // is correct even if the animation never runs.
+  if (!armed || reduced) {
+    return (
+      <span data-numeric className={className}>
+        {to.toFixed(decimals)}
+      </span>
     );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [to, duration, reduced]);
+  }
 
   return (
-    <span ref={ref} data-numeric className={className}>
+    <motion.span
+      data-numeric
+      className={className}
+      initial={{ opacity: 1 }}
+      whileInView={{ opacity: 1 }}
+      viewport={{ once: true, margin: "-60px" }}
+      onViewportEnter={start}
+    >
       {value.toFixed(decimals)}
-    </span>
+    </motion.span>
+  );
+}
+
+/** Scroll progress across the whole page.
+ *
+ * This is information, not decoration: the landing page is nine sections long and a
+ * reader benefits from knowing how much is left. `useScroll` drives `scaleX` directly
+ * through a motion value, so progress never passes through React state and costs no
+ * re-render per frame. */
+export function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 180,
+    damping: 30,
+    restDelta: 0.001,
+  });
+  const reduced = useReducedMotion();
+
+  if (reduced) return null;
+
+  return (
+    <motion.div
+      aria-hidden
+      style={{ scaleX }}
+      className="fixed inset-x-0 top-0 z-50 h-0.5 origin-left bg-primary"
+    />
+  );
+}
+
+/** Moves its children at a different rate to the page as it scrolls.
+ *
+ * Used once, on the hero's product card, to place the product on a different plane from
+ * the pitch beside it. `useTransform` on a scroll motion value means the offset is
+ * written straight to the transform, so this is a compositor-only effect. */
+export function Parallax({
+  children,
+  distance = 40,
+  className,
+}: {
+  children: React.ReactNode;
+  distance?: number;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+  const y = useTransform(scrollYProgress, [0, 1], [distance, -distance]);
+
+  return (
+    <div ref={ref} className={className}>
+      <motion.div style={reduced ? undefined : { y }}>{children}</motion.div>
+    </div>
   );
 }
