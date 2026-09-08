@@ -3,7 +3,7 @@ import { Inter, IBM_Plex_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/AuthProvider";
 import { CurrentUserProvider } from "@/components/CurrentUserProvider";
-import { AppHeader } from "@/components/common/AppHeader";
+import { SiteHeader } from "@/components/common/SiteHeader";
 import "./globals.css";
 
 // Inter for UI, IBM Plex Mono for evidence IDs and score values. Two faces, no third.
@@ -45,7 +45,7 @@ export default function RootLayout({
           {/* CurrentUserProvider wraps the header too: it reads useCurrentUser, which
  throws outside the provider. */}
           <CurrentUserProvider>
-            <AppHeader />
+            <SiteHeader />
             <div className="flex flex-1 flex-col">{children}</div>
           </CurrentUserProvider>
           <Toaster />
