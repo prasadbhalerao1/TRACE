@@ -27,6 +27,7 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+.env*.bak*
 # Dormant credentials for a hosted deployment. Not used by the local setup — see the
 # header inside the file. Never commit.
 .env.cloud
