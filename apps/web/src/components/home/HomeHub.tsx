@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
+
 import { useCallback } from "react";
-import { FeatureCard } from "@/components/home/FeatureCard";
 import { ProfileCompleteness } from "@/components/home/ProfileCompleteness";
 import {
   AdminAttention,
@@ -97,16 +98,35 @@ export function HomeHub() {
         <section>
           <SectionHeader
             title="Everything you can do"
-            description="Your full workspace, one card per capability."
+            description="Your full workspace."
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((feature) => (
-              <FeatureCard
-                key={`${feature.href}-${feature.label}`}
-                feature={feature}
-              />
-            ))}
-          </div>
+          <ul className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+            {features.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <li key={`${feature.href}-${feature.label}`}>
+                  <Link
+                    href={feature.href}
+                    className="group flex items-start gap-3 border-t border-border py-3 outline-none transition-colors duration-(--animate-duration-fast) focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    <Icon
+                      aria-hidden
+                      className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-colors duration-(--animate-duration-fast) group-hover:text-primary"
+                      strokeWidth={1.75}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-body font-medium text-foreground">
+                        {feature.label}
+                      </span>
+                      <span className="mt-0.5 block text-meta leading-relaxed text-muted-foreground">
+                        {feature.description}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       </div>
     </Page>
